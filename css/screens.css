@@ -1,0 +1,8 @@
+/* 各屏内部通用样式 */
+.scr-inner{position:absolute;inset:0;padding:64px 0 0}
+.bg-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(56,189,248,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(56,189,248,.05) 1px,transparent 1px);background-size:44px 44px}
+.corner{position:absolute;width:16px;height:16px;border:2px solid rgba(56,189,248,.55)}
+.corner.tl{left:0;top:0;border-right:0;border-bottom:0}
+.corner.tr{right:0;top:0;border-left:0;border-bottom:0}
+.corner.bl{left:0;bottom:0;border-right:0;border-top:0}
+.corner.br{right:0;bottom:0;border-left:0;border-top:0}

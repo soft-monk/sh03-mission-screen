@@ -1,0 +1,16 @@
+# ---- 调试产物 / 临时文件 ----
+/_tools/*
+!/_tools/verify.mjs
+!/_tools/verify06.cjs
+!/_tools/plan-routes.mjs
+!/_tools/fetch-bbox.mjs
+/预览/
+/.workbuddy/
+*.log
+*.tmp
+
+# ---- 系统 ----
+Thumbs.db
+Desktop.ini
+.DS_Store
+node_modules/

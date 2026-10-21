@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>场景一 · 敏捷拒止布控（演示播片）</title>
+<link href="assets/lib/maplibre-gl.css" rel="stylesheet">
+<link rel="stylesheet" href="css/base.css?v=__V__">
+<link rel="stylesheet" href="css/stage.css?v=__V__">
+<link rel="stylesheet" href="css/screens.css?v=__V__">
+<link rel="stylesheet" href="css/player.css?v=__V__">
+</head>
+<body>
+<div id="__filewarn"></div>
+<script>
+if (location.protocol === "file:") {
+  var w = document.getElementById("__filewarn");
+  w.style.cssText = "position:fixed;inset:0;z-index:99998;display:grid;place-items:center;background:rgba(4,9,16,.94);font-family:'Microsoft YaHei UI',sans-serif";
+  w.innerHTML =
+    '<div style="max-width:620px;text-align:center;color:#dbeafe">' +
+    '<div style="font-size:44px;margin-bottom:18px">\u26A0\uFE0F</div>' +
+    '<div style="font-size:24px;font-weight:700;letter-spacing:2px;margin-bottom:14px">需要通过「启动演示-平面.bat」打开</div>' +
+    '<div style="font-size:15px;line-height:1.9;color:#93aac6">' +
+    '浏览器不允许直接双击 HTML 时加载本地地图瓦片（跨域限制），<br>' +
+    '所以地图会是空的。<br><br>' +
+    '请回到 <b style="color:#7dd3fc">FastHTML</b> 文件夹，双击 <b style="color:#7dd3fc">启动演示-平面.bat</b><br>' +
+    '它会自动起本地服务并打开浏览器（完全离线）。' +
+    '</div>' +
+    '<button id="__filebtn" style="margin-top:26px;padding:11px 26px;border-radius:8px;border:1px solid rgba(56,189,248,.5);background:rgba(56,189,248,.12);color:#bfe9ff;font-size:14px;cursor:pointer;font-family:inherit">我知道了，先看看界面（地图会空着）</button>' +
+    '</div>';
+  document.getElementById("__filebtn").onclick = function () { w.style.display = "none"; };
+}
+</script>
+
+<div id="__err"></div>
+<script>
+window.__ERRS = [];
+function __showErr() {
+  var d = document.getElementById("__err");
+  d.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:99999;background:#7f1d1d;color:#fff;font:13px/1.6 Consolas,monospace;padding:10px 14px;white-space:pre-wrap;max-height:40vh;overflow:auto";
+  var seen = {}; var uniq = [];
+  for (var i = 0; i < window.__ERRS.length; i++) { var k = window.__ERRS[i].split("\n")[0]; if (!seen[k]) { seen[k] = 1; uniq.push(window.__ERRS[i]); } }
+  d.textContent = uniq.slice(-4).join("\n\n");
+}
+window.addEventListener("error", function (e) {
+  /* 跨域脚本抛出的异常没有细节（只有 "Script error."），不往红条里塞 */
+  if (e.message === "Script error.") { console.warn("[cross-origin script error]"); return; }
+  window.__ERRS.push("ERR: " + e.message + " @ " + String(e.filename || "").split("/").pop() + ":" + e.lineno);
+  __showErr();
+});
+window.addEventListener("unhandledrejection", function (e) {
+  window.__ERRS.push("REJ: " + e.reason);
+  __showErr();
+});
+</script>
+<div id="viewport">
+  <div id="stage">
+    <div id="screens"></div>
+    <div class="frame"></div>
+
+    <div id="hud">
+      <div class="hud-top">
+        <div class="l">
+          <img class="mark" src="assets/img/logo.png" alt="">
+          <div class="brand">智能任务管理系统</div>
+        </div>
+        <div class="r">
+          <span class="net"><em>网络：</em><b>已连接</b></span>
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 8.6a15 15 0 0 1 20 0"/><path d="M5.4 12.2a10 10 0 0 1 13.2 0"/><path d="M9 15.7a5 5 0 0 1 6 0"/><circle cx="12" cy="19" r="1.1" fill="currentColor" stroke="none"/></svg>
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="8" width="16" height="8" rx="1.6"/><path d="M21 10.5v3" stroke-linecap="round"/><rect x="4.5" y="10" width="8" height="4" rx=".8" fill="currentColor" stroke="none"/></svg>
+          <span class="time" id="wallclock">15:14</span>
+          <span class="avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="9" r="3.4"/><path d="M5 20c1.6-3.4 4.2-5 7-5s5.4 1.6 7 5"/></svg></span>
+          <span class="badge-demo">演示数据</span>
+          <span class="badge-scr" id="scrbadge" title="当前屏编号">SH-01</span>
+          <span class="t" id="clock">00:00 / 04:35</span>
+        </div>
+      </div>
+
+      <div class="hud-bottom">
+        <div id="subtitle"><span class="who"></span><span class="txt"></span></div>
+        <div id="ctrlbar">
+        <div id="chapters"></div>
+        <div id="progress">
+          <div id="bootcap"><i></i><span>启动</span></div>
+          <div id="track"></div>
+        </div>
+        <div id="controls">
+          <button data-act="replay" title="重播 (R)">&#8635;</button>
+          <button data-act="prev" title="上一屏 (←)">&#9198;</button>
+          <button data-act="play" title="播放 / 暂停 (空格)">&#10074;&#10074;</button>
+          <button data-act="next" title="下一屏 (→)">&#9197;</button>
+          <button data-act="speed" title="倍速">1x</button>
+          <button data-act="full" title="全屏 (F)">&#9974;</button>
+          <span class="hint">空格 暂停 · ← → 切屏 · R 重播 · F 全屏 · H 收起控制条</span>
+        </div>
+        </div>
+      </div>
+
+      <div class="endcard" id="endcard">
+        <div class="box">
+          <h2>播放结束</h2>
+          <p>场景一 · 敏捷拒止布控 · 总长 04:35</p>
+          <button class="btn primary" data-act="replay">重新播放</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/map-meta.js?v=__V__"></script>
+<script src="data/scenario.js?v=__V__"></script>
+<script src="data/routes.js?v=__V__"></script>
+<script src="js/fx.js?v=__V__"></script>
+<script src="js/icons.js?v=__V__"></script>
+<script src="js/geo.js?v=__V__"></script>
+<script src="assets/lib/maplibre-gl.js"></script>
+<script src="js/mapview.js?v=__V__"></script>
+<script src="js/flight06.js?v=__V__"></script>
+<script src="js/timeline.js?v=__V__"></script>
+<script src="scenes/s01-boot.js?v=__V__"></script>
+<script src="scenes/s02-selfcheck.js?v=__V__"></script>
+<script src="scenes/s03-situation.js?v=__V__"></script>
+<script src="scenes/placeholder.js?v=__V__"></script>
+<script src="js/main.js?v=__V__"></script>
+</body>
+</html>
