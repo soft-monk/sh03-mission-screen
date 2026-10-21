@@ -234,18 +234,30 @@ window.MapView = function (host) {
       var data = {
         type: "FeatureCollection",
         features: (features || []).map(function (f) {
-          return { type: "Feature", properties: { t: f.type, r: f.r || 0 }, geometry: { type: "Point", coordinates: [f.lon, f.lat] } };
+          return { type: "Feature", properties: { t: f.type, r: f.r || 0, c: f.color || "#38bdf8" }, geometry: { type: "Point", coordinates: [f.lon, f.lat] } };
         })
       };
       when(function () {
         var src = map.getSource(id);
         if (src) { src.setData(data); return; }
         map.addSource(id, { type: "geojson", data: data });
+        /* 定位点：始终可见的实心小圆，压在图标下面 */
+        map.addLayer({
+          id: id + "-dot", type: "circle", source: id,
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 3.2, 13, 5],
+            "circle-color": ["get", "c"],
+            "circle-opacity": 0.95,
+            "circle-stroke-width": 1.5,
+            "circle-stroke-color": "#0b1220",
+            "circle-stroke-opacity": 0.9
+          }
+        });
         map.addLayer({
           id: id + "-l", type: "symbol", source: id,
           layout: {
             "icon-image": ["concat", "uav-", ["get", "t"]],
-            "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.06, 11, 0.115, 13, 0.19],
+            "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.09, 11, 0.14, 13, 0.20],
             "icon-allow-overlap": true,
             "icon-ignore-placement": true,
             "icon-rotation-alignment": "map",
@@ -267,13 +279,24 @@ window.MapView = function (host) {
         var src = map.getSource(id);
         if (src) { src.setData(data); return; }
         map.addSource(id, { type: "geojson", data: data });
+        /* 深色描边层：让虚线和底图拉开对比 */
+        map.addLayer({
+          id: id + "-c", type: "line", source: id,
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": "#0b1220",
+            "line-width": 6,
+            "line-opacity": 0.45,
+            "line-dasharray": [2, 2]
+          }
+        });
         map.addLayer({
           id: id + "-l", type: "line", source: id,
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
             "line-color": ["get", "c"],
-            "line-width": 2,
-            "line-opacity": 0.7,
+            "line-width": 3.5,
+            "line-opacity": 0.95,
             "line-dasharray": [2, 2]
           }
         });
@@ -296,8 +319,8 @@ window.MapView = function (host) {
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
             "line-color": ["get", "c"],
-            "line-width": 1.3,
-            "line-opacity": 0.32,
+            "line-width": 2,
+            "line-opacity": 0.5,
             "line-dasharray": [1.8, 2.6]
           }
         });

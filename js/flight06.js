@@ -136,7 +136,7 @@ window.FLIGHT06 = (function () {
   var D = [];
   function mk(type, k, opt) { D.push(Object.assign({ type: type, k: k }, opt)); }
 
-  for (k = 0; k < 20; k++) mk("blue", k, { route: RT[0], tArr: TARR[0], taskPath: k < 10 ? PHOTO.A[k] : PHOTO.B[k - 10], spd: V });
+  for (k = 0; k < 20; k++) mk("blue", k, { route: RT[0], tArr: TARR[0], taskPath: k < 10 ? PHOTO.A[k] : PHOTO.B[k - 10], spd: V, sync: k < 10 ? "PA" : "PB" });
   for (k = 0; k < 4; k++)  mk("green", k, { route: RT[1], tArr: TARR[1], relay: k < 3 ? RELAYS[k] : null, mid: k === 3 });
   for (k = 0; k < 4; k++)  mk("red", k, { route: RT[2], tArr: TARR[2], jam: k < 2 ? JAM_TRACK1 : JAM_TRACK2, half: k % 2 === 1 });
   mk("yellow", 0, { route: RT[3], tArr: TARR[3], radar: true, sar: true });
@@ -198,8 +198,11 @@ window.FLIGHT06 = (function () {
   D.forEach(function (d) { if (d.path) d.tStart = d.tArr + (d.tTrans || 0); });
   D.forEach(function (d, i) {
     if (!d.path || d.relay) return;
-    var latest = d.tStart;
-    for (var j = 0; j < D.length; j++) if (D[j].path === d.path && D[j].tStart > latest) latest = D[j].tStart;
+    var latest = d.tStart, key = d.sync;
+    for (var j = 0; j < D.length; j++) {
+      var same = key ? (D[j].sync === key) : (D[j].path === d.path);
+      if (same && D[j].tStart > latest) latest = D[j].tStart;
+    }
     D[i].tStart = latest;
   });
 

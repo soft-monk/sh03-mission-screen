@@ -359,6 +359,7 @@ function make(variant) {
         if (!st.started) { map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); paint(); return; }
         if (map.tracks && FL.tracks) map.tracks("tracks", FL.tracks(st.t).map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.pts }; }));
         var fleet = FL.simulate(st.t);
+        fleet.forEach(function (d) { d.color = COLORS[d.type] || "#38bdf8"; });
         map.fleet("fleet", fleet);
         map.trails("trails", fleet.filter(function (d) { return d.trail && d.trail.length > 1; })
           .map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.trail }; }));
