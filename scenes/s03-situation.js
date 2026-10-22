@@ -12,6 +12,7 @@ function make(variant) {
   var IS_BARE = (variant === "frame" || variant === "plan" || variant === "bare");   /* 都是"基于外壳" */
   var IS_PLAN = (variant === "plan" || variant === "bare");                          /* 三栏 + 确认按钮只在 SH-05 */
   var IS_SELECT = variant === "select";     /* 只有 SH-03 才有场景卡和提示条 */
+  var hideHook = null;                        /* 本屏退场时的清理动作（SH-06 用） */
   var MENU = [
     { k: "态势", icon: "crosshair", on: true },
     { k: "任务", icon: "target" },
@@ -185,37 +186,37 @@ function make(variant) {
     var labelEls = [];
 
     /* 任务区：80x80km 橙黄色实线 */
-    map.polygon("area-mission", AREA.mission, { fill: "#f59e0b", fillOpacity: 0.10, line: "#f59e0b", width: 3.5 });
+    map.polygon("area-mission", AREA.mission, { fill: "#f59e0b", fillOpacity: 0, line: "#f59e0b", width: 3.5 });
     areaEls.push({ id: "area-mission", delay: 1.6 });
     labelEls.push({ h: map.label("任务区", [113.7900, 39.9400], "#fbbf24", 17), delay: 1.6 });
 
-    /* 潜在目标部署区：2 个红色虚线不规则多边形（各约 5x5km） */
+    /* 潜在目标部署区：2 个红色实线矩形（20x20km），无填充 */
     AREA.targets.forEach(function (tg, ti) {
       var tid = "area-target-" + ti;
-      map.polygon(tid, tg.pts, { fill: "#ef4444", fillOpacity: 0.20, line: "#ef4444", width: 2.5, dash: [2.4, 1.6] });
+      map.polygon(tid, tg.pts, { fill: "#ef4444", fillOpacity: 0, line: "#ef4444", width: 2.5 });
       areaEls.push({ id: tid, delay: 2.05 + ti * 0.22 });
       labelEls.push({ h: map.label(tg.name, tg.label, "#fca5a5", 15), delay: 2.05 + ti * 0.22 });
     });
 
-    /* 禁飞区：紫色虚线 */
-    map.polygon("area-nofly", AREA.noFly, { fill: "#a855f7", fillOpacity: 0.16, line: "#a855f7", width: 2.5, dash: [2.4, 1.6] });
-    areaEls.push({ id: "area-nofly", delay: 2.45 });
-    labelEls.push({ h: map.label("禁飞区", [115.7845, 39.7905], "#d8b4fe", 16), delay: 2.45 });
-  /* 走廊禁飞区-2（红）/ 禁飞区-3（红） */
-  map.polygon("area-nofly2", AREA.noFly2, { fill: "#ef4444", fillOpacity: 0.15, line: "#ef4444", width: 2.5, dash: [2.4, 1.6] });
-  areaEls.push({ id: "area-nofly2", delay: 2.45 });
-  labelEls.push({ h: map.label("禁飞区-2", [115.4084, 39.8720], "#fca5a5", 15), delay: 2.45 });
-  map.polygon("area-nofly3", AREA.noFly3, { fill: "#ef4444", fillOpacity: 0.15, line: "#ef4444", width: 2.5, dash: [2.4, 1.6] });
-  areaEls.push({ id: "area-nofly3", delay: 2.45 });
-  labelEls.push({ h: map.label("禁飞区-3", [114.8584, 39.9475], "#fca5a5", 15), delay: 2.45 });
-
-  /* 气象威胁区（青蓝，细密虚线） */
-  map.polygon("area-wx1", AREA.wx1, { fill: "#22d3ee", fillOpacity: 0.12, line: "#22d3ee", width: 2, dash: [1.2, 2.4] });
-  areaEls.push({ id: "area-wx1", delay: 2.45 });
-  labelEls.push({ h: map.label("气象威胁区-1", [115.6818, 39.7810], "#67e8f9", 15), delay: 2.45 });
-  map.polygon("area-wx2", AREA.wx2, { fill: "#22d3ee", fillOpacity: 0.12, line: "#22d3ee", width: 2, dash: [1.2, 2.4] });
-  areaEls.push({ id: "area-wx2", delay: 2.45 });
-  labelEls.push({ h: map.label("气象威胁区-2", [115.1201, 39.8210], "#67e8f9", 15), delay: 2.45 });
+    /* 禁飞区：红实线、无填充、无虚线。
+       点位来自《态势计划-2026-10-22.json》（相邻重复顶点已去掉），
+       外加原来的东侧禁飞区；编号按地理从西到东统一排布。 */
+    var NOFLY = [
+      { n: "禁飞区1", lp: [114.70333,39.88654], pts: [[114.54986,39.85959],[114.54534,39.81695],[114.63454,39.79919],[114.6471,39.83123],[114.69333,39.85322],[114.69183,39.88254],[114.62298,39.84647]] },
+      { n: "禁飞区2", lp: [114.78706,39.97709], pts: [[114.75939,39.97309],[114.74049,39.95014],[114.7562,39.92624],[114.75497,39.90101],[114.77044,39.90364],[114.77338,39.94393],[114.77706,39.9635]] },
+      { n: "禁飞区3", lp: [114.96004,40.05412], pts: [[114.83479,40.0172],[114.86133,39.9889],[114.90867,39.99687],[114.94363,39.99704],[114.95004,40.01313],[114.92327,40.03634],[114.8965,40.05012],[114.86865,40.02292]] },
+      { n: "禁飞区4", lp: [115.01932,40.08641], pts: [[114.97403,40.07834],[114.98344,40.05206],[115.00393,40.05263],[115.00932,40.06751],[114.99228,40.08241]] },
+      { n: "禁飞区5", lp: [115.33519,39.67953], pts: [[115.24096,39.61757],[115.25663,39.61131],[115.32519,39.65365],[115.30532,39.67454],[115.26237,39.67553],[115.26262,39.64167]] },
+      { n: "禁飞区6", lp: [115.32911,39.90649], pts: [[115.28945,39.8904],[115.29981,39.85772],[115.31911,39.86208],[115.30946,39.90249]] },
+      { n: "禁飞区7", lp: [115.43632,39.83947], pts: [[115.35244,39.83547],[115.39506,39.80506],[115.39355,39.77697],[115.39961,39.75717],[115.41135,39.75848],[115.42575,39.79939],[115.42632,39.82689],[115.40302,39.82093],[115.39677,39.82122]] },
+      { n: "禁飞区8", lp: [115.42508,40.02673], pts: [[115.40213,40.02273],[115.39217,39.99702],[115.39916,39.98456],[115.41164,39.98825],[115.41508,40.01422]] },
+      { n: "禁飞区9", lp: [115.79253,39.79417], pts: [[115.76302,39.79017],[115.76302,39.77525],[115.75437,39.76415],[115.77416,39.75983],[115.776,39.77624],[115.78253,39.78558]] }
+    ];
+    NOFLY.forEach(function (z, i) {
+      map.polygon("area-nf" + (i + 1), z.pts, { fill: "#ef4444", fillOpacity: 0, line: "#ef4444", width: 2.5 });
+      areaEls.push({ id: "area-nf" + (i + 1), delay: 2.45 });
+      labelEls.push({ h: map.label(z.n, z.lp, "#fca5a5", 15), delay: 2.45 });
+    });
 
     /* 我方集结区：绿色虚线 4x4km */
     map.polygon("area-reserve", AREA.reserve, { fill: "#22c55e", fillOpacity: 0.16, line: "#22c55e", width: 3, dash: [2.4, 1.6] });
@@ -266,8 +267,7 @@ function make(variant) {
             '<div class="s3-tir"><span>任务时间</span><b>2024-06-28 15:14</b></div>' +
             '<div class="s3-tir"><span>任务状态</span><b class="warn">任务准备中</b></div>' +
           '</div>' +
-          '<div class="s3-go"><i>&raquo;</i><span>进入任务执行</span><i>&raquo;</i></div>' +
-          '<div class="s3-back">返回场景选择</div>'
+          '<div class="s3-go"><i>&raquo;</i><span>进入任务执行</span><i>&raquo;</i></div>'
         : '<div class="s3-panel s3-res">' +
             '<div class="s3-res-h">' + ic("nodes", 18, "", 1.6) + '<span>资源概况</span></div>' +
             '<div class="s3-grid">' +
@@ -356,7 +356,10 @@ function make(variant) {
       })();
 
       function push() {
-        if (!st.started) { map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); paint(); return; }
+        if (!st.started) { map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); if (map.scan) map.scan("scan", []); paint(); return; }
+        if (map.scan && FL.scans) map.scan("scan", FL.scans(st.t).map(function (s) {
+          return { color: COLORS.blue, quad: s.quad, rays: s.rays, sweep: s.sweep, k: s.k };
+        }));
         if (map.tracks && FL.tracks) map.tracks("tracks", FL.tracks(st.t).map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.pts }; }));
         var fleet = FL.simulate(st.t);
         fleet.forEach(function (d) { d.color = COLORS[d.type] || "#38bdf8"; });
@@ -392,7 +395,8 @@ function make(variant) {
       bar.addEventListener("pointercancel", function () { dragging = false; });
 
       function loop(now) {
-      requestAnimationFrame(loop);
+        if (st.dead) return;                  /* 已退场：不再续命 */
+        requestAnimationFrame(loop);
         if (!st.run || !root.classList.contains("on")) { st.last = now; return; }
         if (!st.last) { st.last = now; return; }
         var dt = Math.min(0.25, (now - st.last) / 1000);
@@ -407,6 +411,17 @@ function make(variant) {
       var qF = new URLSearchParams(location.search), f0 = parseFloat(qF.get("fly"));
       if (!isNaN(f0)) { st.started = true; st.t = Math.max(0, Math.min(FL.TOTAL, f0)); goBtn.textContent = "继续"; }
       push();
+
+      /* 退场：停掉自驱循环，并清掉本屏画在共享地图上的动态图层 */
+      hideHook = function () {
+        st.dead = true;
+        try {
+          map.fleet("fleet", []);
+          map.trails("trails", []);
+          if (map.tracks) map.tracks("tracks", []);
+          if (map.scan) map.scan("scan", []);
+        } catch (e) {}
+      };
     }
 
     var cardsHost = root.querySelector(".s3-cards");
@@ -428,6 +443,7 @@ function make(variant) {
         var P = window.PLAYER;
         if (!P || Math.abs(P.time - 25.5) > 0.12) return;
         el.classList.add("picked");
+        if (window.PLAYER && window.PLAYER.lockBack) window.PLAYER.lockBack();
         cardEls.forEach(function (o, j) { if (j) o.classList.add("fade"); });
         setTimeout(function () { P.seek(26); P.play(); }, 620);
       });
@@ -794,7 +810,10 @@ var zoom = is3d ? FX.lerp(10.95, 11.25, cp) : CAM03.zoom;
     if (e && e.map && e.map.repaint) e.map.repaint();
   }
 
-  return { build: build, render: render, onShow: onShow, usesMap: true, ownSubs: IS_MISSION };
+  return {
+    build: build, render: render, onShow: onShow, usesMap: true, ownSubs: IS_MISSION,
+    onHide: function () { if (hideHook) { try { hideHook(); } catch (e) {} } }
+  };
 }
 
 /* SH-03：带场景选择；SH-04：任务信息 + 两个按钮（同一套界面，同一套地图） */

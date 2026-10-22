@@ -17,6 +17,7 @@ window.MapView = function (host) {
   host.appendChild(root);
 
   var map = null, ready = false, pend = [], registry = {}, lastView = "", lastCam = null, tileErrs = [];
+  var onResize = null, ro = null;      /* 本实例自己挂的全局监听，销毁时要摘掉 */
   var labelCache = {};   /* 标签按文字去重：后面几屏再调 label() 不会叠出重影 */
   var FILE_MODE = location.protocol === "file:";
 
@@ -119,12 +120,14 @@ window.MapView = function (host) {
     map = new maplibregl.Map(opts);
     applyPixelRatio();
     var prRaf = 0;
-    window.addEventListener("resize", function () {
+    onResize = function () {
       if (prRaf) return;
       prRaf = requestAnimationFrame(function () { prRaf = 0; applyPixelRatio(); });
-    });
+    };
+    window.addEventListener("resize", onResize);
     if (window.ResizeObserver) {
-      new ResizeObserver(function () { try { map.resize(); } catch (e) {} }).observe(root);
+      ro = new ResizeObserver(function () { try { if (map) map.resize(); } catch (e) {} });
+      ro.observe(root);
     }
     function report(msg) {
       console.error("[MapView]", msg);
@@ -158,8 +161,29 @@ window.MapView = function (host) {
 
   function when(fn) { if (ready) { try { fn(); } catch (e) { console.error("[MapView]", e); } } else pend.push(fn); }
 
+  /* 通用：一个 geojson 源 + 一个图层，存在就只换数据 */
+  function setGeom(lid, type, feats, paint) {
+    var data = { type: "FeatureCollection", features: feats };
+    var src = map.getSource(lid);
+    if (src) { src.setData(data); return; }
+    map.addSource(lid, { type: "geojson", data: data });
+    map.addLayer({
+      id: lid + "-l", type: type, source: lid,
+      layout: type === "line" ? { "line-join": "round", "line-cap": "round" } : {},
+      paint: paint
+    });
+  }
+
   return {
     el: root,
+    /* 销毁：摘掉本实例挂的全局监听 + 销毁 MapLibre 实例，等价于关掉软件 */
+    dispose: function () {
+      try { if (onResize) window.removeEventListener("resize", onResize); } catch (e) {}
+      onResize = null;
+      try { if (ro) { ro.disconnect(); ro = null; } } catch (e) {}
+      try { if (map) map.remove(); } catch (e) {}
+      map = null; ready = false; pend = []; labelCache = {}; registry = {};
+    },
     mode: MODE,
     is3d: IS3D,
     map: function () { return map; },
@@ -326,6 +350,27 @@ window.MapView = function (host) {
         });
       });
     },
+    /* 扫描投影：梯形填充 / 4 条连线 / 边框 / 扫掠线
+       items: [{ quad:[[lon,lat]x5], rays:[[p,q],...], sweep:[[p,q]], color, k }] */
+    scan: function (id, items) {
+      items = items || [];
+      var fill = [], outl = [], rays = [], swee = [];
+      items.forEach(function (s) {
+        var k = s.k == null ? 1 : s.k, c = s.color || "#38bdf8";
+        fill.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "Polygon", coordinates: [s.quad] } });
+        outl.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: s.quad } });
+        (s.rays || []).forEach(function (r) {
+          rays.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: r } });
+        });
+        if (s.sweep) swee.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: s.sweep } });
+      });
+      when(function () {
+        setGeom(id + "-f", "fill", fill, { "fill-color": ["get", "c"], "fill-opacity": ["*", 0.12, ["get", "k"]] });
+        setGeom(id + "-r", "line", rays, { "line-color": ["get", "c"], "line-width": 1, "line-opacity": ["*", 0.45, ["get", "k"]], "line-dasharray": [2, 2] });
+        setGeom(id + "-o", "line", outl, { "line-color": ["get", "c"], "line-width": 1.5, "line-opacity": ["*", 0.85, ["get", "k"]] });
+        setGeom(id + "-s", "line", swee, { "line-color": "#eaf6ff", "line-width": 2, "line-opacity": ["*", 0.9, ["get", "k"]] });
+      });
+    },
     /* 画一条折线（航路用）：坐标为 [[lon,lat], ...] */
     path: function (id, coords, st) {
       when(function () {
@@ -379,7 +424,9 @@ window.MapView = function (host) {
       /* 当前画布如果待在"正在显示"的那一屏里，就不挪走（预热屏是隐藏的，抢不走） */
       var cur = SHARED.el.parentNode;
       var curScr = cur && cur.closest ? cur.closest(".scr") : null;
-      if (!(curScr && curScr.classList.contains("on"))) {
+      /* 只有"旧屏真的还在文档里且正在显示"才保护；脱离文档的屏（重播时已销毁）不算 */
+      var curVisible = !!(curScr && curScr.classList.contains("on") && document.body.contains(curScr));
+      if (!curVisible) {
         host.appendChild(SHARED.el);   /* 同一个 canvas 元素，WebGL 上下文不会丢 */
         SHARED.repaint();              /* 新容器尺寸可能刚变，校准一次 */
       }
@@ -387,4 +434,11 @@ window.MapView = function (host) {
     return SHARED;
   };
   window.MapViewInstance = function () { return SHARED; };
+  /* 彻底复位：销毁实例并移除容器，下次要地图时重新 new —— 与"重新打开软件"等价 */
+  window.MapViewReset = function () {
+    if (!SHARED) return;
+    try { if (SHARED.dispose) SHARED.dispose(); } catch (e) {}
+    try { if (SHARED.el && SHARED.el.parentNode) SHARED.el.parentNode.removeChild(SHARED.el); } catch (e) {}
+    SHARED = null;
+  };
 })();

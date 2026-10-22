@@ -104,18 +104,19 @@ window.FLIGHT06 = (function () {
   var JAM_TRACK1 = raceTrackEW([POT2[0] - JAM_OFF/M_LON, JAM_CY], JAM_LEG, JAM_R, 10);
   var JAM_TRACK2 = raceTrackEW([POT2[0] + JAM_OFF/M_LON, JAM_CY], JAM_LEG, JAM_R, 10);
   /* 通信中继跑道 */
-  var RELAY_MID = raceTrack(MID, 2400, 750, 10);          /* 30% of 8km/2.5km */
+  var RELAY_MID = raceTrack(MID, 3120, 975, 10);          /* 1950 x 5070 m (+30%) */
   /* 通信链：集结区中心 -> 最后一个无人机(两区之间)，按【沿路里程】四等分，四架排成一列 */
   var RT2 = RT[1], RT2_END = RT2.pts[RT2.pts.length - 1];
   var RELAY_HEAD = Math.hypot((RT2.pts[0][0] - ASM_C[0]) * M_LON, (RT2.pts[0][1] - ASM_C[1]) * M_LAT);
   var RELAY_TAIL = Math.hypot((MID[0] - RT2_END[0]) * M_LON, (MID[1] - RT2_END[1]) * M_LAT);
   var RELAY_LEN  = RELAY_HEAD + RT2.len + RELAY_TAIL;
-  var RELAY_FRAC = [0.25, 0.5, 0.75];
+  var RELAY_FRAC = [0.5];
   var RELAYS = RELAY_FRAC.map(function (f) {
     var s = RELAY_LEN * f - RELAY_HEAD;              /* 从航路起点算的里程 */
     var o = at(RT2, s);
     return { frac: f, s: s, lon: o.lon, lat: o.lat };
   });
+  var RELAY_RING = raceTrack([RELAYS[0].lon, RELAYS[0].lat], 2340, 780, 8);   /* 1560 x 3900 m (+30%) */
 
   /* ---------- 待命方阵 ---------- */
   /* 待命方阵固定摆在我方集结区内（不再用航路起点） */
@@ -137,7 +138,12 @@ window.FLIGHT06 = (function () {
   function mk(type, k, opt) { D.push(Object.assign({ type: type, k: k }, opt)); }
 
   for (k = 0; k < 20; k++) mk("blue", k, { route: RT[0], tArr: TARR[0], taskPath: k < 10 ? PHOTO.A[k] : PHOTO.B[k - 10], spd: V, sync: k < 10 ? "PA" : "PB" });
-  for (k = 0; k < 4; k++)  mk("green", k, { route: RT[1], tArr: TARR[1], relay: k < 3 ? RELAYS[k] : null, mid: k === 3 });
+  for (k = 0; k < 2; k++) mk("green", k, {
+    route: RT[1], tArr: TARR[1], half: k === 1,
+    relay: { s: RELAYS[0].s, lon: RELAYS[0].lon, lat: RELAYS[0].lat, ring: RELAY_RING }
+  });
+  mk("green", 2, { route: RT[1], tArr: TARR[1], mid: true, half: false });
+  mk("green", 3, { route: RT[1], tArr: TARR[1], mid: true, half: true });
   for (k = 0; k < 4; k++)  mk("red", k, { route: RT[2], tArr: TARR[2], jam: k < 2 ? JAM_TRACK1 : JAM_TRACK2, half: k % 2 === 1 });
   mk("yellow", 0, { route: RT[3], tArr: TARR[3], radar: true, sar: true });
   mk("yellow", 1, { route: RT[3], tArr: TARR[3], radar: true, half: false });
@@ -146,7 +152,7 @@ window.FLIGHT06 = (function () {
   function takeoffPos(d, t) {
     var a = parkPos(d.type, d.k);
     var b = at(d.route, 0);
-    var off = laneOff(d.k);
+    var off = 0;                     /* 起点不偏移，横向编队位在出港 2km 内渐入 */
     var bx = b.lon + (-b.dy * off) / M_LON, by = b.lat + (b.dx * off) / M_LAT;
     var f = Math.max(0, Math.min(1, (t - T_LIFT) / TOFF));
     var dx = (bx - a.lon) * M_LON, dy = (by - a.lat) * M_LAT;
@@ -155,7 +161,7 @@ window.FLIGHT06 = (function () {
   function transitPos(d, t) {
     var dist = Math.max(0, (t - TJOIN) * V - alongOff(d.k));
     var o = at(d.route, dist, true);
-    var off = laneOff(d.k);
+    var off = laneOff(d.k) * Math.min(1, dist / 2000);
     return { lon: o.lon + (-o.dy * off) / M_LON, lat: o.lat + (o.dx * off) / M_LAT, r: rotOf(o) };
   }
   function onPath(P, phase, t, t0, spd) {
@@ -178,8 +184,8 @@ window.FLIGHT06 = (function () {
       rl.tOff = TJOIN + (rl.s + alongOff(d.k)) / V;    /* 沿航路飞到该里程的时刻 */
       var pr = transitPos(d, rl.tOff);
       rl.pA = [pr.lon, pr.lat];
-      rl.path = raceTrack([rl.lon, rl.lat], 1800, 600, 8);   /* 圆心=等分点 */
-      var e0 = at(rl.path, 0);
+      rl.path = rl.ring;                                     /* 两架共用一个环 */
+      var e0 = at(rl.ring, d.half ? rl.ring.len / 2 : 0);
       rl.pB = [e0.lon, e0.lat];                              /* 从环的起点进入 */
       d.path = rl.path;
       var rdx = (rl.pB[0] - rl.pA[0]) * M_LON, rdy = (rl.pB[1] - rl.pA[1]) * M_LAT;
@@ -205,6 +211,15 @@ window.FLIGHT06 = (function () {
     }
     D[i].tStart = latest;
   });
+  /* 共环的通信机同样同步入场，相位差才是严格半圈 */
+  D.forEach(function (d, i) {
+    if (!d.relay) return;
+    var latest = d.relay.tOn;
+    for (var j = 0; j < D.length; j++) {
+      if (D[j].relay && D[j].path === d.relay.path && D[j].relay.tOn > latest) latest = D[j].relay.tOn;
+    }
+    D[i].relay.tOn = latest;
+  });
 
   function posOf(d, t) {
     if (t < T_LIFT) return parkPos(d.type, d.k);
@@ -216,7 +231,7 @@ window.FLIGHT06 = (function () {
         var rf = (t - rl.tOff) / (rl.tOn - rl.tOff);
         return { lon: rl.pA[0] + (rl.pB[0] - rl.pA[0]) * rf, lat: rl.pA[1] + (rl.pB[1] - rl.pA[1]) * rf, r: rl.rot };
       }
-      return onPath(d.path, 0, t, rl.tOn, V * 0.8);
+      return onPath(d.path, d.half ? d.path.len / 2 : 0, t, rl.tOn, V * 0.8);
     }
     if (t < d.tArr) return transitPos(d, t);
     if (t < d.tStart) {
@@ -244,6 +259,39 @@ window.FLIGHT06 = (function () {
     }
     return out;
   }
+  /* ---------- 光电：地面扫描投影（上宽下窄等腰梯形 + 4 条连线 + 扫掠线） ---------- */
+  var SCAN = { d1: 1200, d2: 5500, w1: 800, w2: 2200, period: 2.4, fade: 0.6 };
+  function scanOf(p, t, tOn) {
+    var th = (p.r || 0) * Math.PI / 180;
+    var fx = Math.sin(th), fy = Math.cos(th);       /* 前（航向） */
+    var sx = Math.cos(th), sy = -Math.sin(th);      /* 右 */
+    function pt(a, b) {
+      return [+(p.lon + (a * fx + b * sx) / M_LON).toFixed(5),
+              +(p.lat + (a * fy + b * sy) / M_LAT).toFixed(5)];
+    }
+    var A = pt(SCAN.d1, -SCAN.w1), B = pt(SCAN.d1, SCAN.w1);
+    var C = pt(SCAN.d2, SCAN.w2), D = pt(SCAN.d2, -SCAN.w2);
+    var ph = (t / SCAN.period) % 1;
+    var u = ph < 0.5 ? ph * 2 : 2 - ph * 2;         /* 近边 → 远边 → 近边 */
+    var a = SCAN.d1 + (SCAN.d2 - SCAN.d1) * u;
+    var b = SCAN.w1 + (SCAN.w2 - SCAN.w1) * u;
+    var k = Math.max(0, Math.min(1, (t - tOn) / SCAN.fade));
+    return {
+      quad: [A, B, C, D, A],
+      rays: [[[p.lon, p.lat], A], [[p.lon, p.lat], B], [[p.lon, p.lat], C], [[p.lon, p.lat], D]],
+      sweep: [pt(a, -b), pt(a, b)],
+      k: +k.toFixed(3)
+    };
+  }
+  function scans(t) {
+    var out = [];
+    for (var i = 0; i < D.length; i++) {
+      var d = D[i];
+      if (d.type !== "blue" || !d.path || t < (d.tStart || 0)) continue;
+      out.push(scanOf(posOf(d, t), t, d.tStart));
+    }
+    return out;
+  }
   function tracks(t) {
     var o = [];
     for (var i = 0; i < D.length; i++) {
@@ -261,5 +309,5 @@ window.FLIGHT06 = (function () {
     if (t < mn) return "编队飞行";
     return "侦察";
   }
-  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks };
+  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks, scans: scans };
 })();

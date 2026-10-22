@@ -16,6 +16,8 @@
   const btnPlay = document.querySelector('[data-act="play"]');
 
   let T = 0, playing = true, curIdx = -1, last = 0, speed = 1, dirty = true;
+  let backLock = false;          /* 选定场景后置 true：时间只许前进 */
+  const SH03_T = (TL.screens.find(s => s.id === "SH-03") || { t: 25.5 }).t;
   const cache = {};
 
   /* ---------- 舞台等比缩放 ---------- */
@@ -44,7 +46,11 @@
   }
   function show(i) {
     const prev = curIdx >= 0 ? cache[TL.screens[curIdx].id] : null;
-    if (prev) prev.root.classList.remove("on");
+    if (prev) {
+      prev.root.classList.remove("on");
+      /* 退场通知：让这一屏自己收拾画在共享地图上的东西 */
+      if (prev.mod && prev.mod.onHide) { try { prev.mod.onHide(prev.ctx); } catch (e) {} }
+    }
     curIdx = i;
     if (scrBadge) scrBadge.textContent = TL.screens[i].id;
     const cur = ensure(i);
@@ -167,6 +173,7 @@
 
   /* ---------- 控制 ---------- */
   function seek(t) {
+    if (backLock && t < T - 1e-6) t = T;        /* 锁死后所有回退入口统一失效 */
     T = FX.clamp(t, 0, TL.total);
     endcard.classList.remove("on");
     if (T < TL.total) setPlaying(playing);
@@ -181,7 +188,30 @@
     play: () => { if (T >= TL.total) { seek(0); setPlaying(true); return; } setPlaying(!playing); },
     prev: () => { const i = idxAt(T); seek(TL.screens[Math.max(0, i - 1)].t); },
     next: () => { const i = idxAt(T); seek(TL.screens[Math.min(TL.screens.length - 1, i + 1)].t); },
-    replay: () => { endcard.classList.remove("on"); for (const k in cache) { cache[k].root.remove(); delete cache[k]; } curIdx = -1; seek(0); setPlaying(true); setTimeout(prewarm, 1200); },
+    replay: () => {
+      endcard.classList.remove("on");
+      backLock = false;
+      for (const k in cache) {
+        try {
+          if (cache[k].mod && cache[k].mod.onHide) cache[k].mod.onHide(cache[k].ctx);
+          cache[k].root.classList.remove("on", "pre");
+          cache[k].root.remove();
+        } catch (e) {}
+        delete cache[k];
+      }
+      curIdx = -1;
+      /* 彻底销毁地图实例：下次进入 SH-03 时重新创建 = 第一次进来的样子 */
+      try { if (window.MapViewReset) window.MapViewReset(); } catch (e) {}
+      curSub = null;
+      seek(SH03_T);            /* 回到 SH-03 起点（14 s）：请选择任务场景之前 */
+      setPlaying(true);        /* 自动重播这一屏，播到 25.5 s 等待点会自己停下等人选 */
+      setTimeout(function () {
+        try {
+          const MI = window.MapViewInstance && window.MapViewInstance();
+          if (MI && MI.repaint) MI.repaint();
+        } catch (e) {}
+      }, 60);
+    },
     speed: e => { speed = speed === 1 ? 2 : speed === 2 ? 4 : 1; e.currentTarget.textContent = speed + "x"; },
     full: () => { if (!document.fullscreenElement) stage.requestFullscreen && stage.requestFullscreen(); else document.exitFullscreen(); }
   };
@@ -223,7 +253,16 @@
     })();
   }
   btnPlay.textContent = playing ? "⏸" : "▶";
-  window.PLAYER = { seek, play: () => setPlaying(true), pause: () => setPlaying(false), get time() { return T; }, get playing() { return playing; }, set speed(v) { speed = v; } };
+  window.PLAYER = {
+    seek,
+    play: () => setPlaying(true),
+    pause: () => setPlaying(false),
+    lockBack: () => { backLock = true; },
+    get locked() { return backLock; },
+    get time() { return T; },
+    get playing() { return playing; },
+    set speed(v) { speed = v; }
+  };
 
   window.__READY = true;
   document.getElementById("wallclock") && (document.getElementById("wallclock").textContent = ("0" + new Date().getHours()).slice(-2) + ":" + ("0" + new Date().getMinutes()).slice(-2));
