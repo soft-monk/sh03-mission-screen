@@ -1,7 +1,7 @@
 /* SH-06 flight sim v5
    - counts: photon 20 / comm 4 / ewar 6 / radar 3 = 33
    - trail: true FIFO history, 1 sample / 5 s, 300 s back (~61 pts)
-   - photon: 10 per zone (2 cols x 5 rows of 10x4 km blocks), each flies a N-S serpentine loop
+   - photon: 10 per zone (5 cols x 2 rows of 4x10 km cells), each flies a 2x10 km narrow loop
    - radar SAR (1): 10 N-S legs 2 km apart (2 km swath), side-looking beam 8-10 km, perpendicular to track
    - radar GMTI (2): one E-W race track SOUTH of zone-1, 20 km wide x 10 km tall, half-lap apart
    - ewar (4): 2 south race tracks outside zone-2, 2 each, half-lap apart
@@ -79,26 +79,23 @@ window.FLIGHT06 = (function () {
   var TARR = RT.map(function(p){ return TJOIN + p.len / V; });
 
   /* ---------- 各任务航迹 ---------- */
-  /* 光电：每区 20x20km 切成 2 列 x 5 行 = 10 块（各 10km x 4km），每架在自己那块走南北向蛇形闭环。
-     扫描器横向覆盖约 2.8km，航带间距取 2.5km（约 10% 重叠），10km 宽正好 4 条腿铺满。 */
-  var SERP = { legs: [-3750, -1250, 1250, 3750], len: 4000 };   /* 腿位置(米) / 腿长(米) */
-  function serpentineLoop(cx, cy) {
-    var y0 = cy - SERP.len / 2 / M_LAT, y1 = cy + SERP.len / 2 / M_LAT, pts = [];
-    for (var i = 0; i < SERP.legs.length; i++) {
-      var x = cx + SERP.legs[i] / M_LON;
-      if (i % 2 === 0) { pts.push([x, y0]); pts.push([x, y1]); }
-      else             { pts.push([x, y1]); pts.push([x, y0]); }
-    }
-    pts.push([cx + SERP.legs[0] / M_LON, y0]);      /* 底部回程，形成闭环（否则回头会瞬移） */
-    return poly(pts);
-  }
+  /* 光电：每区 5 列 x 2 行 = 10 格（各 4km x 10km），每格一架。
+     格内飞"2km 宽 x 10km 长"的窄闭环（两条南北腿，间距 2km）：
+     扫描覆盖 2.8km > 腿距 2km => 相邻扫描带重叠 0.8km（允许），但航路互不重叠。 */
+  var PHOTO_COLS = 5, PHOTO_CELL_W = 4000, PHOTO_CELL_H = 10000, PHOTO_LEG_GAP = 2000;
+  var PHOTO_AHEAD = 2800;                                   /* 扇区前视 2.8km */
+  var PHOTO_LEG_LEN = PHOTO_CELL_H - 2 * PHOTO_AHEAD;       /* 腿长 4.4km，两端各留 2.8km */
   var PHOTO = { A: [], B: [] };
   for (var k = 0; k < 10; k++) {
-    var col = k % 2, row = Math.floor(k / 2);       /* 2 列 x 5 行 */
-    var dx = (col ? 5000 : -5000) / M_LON;          /* 列心 ±5km */
-    var dy = ((row - 2) * 4000) / M_LAT;            /* 行心 -8/-4/0/+4/+8 km */
-    PHOTO.A.push(serpentineLoop(POT1[0] + dx, POT1[1] + dy));
-    PHOTO.B.push(serpentineLoop(POT2[0] + dx, POT2[1] + dy));
+    var col = k % PHOTO_COLS, row = Math.floor(k / PHOTO_COLS);     /* 5 列 x 2 行 */
+    [POT1, POT2].forEach(function (c, zi) {
+      var cx = c[0] + ((col - 2) * PHOTO_CELL_W) / M_LON;
+      var cy = c[1] + ((row ? 5000 : -5000)) / M_LAT;
+      var y0 = cy - PHOTO_LEG_LEN / 2 / M_LAT, y1 = cy + PHOTO_LEG_LEN / 2 / M_LAT;
+      var x1 = cx - PHOTO_LEG_GAP / 2 / M_LON, x2 = cx + PHOTO_LEG_GAP / 2 / M_LON;
+      var loop = poly([[x1, y0], [x1, y1], [x2, y1], [x2, y0], [x1, y0]]);
+      (zi === 0 ? PHOTO.A : PHOTO.B).push(loop);
+    });
   }
   var Z_HALF_LON = 10000 / M_LON, Z_HALF_LAT = 10000 / M_LAT;   /* deployed zone half size 10 km */
   /* SAR: serpentine east of zone-1, 4.3 km clear of its east edge, bbox 20 x 20 km */
@@ -265,6 +262,7 @@ window.FLIGHT06 = (function () {
       var f = (t - d.tArr) / (d.tStart - d.tArr);
       return { lon: d.pA[0] + (d.pB[0] - d.pA[0]) * f, lat: d.pA[1] + (d.pB[1] - d.pA[1]) * f, r: d.transRot };
     }
+    if (d.pp) return scanPos(d, t);          /* 光电：单腿往返，不绕环 */
     var ph = d.half ? d.path.len / 2 : 0;
     var spd = (d.radar && !d.sar) ? V * 1.2 : (d.jam ? V * 0.8 : V);
     return onPath(d.path, ph, t, d.tStart, spd);
