@@ -356,7 +356,7 @@ function make(variant) {
       })();
 
       function push() {
-        if (!st.started) { map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); if (map.scan) map.scan("scan", []); if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); } if (map.beam) map.beam("sbeam", []); paint(); return; }
+        if (!st.started) { map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); if (map.scan) map.scan("scan", []); if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); } if (map.beam) map.beam("sbeam", []); if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); } paint(); return; }
         if (map.fan && FL.fans) {
           var fs0 = FL.fans(st.t);
           map.fan("rfan", fs0.filter(function (f) { return f.kind === "radar"; }).map(function (s) {
@@ -369,6 +369,16 @@ function make(variant) {
         if (map.beam && FL.sarScans) map.beam("sbeam", FL.sarScans(st.t).map(function (s) {
           return { color: COLORS.yellow, band: s.band, rays: s.rays, k: s.k };
         }));
+        if (map.cover && FL.coverage) {
+          var cv = FL.coverage(st.t);
+          if (cv !== lastCv) {                       /* 每 30 秒仿真时间才重建一次覆盖层 */
+            lastCv = cv;
+            map.cover("cov-photo", cv.photo, COLORS.blue);
+            map.cover("cov-gmti", cv.gmti, COLORS.yellow);
+            map.cover("cov-sar", cv.sar, "#f59e0b");
+            map.cover("cov-ewar", cv.ewar, COLORS.red);
+          }
+        }
         if (visDirty) { applyVis(); visDirty = false; }
         if (map.scan && FL.scans) map.scan("scan", FL.scans(st.t).map(function (s) {
           return { color: COLORS.blue, quad: s.quad, rays: s.rays, sweep: s.sweep, k: s.k };
@@ -447,21 +457,22 @@ function make(variant) {
       root.insertAdjacentHTML("beforeend",
         '<section class="s6-lyr-panel">' +
           '<div class="s6-lyr-h"><b>图层</b><button data-all="1">全显</button><button data-all="0">全隐</button></div>' +
-          [["规划航迹", "tracks"], ["光电扫描", "scan"], ["雷达覆盖", "rfan"], ["电子覆盖", "jfan"]].map(function (o) {
+          [["规划航迹", "tracks"], ["光电扫描", "scan"], ["雷达 SAR", "sbeam"], ["雷达 GMTI", "rfan"], ["电子覆盖", "jfan"]].map(function (o) {
             return '<label class="s6-lyr"><input type="checkbox" checked data-k="' + o[1] + '"><span>' + o[0] + '</span></label>';
           }).join("") +
         '</section>');
 
       var lyrPanel = root.querySelector(".s6-lyr-panel");
       var lyrBoxes = [].slice.call(lyrPanel.querySelectorAll("input[data-k]"));
-      var visState = { tracks: true, scan: true, rfan: true, jfan: true };
-      var visDirty = true;
+      var visState = { tracks: true, scan: true, sbeam: true, rfan: true, jfan: true };
+      var visDirty = true, lastCv = null;
       function applyVis() {
         if (!map.setVis) return;
         map.setVis(["tracks"], visState.tracks);
-        map.setVis(["scan"], visState.scan);
-        map.setVis(["rfan", "sbeam"], visState.rfan);   /* SAR 条带归入「雷达覆盖」 */
-        map.setVis(["jfan"], visState.jfan);
+        map.setVis(["scan", "cov-photo"], visState.scan);
+        map.setVis(["sbeam", "cov-sar"], visState.sbeam);
+        map.setVis(["rfan", "cov-gmti"], visState.rfan);
+        map.setVis(["jfan", "cov-ewar"], visState.jfan);
       }
       lyrBoxes.forEach(function (cb) {
         cb.addEventListener("change", function () {
@@ -500,6 +511,7 @@ function make(variant) {
           if (map.scan) map.scan("scan", []);
           if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); }
           if (map.beam) map.beam("sbeam", []);
+          if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); }
         } catch (e) {}
       };
     }

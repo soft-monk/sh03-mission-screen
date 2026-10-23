@@ -165,8 +165,15 @@ window.MapView = function (host) {
   function setGeom(lid, type, feats, paint) {
     var data = { type: "FeatureCollection", features: feats };
     var src = map.getSource(lid);
-    if (src) { src.setData(data); return; }
+    if (src) {
+      src.setData(data);
+      if (!map.getLayer(lid + "-l") && type) addGeomLayer(lid, type, paint);
+      return;
+    }
     map.addSource(lid, { type: "geojson", data: data });
+    addGeomLayer(lid, type, paint);
+  }
+  function addGeomLayer(lid, type, paint) {
     map.addLayer({
       id: lid + "-l", type: type, source: lid,
       layout: type === "line" ? { "line-join": "round", "line-cap": "round" } : {},
@@ -397,6 +404,27 @@ window.MapView = function (host) {
       when(function () {
         setGeom(id + "-b", "line", band, { "line-color": ["get", "c"], "line-width": 2.5, "line-opacity": ["*", 0.95, ["get", "k"]] });
         setGeom(id + "-r", "line", rays, { "line-color": ["get", "c"], "line-width": 1, "line-opacity": ["*", 0.45, ["get", "k"]], "line-dasharray": [2, 2] });
+      });
+    },
+    /* 覆盖块：一堆矩形，单色半透明填充 */
+    cover: function (id, rings, color) {
+      var col = color || "#38bdf8";
+      var polys = [], lines = [];
+      (rings || []).forEach(function (r) {
+        var ring = (r && r.ring) ? r.ring : r;      /* 支持 {mx,my,ring} 单元格对象，也支持裸坐标环 */
+        if (!ring || !ring.length) return;
+        polys.push([ring]);
+        lines.push(ring);
+      });
+      /* 合成单个要素：几千个格子也只占 1 个 feature，MapLibre 重新切瓦片几乎不花时间 */
+      var feats = polys.length ? [{ type: "Feature", properties: { c: col }, geometry: { type: "MultiPolygon", coordinates: polys } }] : [];
+      var edges = lines.length ? [{ type: "Feature", properties: { c: col }, geometry: { type: "MultiLineString", coordinates: lines } }] : [];
+      when(function () {
+        setGeom(id + "-f", "fill", feats, { "fill-color": ["get", "c"], "fill-opacity": 0.28 });
+        setGeom(id + "-l", "line", edges, { "line-color": ["get", "c"], "line-width": 0.7, "line-opacity": 0.5 });
+        /* 图层序：挪到航迹/编队之下，别糊住它们 */
+        var below = ["fleet-dot", "fleet-l", "trails-c", "tracks-l", "scan-f-l", "rfan-f-l", "sbeam-b-l"].filter(function (x) { return map.getLayer(x); })[0];
+        if (below) { try { map.moveLayer(id + "-f-l", below); map.moveLayer(id + "-l-l", below); } catch (e) {} }
       });
     },
     /* 按图层 id 前缀批量显隐：prefixes 形如 ["tracks","scan"] */

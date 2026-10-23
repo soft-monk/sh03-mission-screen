@@ -394,6 +394,77 @@ window.FLIGHT06 = (function () {
     }
     return out;
   }
+  /* ---------- 覆盖进度：把两个疑似区划成 2km 网格，算每格"首次被各类传感器扫到"的时刻 ---------- */
+  var COV = { cell: 500, step: 30, cache: null, cacheT: -1 };
+  (function () {
+    var half = COV.cell / 2;
+    var hx = half / M_LON, hy = half / M_LAT;
+    var cells = [];
+    [POT1, POT2].forEach(function (c) {
+      for (var i = 0; i < 40; i++) for (var j = 0; j < 40; j++) {
+        var lon = c[0] + ((i - 19.5) * COV.cell) / M_LON;
+        var lat = c[1] + ((j - 19.5) * COV.cell) / M_LAT;
+        cells.push({
+          mx: lon * M_LON, my: lat * M_LAT,
+          ring: [[lon - hx, lat - hy], [lon + hx, lat - hy], [lon + hx, lat + hy], [lon - hx, lat + hy], [lon - hx, lat - hy]]
+        });
+      }
+    });
+    COV.cells = cells;
+    var kinds = { photo: [], gmti: [], sar: [], ewar: [] };
+    D.forEach(function (d) {
+      var k = d.type === "blue" ? "photo" : d.type === "red" ? "ewar" : (d.type === "yellow" ? (d.sar ? "sar" : "gmti") : null);
+      if (k) kinds[k].push(d);
+    });
+    var first = {};
+    Object.keys(kinds).forEach(function (k) {
+      var arr = new Array(cells.length);
+      for (var i = 0; i < cells.length; i++) arr[i] = Infinity;
+      first[k] = arr;
+    });
+    var par = {
+      photo: { r0: 2000, r1: 2800, cos: Math.cos(Math.PI / 6 + 0.35) },
+      gmti:  { r0: 2000, r1: 35000, cos: Math.cos(Math.PI / 4 + 0.2) },
+      ewar:  { r0: 1000, r1: 30000, cos: Math.cos(Math.PI / 4 + 0.2) },
+      sar:   { r0: 8000, r1: 10000, cos: 0 }
+    };
+    for (var tt = TJOIN; tt <= TOTAL; tt += COV.step) {
+      Object.keys(kinds).forEach(function (k) {
+        var pr = par[k], r0e = Math.max(0, pr.r0 - 700), r1e = pr.r1 + 700;
+        kinds[k].forEach(function (d) {
+          if (tt < (d.tStart || 0)) return;
+          var p = posOf(d, tt), hd = (p.r || 0) * Math.PI / 180;
+          var fx = Math.sin(hd), fy = Math.cos(hd);
+          var px = p.lon * M_LON, py = p.lat * M_LAT;
+          var arr = first[k];
+          for (var ci = 0; ci < cells.length; ci++) {
+            if (arr[ci] <= tt) continue;
+            var dx = cells[ci].mx - px, dy = cells[ci].my - py;
+            if (dx > r1e || dx < -r1e || dy > r1e || dy < -r1e) continue;
+            var dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < r0e || dist > r1e) continue;
+            if (k === "sar") {
+              if (dx >= 0 || Math.abs(dx) < dist * 0.80 || Math.abs(dy) > 1100) continue;
+            } else if ((dx * fx + dy * fy) / dist < pr.cos) continue;
+            arr[ci] = tt;
+          }
+        });
+      });
+    }
+    COV.first = first;
+  })();
+  function coverage(t) {
+    var b = Math.floor(t / COV.step);
+    if (COV.cache && COV.cacheT === b) return COV.cache;
+    var out = {};
+    Object.keys(COV.first).forEach(function (k) {
+      var arr = [], f = COV.first[k];
+      for (var i = 0; i < COV.cells.length; i++) if (f[i] <= t) arr.push(COV.cells[i]);
+      out[k] = arr;
+    });
+    COV.cache = out; COV.cacheT = b;
+    return out;
+  }
   function tracks(t) {
     var o = [];
     if (t < T_TRACKS) return o;             /* 第一架进入任务区之前不画 */
@@ -410,5 +481,5 @@ window.FLIGHT06 = (function () {
     if (t < mn) return "编队飞行";
     return "侦察";
   }
-  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks, scans: scans, fans: fans, sarScans: sarScans, T_TRACKS: T_TRACKS };
+  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks, scans: scans, fans: fans, sarScans: sarScans, coverage: coverage, T_TRACKS: T_TRACKS };
 })();
