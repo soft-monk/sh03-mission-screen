@@ -371,6 +371,17 @@ window.MapView = function (host) {
         setGeom(id + "-s", "line", swee, { "line-color": "#eaf6ff", "line-width": 2, "line-opacity": ["*", 0.9, ["get", "k"]] });
       });
     },
+    /* 雷达覆盖扇区：淡填充 + 实线边框，items: [{ quad, color, k }] */
+    fan: function (id, items) {
+      items = items || [];
+      var feats = items.map(function (s) {
+        return { type: "Feature", properties: { c: s.color || "#facc15", k: s.k == null ? 1 : s.k }, geometry: { type: "Polygon", coordinates: [s.quad] } };
+      });
+      when(function () {
+        setGeom(id + "-f", "fill", feats, { "fill-color": ["get", "c"], "fill-opacity": ["*", 0.08, ["get", "k"]] });
+        setGeom(id + "-o", "line", feats, { "line-color": ["get", "c"], "line-width": 1.5, "line-opacity": ["*", 0.9, ["get", "k"]] });
+      });
+    },
     /* 画一条折线（航路用）：坐标为 [[lon,lat], ...] */
     path: function (id, coords, st) {
       when(function () {

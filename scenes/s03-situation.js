@@ -46,14 +46,14 @@ function make(variant) {
   var UAVS = [
     { k: "光电无人机", img: "uav-blue.png",   c: "56,189,248",  total: 48, avail: 48, caps: ["侦察", "识别", "跟踪"], used: 20, rest: 28 },
     { k: "雷达无人机", img: "uav-yellow.png", c: "250,204,21",  total: 32, avail: 32, caps: ["探测", "扫描", "测距"], used: 3,  rest: 29 },
-    { k: "电子无人机", img: "uav-red.png",    c: "248,113,113", total: 28, avail: 28, caps: ["干扰", "压制", "侦测"], used: 4,  rest: 24 },
+    { k: "电子无人机", img: "uav-red.png",    c: "248,113,113", total: 28, avail: 28, caps: ["干扰", "压制", "侦测"], used: 6,  rest: 22 },
     { k: "通信无人机", img: "uav-green.png",  c: "74,222,128",  total: 24, avail: 24, caps: ["中继", "通信", "数据"], used: 4,  rest: 20 }
   ];
   /* 每个编组只用一种机型，不同编组可以用同一种 */
   var GROUPS = [
     { n: "编组1", k: "光电无人机", img: "uav-blue.png",   v: 20 },
     { n: "编组2", k: "通信无人机", img: "uav-green.png",  v: 4 },
-    { n: "编组3", k: "电子无人机", img: "uav-red.png",    v: 4 },
+    { n: "编组3", k: "电子无人机", img: "uav-red.png",    v: 6 },
     { n: "编组4", k: "雷达无人机", img: "uav-yellow.png", v: 3 }
   ];
   var REASONS = [
@@ -356,7 +356,10 @@ function make(variant) {
       })();
 
       function push() {
-        if (!st.started) { map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); if (map.scan) map.scan("scan", []); paint(); return; }
+        if (!st.started) { map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); if (map.scan) map.scan("scan", []); if (map.fan) map.fan("rfan", []); paint(); return; }
+        if (map.fan && FL.fans) map.fan("rfan", FL.fans(st.t).map(function (s) {
+          return { color: s.kind === "jam" ? COLORS.red : COLORS.yellow, quad: s.quad, k: s.k };
+        }));
         if (map.scan && FL.scans) map.scan("scan", FL.scans(st.t).map(function (s) {
           return { color: COLORS.blue, quad: s.quad, rays: s.rays, sweep: s.sweep, k: s.k };
         }));
@@ -420,6 +423,7 @@ function make(variant) {
           map.trails("trails", []);
           if (map.tracks) map.tracks("tracks", []);
           if (map.scan) map.scan("scan", []);
+          if (map.fan) map.fan("rfan", []);
         } catch (e) {}
       };
     }

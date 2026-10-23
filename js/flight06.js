@@ -1,7 +1,7 @@
 /* SH-06 flight sim v5
-   - counts: photon 20 / comm 4 / ewar 4 / radar 3 = 31
+   - counts: photon 20 / comm 4 / ewar 6 / radar 3 = 33
    - trail: true FIFO history, 1 sample / 5 s, 300 s back (~61 pts)
-   - photon: 10 per zone (5 cols x 2 rows of 4x10 km cells), each loops its own cell
+   - photon: 10 per zone (2 cols x 5 rows of 10x4 km blocks), each flies a N-S serpentine loop
    - radar SAR (1): serpentine scan EAST of zone-1, bbox 20x20 km, ping-pong loop
    - radar GMTI (2): one E-W race track SOUTH of zone-1, 20 km wide x 10 km tall, half-lap apart
    - ewar (4): 2 south race tracks outside zone-2, 2 each, half-lap apart
@@ -79,12 +79,26 @@ window.FLIGHT06 = (function () {
   var TARR = RT.map(function(p){ return TJOIN + p.len / V; });
 
   /* ---------- 各任务航迹 ---------- */
+  /* 光电：每区 20x20km 切成 2 列 x 5 行 = 10 块（各 10km x 4km），每架在自己那块走南北向蛇形闭环。
+     扫描器横向覆盖约 2.8km，航带间距取 2.5km（约 10% 重叠），10km 宽正好 4 条腿铺满。 */
+  var SERP = { legs: [-3750, -1250, 1250, 3750], len: 4000 };   /* 腿位置(米) / 腿长(米) */
+  function serpentineLoop(cx, cy) {
+    var y0 = cy - SERP.len / 2 / M_LAT, y1 = cy + SERP.len / 2 / M_LAT, pts = [];
+    for (var i = 0; i < SERP.legs.length; i++) {
+      var x = cx + SERP.legs[i] / M_LON;
+      if (i % 2 === 0) { pts.push([x, y0]); pts.push([x, y1]); }
+      else             { pts.push([x, y1]); pts.push([x, y0]); }
+    }
+    pts.push([cx + SERP.legs[0] / M_LON, y0]);      /* 底部回程，形成闭环（否则回头会瞬移） */
+    return poly(pts);
+  }
   var PHOTO = { A: [], B: [] };
   for (var k = 0; k < 10; k++) {
-    var col = k % 5, row = Math.floor(k / 5);
-    var wKm = 4000, hKm = 10000;
-    PHOTO.A.push(rectLoop(POT1[0] + ((col - 2) * wKm) / M_LON, POT1[1] + (row ? 5000 : -5000) / M_LAT, wKm, hKm));
-    PHOTO.B.push(rectLoop(POT2[0] + ((col - 2) * wKm) / M_LON, POT2[1] + (row ? 5000 : -5000) / M_LAT, wKm, hKm));
+    var col = k % 2, row = Math.floor(k / 2);       /* 2 列 x 5 行 */
+    var dx = (col ? 5000 : -5000) / M_LON;          /* 列心 ±5km */
+    var dy = ((row - 2) * 4000) / M_LAT;            /* 行心 -8/-4/0/+4/+8 km */
+    PHOTO.A.push(serpentineLoop(POT1[0] + dx, POT1[1] + dy));
+    PHOTO.B.push(serpentineLoop(POT2[0] + dx, POT2[1] + dy));
   }
   var Z_HALF_LON = 10000 / M_LON, Z_HALF_LAT = 10000 / M_LAT;   /* deployed zone half size 10 km */
   /* SAR: serpentine east of zone-1, 4.3 km clear of its east edge, bbox 20 x 20 km */
@@ -95,14 +109,18 @@ window.FLIGHT06 = (function () {
   /* GMTI: E-W race track south of zone-1, 20 km wide x 10 km tall, 4.4 km clear of its south edge */
   var RADAR_GAP = 4400, RADAR_LEG = 3000, RADAR_R = 1500;
   var RADAR_CY = POT1[1] - Z_HALF_LAT - (RADAR_R + RADAR_GAP) / M_LAT;
-  var RADAR_TRACK = raceTrackEW([POT1[0], RADAR_CY], RADAR_LEG, RADAR_R, 12);
+  /* 长轴南北：南北直边 3000 + 上下半圆 1500 => 6000(南北) x 3000(东西) */
+  var RADAR_TRACK = raceTrack([POT1[0], RADAR_CY], RADAR_LEG, RADAR_R, 12);
   /* 电子两条跑道：区域外侧（南），各 8km 直边、2km 半径，左右并排 */
-  var JAM_LEG = 2400, JAM_R = 750;
-  var JAM_GAP = 2000;                       /* 两条跑道内侧留 2 km 空档 */
-  var JAM_OFF = JAM_LEG/2 + JAM_R + JAM_GAP/2;
-  var JAM_CY = POT2[1] - Z_HALF_LAT - (JAM_R + 4000) / M_LAT;
-  var JAM_TRACK1 = raceTrackEW([POT2[0] - JAM_OFF/M_LON, JAM_CY], JAM_LEG, JAM_R, 10);
-  var JAM_TRACK2 = raceTrackEW([POT2[0] + JAM_OFF/M_LON, JAM_CY], JAM_LEG, JAM_R, 10);
+  /* 电子干扰：3 条南北长轴跑道环（线性 x1.1），每环 2 架半圈错开 */
+  var JAM_LEG = 2640, JAM_R = 825;
+  var JAM_GAP = 2000;                       /* 相邻环之间留 2 km 空档 */
+  var JAM_STEP = JAM_R * 2 + JAM_GAP;       /* 环心间距 3650 m */
+  var JAM_NS = JAM_LEG / 2 + JAM_R;         /* 南北半跨度 2145 m */
+  var JAM_CY = POT2[1] - Z_HALF_LAT - (JAM_NS + 4000) / M_LAT;
+  var JAM_TRACKS = [-1, 0, 1].map(function (i) {
+    return raceTrack([POT2[0] + (i * JAM_STEP) / M_LON, JAM_CY], JAM_LEG, JAM_R, 10);
+  });
   /* 通信中继跑道 */
   var RELAY_MID = raceTrack(MID, 3120, 975, 10);          /* 1950 x 5070 m (+30%) */
   /* 通信链：集结区中心 -> 最后一个无人机(两区之间)，按【沿路里程】四等分，四架排成一列 */
@@ -144,7 +162,7 @@ window.FLIGHT06 = (function () {
   });
   mk("green", 2, { route: RT[1], tArr: TARR[1], mid: true, half: false });
   mk("green", 3, { route: RT[1], tArr: TARR[1], mid: true, half: true });
-  for (k = 0; k < 4; k++)  mk("red", k, { route: RT[2], tArr: TARR[2], jam: k < 2 ? JAM_TRACK1 : JAM_TRACK2, half: k % 2 === 1 });
+  for (k = 0; k < 6; k++) mk("red", k, { route: RT[2], tArr: TARR[2], jam: JAM_TRACKS[Math.floor(k / 2)], half: k % 2 === 1 });
   mk("yellow", 0, { route: RT[3], tArr: TARR[3], radar: true, sar: true });
   mk("yellow", 1, { route: RT[3], tArr: TARR[3], radar: true, half: false });
   mk("yellow", 2, { route: RT[3], tArr: TARR[3], radar: true, half: true });
@@ -259,29 +277,30 @@ window.FLIGHT06 = (function () {
     }
     return out;
   }
-  /* ---------- 光电：地面扫描投影（上宽下窄等腰梯形 + 4 条连线 + 扫掠线） ---------- */
-  var SCAN = { d1: 1200, d2: 5500, w1: 800, w2: 2200, period: 2.4, fade: 0.6 };
+  /* ---------- 光电：60 度环形扇区（内 2km / 外 2.8km）+ 10 度每秒的扫描条带 ---------- */
+  var SCAN = { r0: 2000, r1: 2800, half: Math.PI / 6, seg: 10, rate: 10, fade: 0.6 };
   function scanOf(p, t, tOn) {
-    var th = (p.r || 0) * Math.PI / 180;
-    var fx = Math.sin(th), fy = Math.cos(th);       /* 前（航向） */
-    var sx = Math.cos(th), sy = -Math.sin(th);      /* 右 */
-    function pt(a, b) {
-      return [+(p.lon + (a * fx + b * sx) / M_LON).toFixed(5),
-              +(p.lat + (a * fy + b * sy) / M_LAT).toFixed(5)];
+    var hd = (p.r || 0) * Math.PI / 180;              /* 机头方位：0=正北，顺时针 */
+    function pt(dm, rel) {                            /* dm 米；rel 相对机头的角（弧度） */
+      var an = hd + rel;
+      return [+(p.lon + (dm * Math.sin(an)) / M_LON).toFixed(5),
+              +(p.lat + (dm * Math.cos(an)) / M_LAT).toFixed(5)];
     }
-    var A = pt(SCAN.d1, -SCAN.w1), B = pt(SCAN.d1, SCAN.w1);
-    var C = pt(SCAN.d2, SCAN.w2), D = pt(SCAN.d2, -SCAN.w2);
-    var ph = (t / SCAN.period) % 1;
-    var u = ph < 0.5 ? ph * 2 : 2 - ph * 2;         /* 近边 → 远边 → 近边 */
-    var a = SCAN.d1 + (SCAN.d2 - SCAN.d1) * u;
-    var b = SCAN.w1 + (SCAN.w2 - SCAN.w1) * u;
-    var k = Math.max(0, Math.min(1, (t - tOn) / SCAN.fade));
-    return {
-      quad: [A, B, C, D, A],
-      rays: [[[p.lon, p.lat], A], [[p.lon, p.lat], B], [[p.lon, p.lat], C], [[p.lon, p.lat], D]],
-      sweep: [pt(a, -b), pt(a, b)],
-      k: +k.toFixed(3)
-    };
+    var quad = [], i, rel;
+    for (i = 0; i <= SCAN.seg; i++) {                 /* 外弧：-30° → +30° */
+      rel = -SCAN.half + 2 * SCAN.half * (i / SCAN.seg);
+      quad.push(pt(SCAN.r1, rel));
+    }
+    for (i = SCAN.seg; i >= 0; i--) {                 /* 内弧：+30° → -30° */
+      rel = -SCAN.half + 2 * SCAN.half * (i / SCAN.seg);
+      quad.push(pt(SCAN.r0, rel));
+    }
+    quad.push(quad[0]);
+    /* 扫描条带：内径→外径的径向连线，从左边缘扫到右边缘，10°/s，单程 6 秒 */
+    var el = Math.max(0, t - tOn);
+    var sw = -SCAN.half + 2 * SCAN.half * (((el * SCAN.rate) / 60) % 1);
+    var k = Math.max(0, Math.min(1, el / SCAN.fade));
+    return { quad: quad, rays: [], sweep: [pt(SCAN.r0, sw), pt(SCAN.r1, sw)], k: +k.toFixed(3) };
   }
   function scans(t) {
     var out = [];
@@ -289,6 +308,44 @@ window.FLIGHT06 = (function () {
       var d = D[i];
       if (d.type !== "blue" || !d.path || t < (d.tStart || 0)) continue;
       out.push(scanOf(posOf(d, t), t, d.tStart));
+    }
+    return out;
+  }
+  /* ---------- 雷达 GMTI：90 度环形扇区覆盖区（内径 2km / 外径 35km，朝向固定正北，无扫描） ---------- */
+  var FAN = {
+    radar: { r0: 2000, r1: 35000 },
+    jam:   { r0: 1000, r1: 30000 },
+    half: Math.PI / 4, seg: 28, fade: 0.6
+  };
+  function fanOf(p, t, tOn, R0, R1) {
+    var hd = (p.r || 0) * Math.PI / 180;      /* 机头方位：扇形中轴对正机头 */
+    var pts = [], i, th, an;
+    for (i = 0; i <= FAN.seg; i++) {          /* 外弧：机头 -45° → +45° */
+      th = -FAN.half + (2 * FAN.half) * (i / FAN.seg);
+      an = hd + th;
+      pts.push([+(p.lon + (R1 * Math.sin(an)) / M_LON).toFixed(5),
+                +(p.lat + (R1 * Math.cos(an)) / M_LAT).toFixed(5)]);
+    }
+    for (i = FAN.seg - 1; i >= 1; i--) {      /* 内弧：机头 +45° → -45° */
+      th = -FAN.half + (2 * FAN.half) * (i / FAN.seg);
+      an = hd + th;
+      pts.push([+(p.lon + (R0 * Math.sin(an)) / M_LON).toFixed(5),
+                +(p.lat + (R0 * Math.cos(an)) / M_LAT).toFixed(5)]);
+    }
+    pts.push(pts[0]);
+    var k = Math.max(0, Math.min(1, (t - tOn) / FAN.fade));
+    return { quad: pts, k: +k.toFixed(3) };
+  }
+  function fans(t) {
+    var out = [];
+    for (var i = 0; i < D.length; i++) {
+      var d = D[i];
+      if (!d.path || t < (d.tStart || 0)) continue;
+      if (d.radar && !d.sar) {                      /* 雷达 GMTI：2~35km */
+        out.push(Object.assign(fanOf(posOf(d, t), t, d.tStart, FAN.radar.r0, FAN.radar.r1), { kind: "radar" }));
+      } else if (d.jam) {                            /* 电子干扰：1~30km */
+        out.push(Object.assign(fanOf(posOf(d, t), t, d.tStart, FAN.jam.r0, FAN.jam.r1), { kind: "jam" }));
+      }
     }
     return out;
   }
@@ -309,5 +366,5 @@ window.FLIGHT06 = (function () {
     if (t < mn) return "编队飞行";
     return "侦察";
   }
-  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks, scans: scans };
+  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks, scans: scans, fans: fans };
 })();
