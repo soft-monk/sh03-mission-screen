@@ -186,14 +186,14 @@ function make(variant) {
     var labelEls = [];
 
     /* 任务区：80x80km 橙黄色实线 */
-    map.polygon("area-mission", AREA.mission, { fill: "#f59e0b", fillOpacity: 0, line: "#f59e0b", width: 3.5 });
+    map.polygon("area-mission", AREA.mission, { fill: "#f59e0b", fillOpacity: 0, line: "#f59e0b", width: 5.5 });
     areaEls.push({ id: "area-mission", delay: 1.6 });
     labelEls.push({ h: map.label("任务区", [113.7900, 39.9400], "#fbbf24", 17), delay: 1.6 });
 
     /* 潜在目标部署区：2 个红色实线矩形（20x20km），无填充 */
     AREA.targets.forEach(function (tg, ti) {
       var tid = "area-target-" + ti;
-      map.polygon(tid, tg.pts, { fill: "#ef4444", fillOpacity: 0, line: "#ef4444", width: 2.5 });
+      map.polygon(tid, tg.pts, { fill: "#ef4444", fillOpacity: 0, line: "#ef4444", width: 4.5 });
       areaEls.push({ id: tid, delay: 2.05 + ti * 0.22 });
       labelEls.push({ h: map.label(tg.name, tg.label, "#fca5a5", 15), delay: 2.05 + ti * 0.22 });
     });
@@ -213,13 +213,13 @@ function make(variant) {
       { n: "禁飞区9", lp: [115.79253,39.79417], pts: [[115.76302,39.79017],[115.76302,39.77525],[115.75437,39.76415],[115.77416,39.75983],[115.776,39.77624],[115.78253,39.78558]] }
     ];
     NOFLY.forEach(function (z, i) {
-      map.polygon("area-nf" + (i + 1), z.pts, { fill: "#ef4444", fillOpacity: 0, line: "#ef4444", width: 2.5 });
+      map.polygon("area-nf" + (i + 1), z.pts, { fill: "#ef4444", fillOpacity: 0, line: "#ef4444", width: 4.5 });
       areaEls.push({ id: "area-nf" + (i + 1), delay: 2.45 });
       labelEls.push({ h: map.label(z.n, z.lp, "#fca5a5", 15), delay: 2.45 });
     });
 
     /* 我方集结区：绿色虚线 4x4km */
-    map.polygon("area-reserve", AREA.reserve, { fill: "#22c55e", fillOpacity: 0.16, line: "#22c55e", width: 3, dash: [2.4, 1.6] });
+    map.polygon("area-reserve", AREA.reserve, { fill: "#22c55e", fillOpacity: 0.16, line: "#22c55e", width: 5, dash: [2.4, 1.6] });
     areaEls.push({ id: "area-reserve", delay: 2.75 });
     labelEls.push({ h: map.label("我方集结区", [115.9320, 39.7660], "#4ade80", 16), delay: 2.75 });
 
@@ -356,19 +356,30 @@ function make(variant) {
       })();
 
       function push() {
-        if (!st.started) { map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); if (map.scan) map.scan("scan", []); if (map.fan) map.fan("rfan", []); paint(); return; }
-        if (map.fan && FL.fans) map.fan("rfan", FL.fans(st.t).map(function (s) {
-          return { color: s.kind === "jam" ? COLORS.red : COLORS.yellow, quad: s.quad, k: s.k };
+        if (!st.started) { map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); if (map.scan) map.scan("scan", []); if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); } if (map.beam) map.beam("sbeam", []); paint(); return; }
+        if (map.fan && FL.fans) {
+          var fs0 = FL.fans(st.t);
+          map.fan("rfan", fs0.filter(function (f) { return f.kind === "radar"; }).map(function (s) {
+            return { color: COLORS.yellow, quad: s.quad, k: s.k };
+          }));
+          map.fan("jfan", fs0.filter(function (f) { return f.kind === "jam"; }).map(function (s) {
+            return { color: COLORS.red, quad: s.quad, k: s.k };
+          }));
+        }
+        if (map.beam && FL.sarScans) map.beam("sbeam", FL.sarScans(st.t).map(function (s) {
+          return { color: COLORS.yellow, band: s.band, rays: s.rays, k: s.k };
         }));
+        if (visDirty) { applyVis(); visDirty = false; }
         if (map.scan && FL.scans) map.scan("scan", FL.scans(st.t).map(function (s) {
           return { color: COLORS.blue, quad: s.quad, rays: s.rays, sweep: s.sweep, k: s.k };
         }));
-        if (map.tracks && FL.tracks) map.tracks("tracks", FL.tracks(st.t).map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.pts }; }));
         var fleet = FL.simulate(st.t);
         fleet.forEach(function (d) { d.color = COLORS[d.type] || "#38bdf8"; });
         map.fleet("fleet", fleet);
         map.trails("trails", fleet.filter(function (d) { return d.trail && d.trail.length > 1; })
           .map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.trail }; }));
+        /* 规划航迹放在尾迹之后创建 => 图层压在尾迹上面，不被粗尾迹盖住 */
+        if (map.tracks && FL.tracks) map.tracks("tracks", FL.tracks(st.t).map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.pts }; }));
         paint();
       }
 
@@ -413,6 +424,70 @@ function make(variant) {
       requestAnimationFrame(loop);
       var qF = new URLSearchParams(location.search), f0 = parseFloat(qF.get("fly"));
       if (!isNaN(f0)) { st.started = true; st.t = Math.max(0, Math.min(FL.TOTAL, f0)); goBtn.textContent = "继续"; }
+      /* ---------- 图层面板：只放 4 个开关，默认全开 ---------- */
+      if (!document.getElementById("css-s6lyr")) {
+        var st6 = document.createElement("style");
+        st6.id = "css-s6lyr";
+        st6.textContent =
+          ".s6-lyr-panel{position:absolute;left:116px;top:142px;width:200px;padding:10px 12px;border-radius:10px;" +
+            "background:rgba(8,20,34,.94);border:1px solid rgba(56,189,248,.35);box-shadow:0 12px 32px rgba(0,0,0,.55);" +
+            "display:none;z-index:30;font-size:14px;color:#cfe3f7}" +
+          ".s6-lyr-panel.on{display:block}" +
+          ".s6-lyr-h{display:flex;align-items:center;gap:8px;font-size:13px;color:#7dd3fc;letter-spacing:2px;" +
+            "padding-bottom:8px;border-bottom:1px solid rgba(56,189,248,.18);margin-bottom:4px}" +
+          ".s6-lyr-h b{margin-right:auto;font-weight:600}" +
+          ".s6-lyr-h button{background:rgba(56,189,248,.12);border:1px solid rgba(56,189,248,.3);color:#9fd0f5;" +
+            "border-radius:5px;padding:2px 8px;font-size:12px;cursor:pointer}" +
+          ".s6-lyr-h button:hover{background:rgba(56,189,248,.24)}" +
+          ".s6-lyr{display:flex;align-items:center;gap:9px;padding:7px 2px;cursor:pointer;user-select:none}" +
+          ".s6-lyr:hover{color:#eaf6ff}" +
+          ".s6-lyr input{accent-color:#38bdf8;width:14px;height:14px;cursor:pointer}";
+        document.head.appendChild(st6);
+      }
+      root.insertAdjacentHTML("beforeend",
+        '<section class="s6-lyr-panel">' +
+          '<div class="s6-lyr-h"><b>图层</b><button data-all="1">全显</button><button data-all="0">全隐</button></div>' +
+          [["规划航迹", "tracks"], ["光电扫描", "scan"], ["雷达覆盖", "rfan"], ["电子覆盖", "jfan"]].map(function (o) {
+            return '<label class="s6-lyr"><input type="checkbox" checked data-k="' + o[1] + '"><span>' + o[0] + '</span></label>';
+          }).join("") +
+        '</section>');
+
+      var lyrPanel = root.querySelector(".s6-lyr-panel");
+      var lyrBoxes = [].slice.call(lyrPanel.querySelectorAll("input[data-k]"));
+      var visState = { tracks: true, scan: true, rfan: true, jfan: true };
+      var visDirty = true;
+      function applyVis() {
+        if (!map.setVis) return;
+        map.setVis(["tracks"], visState.tracks);
+        map.setVis(["scan"], visState.scan);
+        map.setVis(["rfan", "sbeam"], visState.rfan);   /* SAR 条带归入「雷达覆盖」 */
+        map.setVis(["jfan"], visState.jfan);
+      }
+      lyrBoxes.forEach(function (cb) {
+        cb.addEventListener("change", function () {
+          visState[cb.getAttribute("data-k")] = cb.checked;
+          visDirty = true; applyVis();
+        });
+      });
+      [].slice.call(lyrPanel.querySelectorAll("button[data-all]")).forEach(function (b) {
+        b.addEventListener("click", function () {
+          var v = b.getAttribute("data-all") === "1";
+          lyrBoxes.forEach(function (cb) { cb.checked = v; visState[cb.getAttribute("data-k")] = v; });
+          visDirty = true; applyVis();
+        });
+      });
+      (function () {
+        var tb = root.querySelector(".s3-toolbar"), btn = null;
+        if (!tb) return;
+        [].slice.call(tb.querySelectorAll("b")).forEach(function (b) { if (b.textContent === "图层") btn = b; });
+        if (!btn) return;
+        btn.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          var on = lyrPanel.classList.toggle("on");
+          btn.classList.toggle("on", on);
+        });
+      })();
+
       push();
 
       /* 退场：停掉自驱循环，并清掉本屏画在共享地图上的动态图层 */
@@ -423,7 +498,8 @@ function make(variant) {
           map.trails("trails", []);
           if (map.tracks) map.tracks("tracks", []);
           if (map.scan) map.scan("scan", []);
-          if (map.fan) map.fan("rfan", []);
+          if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); }
+          if (map.beam) map.beam("sbeam", []);
         } catch (e) {}
       };
     }

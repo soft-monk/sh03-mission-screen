@@ -343,8 +343,8 @@ window.MapView = function (host) {
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
             "line-color": ["get", "c"],
-            "line-width": 2,
-            "line-opacity": 0.5,
+            "line-width": 2.5,
+            "line-opacity": 0.8,
             "line-dasharray": [1.8, 2.6]
           }
         });
@@ -380,6 +380,38 @@ window.MapView = function (host) {
       when(function () {
         setGeom(id + "-f", "fill", feats, { "fill-color": ["get", "c"], "fill-opacity": ["*", 0.08, ["get", "k"]] });
         setGeom(id + "-o", "line", feats, { "line-color": ["get", "c"], "line-width": 1.5, "line-opacity": ["*", 0.9, ["get", "k"]] });
+      });
+    },
+    /* SAR 扫描条带：细带(2.5px) + 两条到机的连线
+       items: [{ band:[[lon,lat],[lon,lat]], rays:[[p,q],...], color, k }] */
+    beam: function (id, items) {
+      items = items || [];
+      var band = [], rays = [];
+      items.forEach(function (s) {
+        var c = s.color || "#facc15", k = s.k == null ? 1 : s.k;
+        band.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: s.band } });
+        (s.rays || []).forEach(function (r) {
+          rays.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: r } });
+        });
+      });
+      when(function () {
+        setGeom(id + "-b", "line", band, { "line-color": ["get", "c"], "line-width": 2.5, "line-opacity": ["*", 0.95, ["get", "k"]] });
+        setGeom(id + "-r", "line", rays, { "line-color": ["get", "c"], "line-width": 1, "line-opacity": ["*", 0.45, ["get", "k"]], "line-dasharray": [2, 2] });
+      });
+    },
+    /* 按图层 id 前缀批量显隐：prefixes 形如 ["tracks","scan"] */
+    setVis: function (prefixes, visible) {
+      when(function () {
+        var v = visible ? "visible" : "none";
+        var ls = (map.getStyle() && map.getStyle().layers) || [];
+        for (var i = 0; i < ls.length; i++) {
+          for (var j = 0; j < prefixes.length; j++) {
+            if (ls[i].id.indexOf(prefixes[j]) === 0) {
+              try { map.setLayoutProperty(ls[i].id, "visibility", v); } catch (e) {}
+              break;
+            }
+          }
+        }
       });
     },
     /* 画一条折线（航路用）：坐标为 [[lon,lat], ...] */

@@ -2,7 +2,7 @@
    - counts: photon 20 / comm 4 / ewar 6 / radar 3 = 33
    - trail: true FIFO history, 1 sample / 5 s, 300 s back (~61 pts)
    - photon: 10 per zone (2 cols x 5 rows of 10x4 km blocks), each flies a N-S serpentine loop
-   - radar SAR (1): serpentine scan EAST of zone-1, bbox 20x20 km, ping-pong loop
+   - radar SAR (1): 10 N-S legs 2 km apart (2 km swath), side-looking beam 8-10 km, perpendicular to track
    - radar GMTI (2): one E-W race track SOUTH of zone-1, 20 km wide x 10 km tall, half-lap apart
    - ewar (4): 2 south race tracks outside zone-2, 2 each, half-lap apart
    - comm: 1 relay between the two zones, other 3 evenly split on assembly->mid corridor */
@@ -102,10 +102,19 @@ window.FLIGHT06 = (function () {
   }
   var Z_HALF_LON = 10000 / M_LON, Z_HALF_LAT = 10000 / M_LAT;   /* deployed zone half size 10 km */
   /* SAR: serpentine east of zone-1, 4.3 km clear of its east edge, bbox 20 x 20 km */
-  var SAR_GAP = 4300, SAR_LEG = 20000;
-  var SAR_CX = POT1[0] + Z_HALF_LON + (SAR_LEG/2 + SAR_GAP) / M_LON;
-  var SAR_LEGS = 7, SAR_W = 20000;
-  var SAR_TRACK = serpentine(SAR_CX, POT1[1], SAR_LEG, SAR_W, SAR_LEGS);
+  /* SAR：侧视成像，测绘带宽 2km（地距 8~10km）=> 20km 宽的疑似区需要 10 条平行腿、间距 2km */
+  var SAR_LEGS = 10, SAR_STEP = 2000, SAR_LEGLEN = 22000;
+  var SAR_TRACK = (function () {
+    var y0 = POT1[1] - SAR_LEGLEN / 2 / M_LAT, y1 = POT1[1] + SAR_LEGLEN / 2 / M_LAT;
+    var pts = [], i, x;
+    for (i = 0; i < SAR_LEGS; i++) {
+      x = POT1[0] + (i * SAR_STEP) / M_LON;          /* 从疑似区中心向东排到 +18km */
+      if (i % 2 === 0) { pts.push([x, y0]); pts.push([x, y1]); }
+      else             { pts.push([x, y1]); pts.push([x, y0]); }
+    }
+    pts.push([POT1[0], y0]);                          /* 南侧回程，闭合 */
+    return poly(pts);
+  })();
   /* GMTI: E-W race track south of zone-1, 20 km wide x 10 km tall, 4.4 km clear of its south edge */
   var RADAR_GAP = 4400, RADAR_LEG = 3000, RADAR_R = 1500;
   var RADAR_CY = POT1[1] - Z_HALF_LAT - (RADAR_R + RADAR_GAP) / M_LAT;
@@ -256,9 +265,8 @@ window.FLIGHT06 = (function () {
       var f = (t - d.tArr) / (d.tStart - d.tArr);
       return { lon: d.pA[0] + (d.pB[0] - d.pA[0]) * f, lat: d.pA[1] + (d.pB[1] - d.pA[1]) * f, r: d.transRot };
     }
-    if (d.sar) return scanPos(d, t);
     var ph = d.half ? d.path.len / 2 : 0;
-    var spd = d.radar ? V * 1.2 : (d.jam ? V * 0.8 : V);
+    var spd = (d.radar && !d.sar) ? V * 1.2 : (d.jam ? V * 0.8 : V);
     return onPath(d.path, ph, t, d.tStart, spd);
   }
 
@@ -349,13 +357,51 @@ window.FLIGHT06 = (function () {
     }
     return out;
   }
+  /* 规划航迹统一从那"第一架进入任务区"的时刻开始画 */
+  var MISSION = { w: 113.62960, e: 114.56639, s: 39.51435, n: 40.25096 };
+  function inMission(p) { return p.lon > MISSION.w && p.lon < MISSION.e && p.lat > MISSION.s && p.lat < MISSION.n; }
+  var T_TRACKS = (function () {
+    for (var tt = TJOIN; tt <= TOTAL; tt += 5) {
+      for (var i = 0; i < D.length; i++) if (inMission(posOf(D[i], tt))) return tt;
+    }
+    return 0;
+  })();
+  /* ---------- SAR：始终指向疑似区中心的地面扫描条带（地距 8~10km，条带宽 100m） ---------- */
+  var SARB = { near: 8000, far: 10000, width: 100, fade: 0.6 };
+  function sarBeamOf(p, t, tOn) {
+    var hd = (p.r || 0) * Math.PI / 180;
+    if (Math.abs(Math.cos(hd)) < 0.5) return null;   /* 东西向的连接段/回程：侧视不成立，不画 */
+    var ux = -1, uy = 0;                             /* 固定朝正西（垂直南北航向） */
+    var nx = 0, ny = 1;
+    function pt(dist, off) {
+      return [+(p.lon + (ux * dist + nx * off) / M_LON).toFixed(5),
+              +(p.lat + (uy * dist + ny * off) / M_LAT).toFixed(5)];
+    }
+    var kn = Math.max(0, Math.min(1, (t - tOn) / SARB.fade));
+    return {
+      band: [pt(SARB.near, 0), pt(SARB.far, 0)],
+      ends: [pt(SARB.near, 0), pt(SARB.far, 0)],
+      rays: [[[p.lon, p.lat], pt(SARB.near, -SARB.width / 2)],
+             [[p.lon, p.lat], pt(SARB.far, SARB.width / 2)]],
+      k: +kn.toFixed(3)
+    };
+  }
+  function sarScans(t) {
+    var out = [];
+    for (var i = 0; i < D.length; i++) {
+      var d = D[i];
+      if (!d.sar || !d.path || t < (d.tStart || 0)) continue;
+      var b = sarBeamOf(posOf(d, t), t, d.tStart);
+      if (b) out.push(b);
+    }
+    return out;
+  }
   function tracks(t) {
     var o = [];
+    if (t < T_TRACKS) return o;             /* 第一架进入任务区之前不画 */
     for (var i = 0; i < D.length; i++) {
       var d = D[i], P = d.path;
-      if (!P || !P.pts || d.sar) continue;      /* SAR 只要尾迹，不要规划虚线 */
-      var tOn = d.relay ? d.relay.tOn : (d.tStart || 0);
-      if (t < tOn) continue;
+      if (!P || !P.pts) continue;
       o.push({ type: d.type, pts: P.pts.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
     }
     return o;
@@ -366,5 +412,5 @@ window.FLIGHT06 = (function () {
     if (t < mn) return "编队飞行";
     return "侦察";
   }
-  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks, scans: scans, fans: fans };
+  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks, scans: scans, fans: fans, sarScans: sarScans, T_TRACKS: T_TRACKS };
 })();
