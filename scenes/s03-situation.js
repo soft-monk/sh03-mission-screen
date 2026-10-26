@@ -169,7 +169,7 @@ function make(variant) {
         '<section class="s6-right">' +
           '<div class="s6-toolbox">' +
             '<div class="s6-toolbox-h"><span>目标</span><b class="s6-target-count">0</b></div>' +
-            '<div class="s6-tb s6-target-item open" style="display:none">' +
+            '<div class="s6-tb s6-target-item open" data-target="001" style="display:none">' +
               '<div class="s6-tb-head">' +
                 '<span class="s6-tb-no">001</span>' +
                 '<span class="s6-tb-name">疑似雷达目标</span>' +
@@ -178,13 +178,13 @@ function make(variant) {
               '</div>' +
               '<div class="s6-tb-body">' +
                 '<div class="s6-tb-row"><span>类型</span><b>雷达目标</b></div>' +
-                '<div class="s6-tb-row"><span>判定</span><b class="sus">疑似（未经确认）</b></div>' +
+                '<div class="s6-tb-row"><span>判定</span><b class="sus s6-tb-judge">疑似（未经确认）</b></div>' +
                 '<div class="s6-tb-row"><span>来源</span><b>电子干扰机-01</b></div>' +
                 '<div class="s6-tb-row"><span>区域</span><b>潜在目标部署区2</b></div>' +
                 '<div class="s6-tb-tags"><i>疑似雷达信号</i><i>待复核</i></div>' +
               '</div>' +
             '</div>' +
-            '<div class="s6-tb s6-target-item" style="display:none">' +
+            '<div class="s6-tb s6-target-item" data-target="002" style="display:none">' +
               '<div class="s6-tb-head">' +
                 '<span class="s6-tb-no">002</span>' +
                 '<span class="s6-tb-name">疑似雷达目标</span>' +
@@ -193,7 +193,7 @@ function make(variant) {
               '</div>' +
               '<div class="s6-tb-body">' +
                 '<div class="s6-tb-row"><span>类型</span><b>雷达目标</b></div>' +
-                '<div class="s6-tb-row"><span>判定</span><b class="sus">疑似（未经确认）</b></div>' +
+                '<div class="s6-tb-row"><span>判定</span><b class="sus s6-tb-judge">疑似（未经确认）</b></div>' +
                 '<div class="s6-tb-row"><span>来源</span><b>电子干扰机-01</b></div>' +
                 '<div class="s6-tb-row"><span>区域</span><b>潜在目标部署区2</b></div>' +
                 '<div class="s6-tb-tags"><i>疑似雷达信号</i><i>待复核</i></div>' +
@@ -377,16 +377,20 @@ function make(variant) {
       var targetCountEl = root.querySelector(".s6-target-count");
       var targetOn = false;
       var T_SCAN = 3900;
+      var T_CONFIRM_001 = 4498.48;
+      var T_CONFIRM_002 = 4212.80;
       var SUSPECTS = [
-        { id: "s6-suspect-1", no: "001", center: [114.34, 40.02], label: [114.352, 40.024] },
-        { id: "s6-suspect-2", no: "002", center: [114.28, 40.08], label: [114.292, 40.084] }
+        { id: "s6-suspect-1", confirmedId: "s6-confirm-1", no: "001", center: [114.34, 40.02], label: [114.352, 40.024], confirmAt: T_CONFIRM_001 },
+        { id: "s6-suspect-2", confirmedId: "s6-confirm-2", no: "002", center: [114.28, 40.08], label: [114.292, 40.084], confirmAt: T_CONFIRM_002 }
       ];
       var SR = 0.009;
-      var suspectLabels = [];
-      var suspectsCreated = false;
-      function ensureSuspects() {
-        if (suspectsCreated) return;
-        suspectsCreated = true;
+      var targetsCreated = false;
+      var confirmedState = { "001": null, "002": null };
+      var itemByNo = {};
+      targetItems.forEach(function (el) { itemByNo[el.getAttribute("data-target")] = el; });
+      function ensureTargets() {
+        if (targetsCreated) return;
+        targetsCreated = true;
         SUSPECTS.forEach(function (s) {
           var c = s.center;
           var ring = [
@@ -397,23 +401,62 @@ function make(variant) {
             [c[0], c[1] + SR]
           ];
           map.polygon(s.id, ring, { fill: "#f59e0b", fillOpacity: 0.22, line: "#f59e0b", width: 2.4 });
-          suspectLabels.push(map.label("疑似雷达目标 " + s.no, s.label, "#fbbf24", 14));
+          map.polygon(s.confirmedId, ring, { fill: "#ef4444", fillOpacity: 0.3, line: "#ef4444", width: 3 });
+          s.targetLabel = map.label("疑似雷达目标 " + s.no, s.label, "#fbbf24", 14, "target-label-" + s.no);
         });
+      }
+      function setTargetItemState(s, confirmed) {
+        var no = s.no;
+        var el = itemByNo[no];
+        if (el) {
+          el.classList.toggle("confirmed", confirmed);
+          var name = el.querySelector(".s6-tb-name");
+          if (name) name.textContent = confirmed ? no + "雷达目标" : "疑似雷达目标";
+          var badge = el.querySelector(".s6-tb-sus");
+          if (badge) badge.style.display = confirmed ? "none" : "";
+          var judge = el.querySelector(".s6-tb-judge");
+          if (judge) {
+            judge.textContent = confirmed ? "已确认" : "疑似（未经确认）";
+            judge.classList.toggle("sus", !confirmed);
+            judge.classList.toggle("confirmed", confirmed);
+          }
+          var tags = el.querySelector(".s6-tb-tags");
+          if (tags) tags.innerHTML = confirmed ? "<i>雷达信号</i><i>已确认</i>" : "<i>疑似雷达信号</i><i>待复核</i>";
+        }
+        if (s.targetLabel) {
+          s.targetLabel.setText(confirmed ? no + "雷达目标" : "疑似雷达目标 " + no);
+          s.targetLabel.setColor(confirmed ? "#ef4444" : "#fbbf24");
+        }
       }
       function renderTargetState(t) {
         var on = st.started && t >= T_SCAN;
-        if (on === targetOn) return;
-        targetOn = on;
-        targetItems.forEach(function (el) { el.style.display = on ? "" : "none"; });
-        if (targetCountEl) targetCountEl.textContent = on ? String(targetItems.length) : "0";
-        if (on) {
-          ensureSuspects();
-          if (map.setVis) map.setVis(["s6-suspect"], true);
-          suspectLabels.forEach(function (l) { l.set(1); });
-        } else if (suspectsCreated) {
-          if (map.setVis) map.setVis(["s6-suspect"], false);
-          suspectLabels.forEach(function (l) { l.set(0); });
+        if (on !== targetOn) {
+          targetOn = on;
+          targetItems.forEach(function (el) { el.style.display = on ? "" : "none"; });
+          if (targetCountEl) targetCountEl.textContent = on ? String(targetItems.length) : "0";
+          if (!on) {
+            if (targetsCreated) {
+              SUSPECTS.forEach(function (s) {
+                map.setVis([s.id], false);
+                map.setVis([s.confirmedId], false);
+                s.targetLabel.set(0);
+              });
+            }
+            confirmedState["001"] = null;
+            confirmedState["002"] = null;
+          }
         }
+        if (!on) return;
+        ensureTargets();
+        SUSPECTS.forEach(function (s) {
+          var confirmed = t >= s.confirmAt;
+          s.targetLabel.set(1);
+          if (confirmedState[s.no] === confirmed) return;
+          confirmedState[s.no] = confirmed;
+          setTargetItemState(s, confirmed);
+          map.setVis([s.id], !confirmed);
+          map.setVis([s.confirmedId], confirmed);
+        });
       }
       var aiChatEl = root.querySelector(".s6-chat-scroll");
       var aiLogEl = root.querySelector(".s6-ai-log");
@@ -429,7 +472,9 @@ function make(variant) {
         { t: T_SCAN + 2, who: "user", text: "方案确认。" },
         { t: FL.T_REASSIGN || 0, who: "ai", text: "已分配14号、15号光电无人机进行001疑似目标察打任务。" },
         { t: FL.T_REASSIGN || 0, who: "ai", text: "已分配17号、18号光电无人机进行002疑似目标察打任务。" },
-        { t: FL.T_REPLAN || 0, who: "ai", text: "重新规划剩余的6架光电无人机侦察方式。" }
+        { t: FL.T_REPLAN || 0, who: "ai", text: "重新规划剩余的6架光电无人机侦察方式。" },
+        { t: T_CONFIRM_002, who: "ai", text: "智能评估对照，确认002雷达目标" },
+        { t: T_CONFIRM_001, who: "ai", text: "智能评估对照，确认001雷达目标" }
       ].filter(function (ev) { return ev.t > 0; }).sort(function (a, b) { return a.t - b.t; });
       function renderAiLog(t) {
         if (!aiLogEl) return;
@@ -644,8 +689,10 @@ function make(variant) {
           if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); }
           if (map.beam) map.beam("sbeam", []);
           if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); }
-          if (suspectsCreated) { if (map.setVis) map.setVis(["s6-suspect"], false); suspectLabels.forEach(function (l) { l.set(0); }); }
+          if (targetsCreated) { SUSPECTS.forEach(function (s) { map.setVis([s.id], false); map.setVis([s.confirmedId], false); s.targetLabel.set(0); }); }
           targetOn = false;
+          confirmedState["001"] = null;
+          confirmedState["002"] = null;
         } catch (e) {}
       };
     }
@@ -862,6 +909,12 @@ function make(variant) {
         ".s6-tb-sus{font-style:normal;font-size:10px;color:#fbbf24;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.38);",
         "  border-radius:3px;padding:1px 5px;margin-left:6px;white-space:nowrap}",
         ".s6-tb-row b.sus{color:#fbbf24}",
+        ".s6-tb.confirmed .s6-tb-head{background:rgba(127,29,29,.55);box-shadow:inset 2px 0 0 #ef4444}",
+        ".s6-tb.confirmed .s6-tb-no{color:#f87171}",
+        ".s6-tb.confirmed .s6-tb-name{color:#fee2e2}",
+        ".s6-tb.confirmed .s6-tb-arrow{border-color:#fca5a5}",
+        ".s6-tb-row b.confirmed{color:#f87171}",
+        ".s6-tb.confirmed .s6-tb-tags i{color:#fca5a5;background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3)}",
         ".s6-tb-tags i{font-style:normal;font-size:11px;color:#9fc4e6;background:rgba(56,189,248,.1);",
         "  border:1px solid rgba(56,189,248,.22);border-radius:3px;padding:1px 6px}",
         ".s6-ai{border-radius:12px;padding:12px 14px;background:linear-gradient(180deg,rgba(6,18,32,.97),rgba(4,12,22,.98));",

@@ -469,15 +469,20 @@ window.MapView = function (host) {
 
       });
     },
-    label: function (text, lngLat, color, size) {
-      if (labelCache[text]) return labelCache[text];
+    label: function (text, lngLat, color, size, key) {
+      var cacheKey = key || text;
+      if (labelCache[cacheKey]) return labelCache[cacheKey];
       var el = document.createElement("div");
       el.textContent = text;
       el.style.cssText = "color:" + color + ";font:600 " + size + "px/1.1 var(--font);letter-spacing:1px;" +
         "text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 8px rgba(0,0,0,.8);white-space:nowrap;opacity:0;pointer-events:none";
       when(function () { new maplibregl.Marker({ element: el, anchor: "top-left" }).setLngLat(lngLat).addTo(map); });
-      labelCache[text] = { set: function (v) { el.style.opacity = v; } };
-      return labelCache[text];
+      labelCache[cacheKey] = {
+        set: function (v) { el.style.opacity = v; },
+        setText: function (v) { el.textContent = v; },
+        setColor: function (v) { el.style.color = v; }
+      };
+      return labelCache[cacheKey];
     }
   };
 };
