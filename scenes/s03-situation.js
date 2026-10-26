@@ -148,36 +148,73 @@ function make(variant) {
         '<div class="s5-confirm"><i>&raquo;</i><span>确认推荐方案</span><i>&raquo;</i></div>')
       : "";
 
-    /* SH-06 右上角：资源概况（在用 / 损毁 / 待用） */
+    /* SH-06 顶部工具条右侧：资源概况（在用/损毁/待用 合并为 20/0/28） */
     var RES6_HTML = (sc && sc.id === "SH-06")
       ? ('<section class="s6-res">' +
-          '<div class="s6-h">资源概况</div>' +
           '<div class="s6-grid">' +
             UAVS.map(function (u) {
               return '<div class="s6-col" style="--c:' + u.c + '">' +
-                '<div class="lb">' + u.k.replace("无人机", "") + '</div>' +
                 '<img src="assets/img/' + u.img + '" alt="">' +
-                '<div class="st g"><span>在用</span><b>' + u.used + '</b></div>' +
-                '<div class="st r"><span>损毁</span><b>0</b></div>' +
-                '<div class="st b"><span>待用</span><b>' + u.rest + '</b></div>' +
+                '<div class="lb">' + u.k.replace("无人机", "") + '</div>' +
+                '<div class="s6-nums"><b class="g">' + u.used + '</b><i>/</i><b class="r">0</b><i>/</i><b class="b">' + u.rest + '</b></div>' +
               '</div>';
             }).join("") +
           '</div>' +
         '</section>')
       : "";
 
+    var SH06_RIGHT_HTML = "";
+    if (sc && sc.id === "SH-06") {
+      SH06_RIGHT_HTML =
+        '<section class="s6-right">' +
+          '<div class="s6-toolbox">' +
+            '<div class="s6-toolbox-h"><span>目标</span><b class="s6-target-count">0</b></div>' +
+            '<div class="s6-tb s6-target-item open" style="display:none">' +
+              '<div class="s6-tb-head">' +
+                '<span class="s6-tb-no">001</span>' +
+                '<span class="s6-tb-name">疑似雷达目标</span>' +
+                '<i class="s6-tb-sus">疑似</i>' +
+                '<i class="s6-tb-arrow"></i>' +
+              '</div>' +
+              '<div class="s6-tb-body">' +
+                '<div class="s6-tb-row"><span>类型</span><b>雷达目标</b></div>' +
+                '<div class="s6-tb-row"><span>判定</span><b class="sus">疑似（未经确认）</b></div>' +
+                '<div class="s6-tb-row"><span>来源</span><b>电子干扰机-01</b></div>' +
+                '<div class="s6-tb-row"><span>区域</span><b>潜在目标部署区2</b></div>' +
+                '<div class="s6-tb-tags"><i>疑似雷达信号</i><i>待复核</i></div>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<section class="s6-ai">' +
+            '<div class="s6-ai-h">' + ic("mic", 16, "", 1.6) + '<span>AI语音</span></div>' +
+            '<div class="s6-chat s6-chat-scroll">' +
+              '<div class="s6-ai-log"></div>' +
+            '</div>' +
+          '</section>' +
+        '</section>';
+    }
+
     root.innerHTML =
       '<div class="s3-map"></div>' +
       '<aside class="s3-menu"></aside>' +
-      '<div class="s3-toolbar"></div>' +
+      '<div class="s3-toprow"><div class="s3-toolbar"></div>' + RES6_HTML + '</div>' +
       '<section class="s3-side"></section>' +
       '<div class="s3-scale"><b></b><span>2 km</span></div>' +
       '<div class="s3-coord">116.53850, 39.76102</div>' +
       (IS_SELECT ? '<div class="s3-cards"></div><div class="s3-prompt">请选择任务场景</div>' : (IS_MISSION ? VOICE_HTML : FRAME_HTML)) +
-      RES6_HTML +
+      SH06_RIGHT_HTML +
       '<button class="s3-mic">' + ic("mic", 26, "", 1.7) + '</button>' +
       '<footer class="s3-status"></footer>';
 
+
+    [].slice.call(root.querySelectorAll(".s6-tb-head")).forEach(function (head) {
+      head.addEventListener("click", function () {
+        var item = head.parentNode;
+        var open = !item.classList.contains("open");
+        [].slice.call(root.querySelectorAll(".s6-tb")).forEach(function (o) { o.classList.remove("open"); });
+        if (open) item.classList.add("open");
+      });
+    });
     /* 共享同一块地图：后面每一屏都复用，不重建 */
     var mapHost = root.querySelector(".s3-map");
     var map = MapViewShared(mapHost);
@@ -321,6 +358,71 @@ function make(variant) {
       var st = { t: 0, speed: 8, run: false, started: false, last: 0, acc: 0 };
       var COLORS = { blue: "#38bdf8", yellow: "#facc15", red: "#f87171", green: "#4ade80" };
 
+      var targetItemEl = root.querySelector(".s6-target-item");
+      var targetCountEl = root.querySelector(".s6-target-count");
+      var targetOn = false;
+      var T_SCAN = 3900;
+      var SUSPECT = [114.34, 40.02];
+      var SR = 0.009;
+      var suspectRing = [
+        [SUSPECT[0], SUSPECT[1] + SR],
+        [SUSPECT[0] + SR * 1.2, SUSPECT[1]],
+        [SUSPECT[0], SUSPECT[1] - SR],
+        [SUSPECT[0] - SR * 1.2, SUSPECT[1]],
+        [SUSPECT[0], SUSPECT[1] + SR]
+      ];
+      var suspectLabel = null;
+      var suspectCreated = false;
+      function ensureSuspect() {
+        if (suspectCreated) return;
+        suspectCreated = true;
+        map.polygon("s6-suspect", suspectRing, { fill: "#f59e0b", fillOpacity: 0.22, line: "#f59e0b", width: 2.4 });
+        suspectLabel = map.label("疑似雷达目标", [SUSPECT[0] + 0.012, SUSPECT[1] + 0.004], "#fbbf24", 14);
+      }
+      function renderTargetState(t) {
+        var on = st.started && t >= T_SCAN;
+        if (on === targetOn) return;
+        targetOn = on;
+        if (targetItemEl) targetItemEl.style.display = on ? "" : "none";
+        if (targetCountEl) targetCountEl.textContent = on ? "1" : "0";
+        if (on) {
+          ensureSuspect();
+          if (map.setVis) map.setVis(["s6-suspect"], true);
+          if (suspectLabel) suspectLabel.set(1);
+        } else if (suspectCreated) {
+          if (map.setVis) map.setVis(["s6-suspect"], false);
+          if (suspectLabel) suspectLabel.set(0);
+        }
+      }
+      var aiChatEl = root.querySelector(".s6-chat-scroll");
+      var aiLogEl = root.querySelector(".s6-ai-log");
+      var T_JOIN = FL.T_LIFT + 90; /* matches TOFF in flight06.js */
+      var T_ARRIVE = Math.min.apply(null, FL.T_ARR || [T_JOIN]);
+      var AI_EVENTS = [
+        { t: FL.T_LIFT, who: "ai", text: "无人机起飞。" },
+        { t: T_JOIN, who: "ai", text: "无人机完成编队，开始沿规划航路飞行。" },
+        { t: T_ARRIVE, who: "ai", text: "机群抵达任务区，开始分区侦察。" },
+        { t: FL.T_TRACKS || 0, who: "ai", text: "光电集群开始网格扫描，雷达开始 SAR/GMTI 探测，电子集群开始干扰压制。" },
+        { t: T_SCAN, who: "ai", text: "在潜在目标部署区2扫描发现一个疑似雷达目标，已加入目标档案。" },
+        { t: T_SCAN, who: "ai", text: "建议采用方案：派出两架光电机执行侦察并打击001号目标。" },
+        { t: T_SCAN + 2, who: "user", text: "方案确认。" },
+        { t: FL.TOTAL * 0.5, who: "ai", text: "侦察覆盖持续扩大，态势数据实时回传。" }
+      ].filter(function (ev) { return ev.t > 0; }).sort(function (a, b) { return a.t - b.t; });
+      function renderAiLog(t) {
+        if (!aiLogEl) return;
+        var n = 0;
+        for (var i = 0; i < AI_EVENTS.length; i++) if (t + 1e-6 >= AI_EVENTS[i].t) n++;
+        if (aiLogEl.getAttribute("data-n") === String(n)) return;
+        aiLogEl.setAttribute("data-n", String(n));
+        var html = "";
+        for (var j = 0; j < n; j++) {
+          var who = AI_EVENTS[j].who || "ai";
+          html += '<div class="s6-msg ' + who + '"><div class="s6-avatar">' + (who === "user" ? "用户" : "AI") + '</div><div class="s6-bubble">' + AI_EVENTS[j].text + '</div></div>';
+        }
+        aiLogEl.innerHTML = html;
+        if (aiChatEl) aiChatEl.scrollTop = aiChatEl.scrollHeight;
+      }
+
       function fmt(s) { var m = Math.floor(s / 60), ss = Math.floor(s % 60); var mm = m < 10 ? "0" + m : String(m); return mm + ":" + ("0" + ss).slice(-2); }
       function paint() {
         var r = st.t / FL.TOTAL;
@@ -353,10 +455,16 @@ function make(variant) {
           lb.textContent = marks[i][1];
           segLbls.appendChild(lb);
         }
+        var scanLb = document.createElement("span");
+        scanLb.style.left = ((T_SCAN / FL.TOTAL) * 100).toFixed(4) + "%";
+        scanLb.textContent = "目标扫描";
+        segLbls.appendChild(scanLb);
       })();
 
       function push() {
-        if (!st.started) { map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); if (map.scan) map.scan("scan", []); if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); } if (map.beam) map.beam("sbeam", []); if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); } paint(); return; }
+        if (!st.started) { renderAiLog(-1); renderTargetState(-1); map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); if (map.scan) map.scan("scan", []); if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); } if (map.beam) map.beam("sbeam", []); if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); } paint(); return; }
+        renderAiLog(st.t);
+        renderTargetState(st.t);
         if (map.fan && FL.fans) {
           var fs0 = FL.fans(st.t);
           map.fan("rfan", fs0.filter(function (f) { return f.kind === "radar"; }).map(function (s) {
@@ -431,6 +539,7 @@ function make(variant) {
         if (st.t >= FL.TOTAL) { st.run = false; goBtn.textContent = "重播"; }
       }
       root.__onSpace = function () { goBtn.click(); };   /* 空格 = 开始/暂停本演示 */
+      root.__s6Refresh = function () { push(); };
       requestAnimationFrame(loop);
       var qF = new URLSearchParams(location.search), f0 = parseFloat(qF.get("fly"));
       if (!isNaN(f0)) { st.started = true; st.t = Math.max(0, Math.min(FL.TOTAL, f0)); goBtn.textContent = "继续"; }
@@ -512,6 +621,8 @@ function make(variant) {
           if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); }
           if (map.beam) map.beam("sbeam", []);
           if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); }
+          if (suspectCreated) { if (map.setVis) map.setVis(["s6-suspect"], false); if (suspectLabel) suspectLabel.set(0); }
+          targetOn = false;
         } catch (e) {}
       };
     }
@@ -563,8 +674,9 @@ function make(variant) {
         "  border-radius:9px;color:#6f8aa8;font-size:12px;letter-spacing:1px;opacity:0;border:1px solid transparent}",
         ".s3-mi.on{color:#bfe9ff;background:linear-gradient(180deg,rgba(56,189,248,.22),rgba(56,189,248,.05));",
         "  border-color:rgba(56,189,248,.55);box-shadow:0 0 20px rgba(56,189,248,.25) inset}",
-        ".s3-toolbar{position:absolute;left:116px;top:88px;height:46px;display:flex;align-items:center;gap:4px;padding:0 8px;border-radius:9px;",
-        "  background:rgba(7,16,28,.9);border:1px solid rgba(56,189,248,.2);z-index:13;opacity:0}",
+        ".s3-toprow{position:absolute;left:116px;top:88px;height:46px;display:flex;align-items:stretch;gap:18px;z-index:13}",
+        ".s3-toolbar{position:relative;height:46px;flex:none;display:flex;align-items:center;gap:4px;padding:0 8px;border-radius:9px;",
+        "  background:rgba(7,16,28,.9);border:1px solid rgba(56,189,248,.2);opacity:0}",
         ".s3-collapse{width:26px;text-align:center;color:#5f7f9e;font-style:normal;font-size:15px}",
         ".s3-toolbar b{height:32px;padding:0 13px;display:flex;align-items:center;border-radius:6px;font-size:13px;font-weight:400;color:#9db4cc;letter-spacing:.5px;cursor:pointer}",
         ".s3-toolbar b.on{background:linear-gradient(180deg,#2563eb,#1d4ed8);color:#fff;box-shadow:0 0 18px rgba(37,99,235,.5)}",
@@ -683,19 +795,75 @@ function make(variant) {
         "  background:linear-gradient(180deg,#1d4ed8,#0b2a63);border:1px solid rgba(56,189,248,.55);",
         "  box-shadow:0 0 26px rgba(37,99,235,.45),0 0 0 1px rgba(56,189,248,.2) inset}",
         ".s5-confirm i{font-style:normal;color:#7dd3fc;letter-spacing:-3px;font-size:20px}",
-        ".s6-res{position:absolute;right:32px;top:88px;width:344px;border-radius:12px;overflow:hidden;z-index:13;",
+        ".s6-res{position:relative;height:100%;flex:none;border-radius:9px;overflow:hidden;",
         "  background:linear-gradient(180deg,rgba(6,18,32,.95),rgba(4,12,22,.97));border:1px solid rgba(56,189,248,.22)}",
-        ".s6-h{padding:13px 16px;font-size:15px;letter-spacing:1px;color:#e8f4ff;border-bottom:1px solid rgba(56,189,248,.14)}",
-        ".s6-grid{display:grid;grid-template-columns:repeat(4,1fr)}",
-        ".s6-col{padding:12px 4px 14px;text-align:center;border-right:1px solid rgba(56,189,248,.09)}",
+        ".s6-grid{height:100%;display:flex;align-items:center;padding:0 12px}",
+        ".s6-col{height:100%;display:flex;align-items:center;gap:7px;padding:0 12px;border-right:1px solid rgba(56,189,248,.12)}",
         ".s6-col:last-child{border-right:0}",
-        ".s6-col .lb{font-size:13px;color:#9fb6d4;margin-bottom:7px}",
-        ".s6-col img{width:32px;height:auto;display:block;margin:0 auto 9px;filter:drop-shadow(0 0 7px rgba(var(--c),.55))}",
-        ".s6-col .st{display:flex;align-items:center;justify-content:center;gap:3px;font-size:11px;line-height:1.85}",
-        ".s6-col .st span{opacity:.9}",
-        ".s6-col .st b{font-family:var(--num);font-size:14px;font-weight:600}",
-        ".s6-col .st.g{color:#4ade80}",
-        ".s6-col .st.r{color:#f87171}",
+        ".s6-col img{width:22px;height:auto;display:block;filter:drop-shadow(0 0 6px rgba(var(--c),.55))}",
+        ".s6-col .lb{font-size:13px;color:#9fb6d4;white-space:nowrap}",
+        ".s6-nums{display:flex;align-items:center;gap:2px;font-family:var(--num);font-size:14px;font-weight:600;white-space:nowrap}",
+        ".s6-nums b{font-weight:600}",
+        ".s6-nums i{font-style:normal;color:#64748b;font-weight:400;margin:0 1px}",
+        ".s6-nums .g{color:#4ade80}",
+        ".s6-nums .r{color:#f87171}",
+        ".s6-nums .b{color:#eaf4ff}",
+
+        ".s6-right{position:absolute;right:32px;top:88px;width:344px;z-index:13;display:flex;flex-direction:column;gap:18px}",
+        ".s6-toolbox{position:relative;z-index:1;border-radius:10px;overflow:hidden;",
+        "  background:linear-gradient(180deg,rgba(6,18,32,.97),rgba(4,12,22,.98));border:1px solid rgba(56,189,248,.28);",
+        "  box-shadow:0 12px 32px rgba(0,0,0,.5),0 0 0 1px rgba(56,189,248,.08) inset}",
+        ".s6-toolbox-h{display:flex;align-items:center;justify-content:space-between;padding:10px 13px;",
+        "  font-size:15px;letter-spacing:1px;color:#e8f4ff;border-bottom:1px solid rgba(56,189,248,.2);",
+        "  background:linear-gradient(180deg,rgba(56,189,248,.12),rgba(56,189,248,.02))}",
+        ".s6-toolbox-h b{font-family:var(--num);font-size:12px;color:#7dd3fc;border:1px solid rgba(56,189,248,.38);",
+        "  background:rgba(56,189,248,.1);border-radius:4px;padding:1px 7px;font-weight:500}",
+        ".s6-tb{border-bottom:1px solid rgba(56,189,248,.12)}",
+        ".s6-tb:last-child{border-bottom:0}",
+        ".s6-tb-head{display:flex;align-items:center;gap:9px;padding:9px 12px;cursor:pointer;user-select:none;",
+        "  background:rgba(7,16,28,.65);transition:background .15s ease,color .15s ease}",
+        ".s6-tb-head:hover{background:rgba(20,48,78,.85)}",
+        ".s6-tb.open .s6-tb-head{background:rgba(18,48,80,.92);color:#eaf6ff}",
+        ".s6-tb-no{width:36px;flex:none;font-family:var(--num);font-size:12px;color:#38bdf8;letter-spacing:.5px}",
+        ".s6-tb-name{flex:1;min-width:0;font-size:13.5px;color:#dbeafe;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+        ".s6-tb-arrow{width:6px;height:6px;border-right:1.5px solid #6f8aa8;border-bottom:1.5px solid #6f8aa8;",
+        "  transform:rotate(-45deg);transition:transform .15s ease,border-color .15s ease;margin-right:3px}",
+        ".s6-tb.open .s6-tb-arrow{transform:rotate(45deg);border-color:#7dd3fc}",
+        ".s6-tb-body{display:none;padding:9px 12px 11px 57px;background:rgba(4,12,22,.5)}",
+        ".s6-tb.open .s6-tb-body{display:block}",
+        ".s6-tb-row{display:flex;align-items:center;gap:10px;padding:3px 0;font-size:12px;line-height:1.5}",
+        ".s6-tb-row span{width:46px;flex:none;color:#6f8aa8}",
+        ".s6-tb-row b{color:#cfe6ff;font-weight:500;font-variant-numeric:tabular-nums}",
+        ".s6-tb-row b.high{color:#f87171}.s6-tb-row b.mid{color:#fbbf24}.s6-tb-row b.low{color:#4ade80}",
+        ".s6-tb-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}",
+        ".s6-tb-sus{font-style:normal;font-size:10px;color:#fbbf24;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.38);",
+        "  border-radius:3px;padding:1px 5px;margin-left:6px;white-space:nowrap}",
+        ".s6-tb-row b.sus{color:#fbbf24}",
+        ".s6-tb-tags i{font-style:normal;font-size:11px;color:#9fc4e6;background:rgba(56,189,248,.1);",
+        "  border:1px solid rgba(56,189,248,.22);border-radius:3px;padding:1px 6px}",
+        ".s6-ai{border-radius:12px;padding:12px 14px;background:linear-gradient(180deg,rgba(6,18,32,.97),rgba(4,12,22,.98));",
+        "  border:1px solid rgba(56,189,248,.24);box-shadow:0 12px 32px rgba(0,0,0,.45)}",
+        ".s6-ai-h{display:flex;align-items:center;gap:7px;font-size:14px;letter-spacing:1px;color:#bfe9ff;",
+        "  padding-bottom:9px;border-bottom:1px solid rgba(56,189,248,.14)}",
+        ".s6-ai-h svg{color:#38bdf8}",
+        ".s6-chat{margin-top:10px;display:flex;flex-direction:column;gap:10px}",
+        ".s6-chat-scroll{max-height:236px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;",
+        "  scrollbar-width:thin;scrollbar-color:rgba(56,189,248,.35) transparent}",
+        ".s6-chat-scroll::-webkit-scrollbar{width:5px}",
+        ".s6-chat-scroll::-webkit-scrollbar-thumb{background:rgba(56,189,248,.35);border-radius:3px}",
+        ".s6-chat-scroll::-webkit-scrollbar-track{background:transparent}",
+        ".s6-ai-log{display:flex;flex-direction:column;gap:10px}",
+        ".s6-msg{display:flex;align-items:flex-start;gap:8px}",
+        ".s6-msg.user{flex-direction:row-reverse}",
+        ".s6-avatar{width:32px;height:32px;flex:0 0 32px;min-width:32px;border-radius:50%;display:grid;place-items:center;white-space:nowrap;",
+        "  font-size:10px;line-height:1;letter-spacing:0;font-weight:700;color:#eaf6ff;background:linear-gradient(180deg,#2563eb,#0b2a63);border:1px solid rgba(96,165,250,.5)}",
+        ".s6-msg.user .s6-avatar{background:linear-gradient(180deg,#15803d,#0a3d22);border-color:rgba(74,222,128,.5);font-weight:500}",
+        ".s6-bubble{position:relative;max-width:236px;padding:9px 11px;border-radius:9px;font-size:13px;line-height:1.6;",
+        "  background:rgba(12,34,58,.95);border:1px solid rgba(56,189,248,.25);color:#cfe6ff}",
+        ".s6-bubble:before{content:'';position:absolute;left:-5px;top:10px;border-top:5px solid transparent;",
+        "  border-bottom:5px solid transparent;border-right:5px solid rgba(12,34,58,.95)}",
+        ".s6-msg.user .s6-bubble{background:rgba(22,101,52,.88);border-color:rgba(74,222,128,.45);color:#dcfce7}",
+        ".s6-msg.user .s6-bubble:before{left:auto;right:-5px;border-right:0;border-left:5px solid rgba(22,101,52,.88)}",
         ".s6-ctl{position:absolute;left:116px;right:376px;bottom:62px;z-index:14;border-radius:12px;padding:12px 16px 10px;",
         "  background:linear-gradient(180deg,rgba(6,18,32,.95),rgba(4,12,22,.97));border:1px solid rgba(56,189,248,.24)}",
         ".s6-line{display:flex;align-items:center;gap:14px}",
@@ -718,10 +886,11 @@ function make(variant) {
         ".s6-seg0{background:rgba(148,163,184,.18)}",
         ".s6-seg1{background:rgba(56,189,248,.14)}",
         ".s6-seg2{background:rgba(74,222,128,.14)}",
-        ".s6-seglbls{position:relative;height:16px;margin-top:5px}",
-        ".s6-seglbls span{position:absolute;transform:translateX(-2px);font-size:11px;letter-spacing:.5px;white-space:nowrap;color:#7d93ab}",
-        ".s6-seglbls span:nth-child(2){color:#7dd3fc}",
-        ".s6-seglbls span:nth-child(3){color:#4ade80}",
+        ".s6-seglbls{position:relative;height:21px;margin-top:6px;pointer-events:none}",
+        ".s6-seglbls span{position:absolute;top:0;transform:translateX(-2px);font-size:11px;line-height:1;letter-spacing:.5px;white-space:nowrap;color:#9fb6d4;",
+        "  background:rgba(8,20,34,.92);border:1px solid rgba(56,189,248,.22);border-radius:4px;padding:3px 7px;font-weight:500}",
+        ".s6-seglbls span:before{content:'';position:absolute;left:0;top:-8px;width:1px;height:8px;background:rgba(125,211,252,.7);",
+        "  box-shadow:0 0 5px rgba(56,189,248,.45)}",
         "  background:#eaf6ff;box-shadow:0 0 10px rgba(56,189,248,.9);text-decoration:none}",        ".s6-col .st.b{color:#60a5fa}",        ".s5-confirm:hover{filter:brightness(1.12)}",        ".s5-m b i{font-style:normal;font-size:12px;margin-left:1px}",        ".s4-mic{width:104px;height:104px;flex:none;border-radius:50%;display:grid;place-items:center;color:#eaf6ff;",
         "  background:radial-gradient(circle at 50% 35%,#2563eb,#0a1d3c 72%);border:1px solid rgba(96,165,250,.55);",
         "  box-shadow:0 0 34px rgba(37,99,235,.55),0 0 0 7px rgba(37,99,235,.12)}",
@@ -899,6 +1068,10 @@ var zoom = is3d ? FX.lerp(10.95, 11.25, cp) : CAM03.zoom;
     /* 切到前台：先把共享画布挂到自己容器上（若它还在别的屏里），再校准一次 */
     if (e && e.scid === "SH-06" && window.PLAYER) window.PLAYER.pause();   /* 这一屏交给飞行演示的独立时钟 */
     if (e && e.host && window.MapViewShared) window.MapViewShared(e.host);
+    if (e && e.scid === "SH-06" && e.host && e.host.closest) {
+      var scr = e.host.closest(".scr");
+      if (scr && scr.__s6Refresh) scr.__s6Refresh();
+    }
     if (e && e.map && e.map.repaint) e.map.repaint();
   }
 
