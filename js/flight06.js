@@ -2,6 +2,7 @@
    - counts: photon 20 / comm 4 / ewar 6 / radar 3 = 33
    - trail: true FIFO history, 1 sample / 5 s, 300 s back (~61 pts)
    - photon: 10 per zone (5 cols x 2 rows of 4x10 km cells), each flies a 2x10 km narrow loop
+   - 3905 s: blue 14/15, 17/18 orbit two suspects; remaining zone-2 blue replan as 3x2 loops
    - radar SAR (1): 10 N-S legs 2 km apart (2 km swath), side-looking beam 8-10 km, perpendicular to track
    - radar GMTI (2): one E-W race track SOUTH of zone-1, 20 km wide x 10 km tall, half-lap apart
    - ewar (4): 2 south race tracks outside zone-2, 2 each, half-lap apart
@@ -245,7 +246,7 @@ window.FLIGHT06 = (function () {
     D[i].relay.tOn = latest;
   });
 
-  function posOf(d, t) {
+  function basePosOf(d, t) {
     if (t < T_LIFT) return parkPos(d.type, d.k);
     if (t < T_LIFT + TOFF) return takeoffPos(d, t);
     if (d.relay) {
@@ -268,6 +269,228 @@ window.FLIGHT06 = (function () {
     return onPath(d.path, ph, t, d.tStart, spd);
   }
 
+  /* ---------- 3905 s: two suspects, four blue UAVs orbit, then replan six ---------- */
+  var T_REASSIGN = 3905;
+  var ORBIT_R = 2000;
+  var ORBIT_W = V / ORBIT_R;
+  var SUSPECTS = [
+    { no: "001", center: [114.34, 40.02] },
+    { no: "002", center: [114.28, 40.08] }
+  ];
+  function orbitPoint(center, a) {
+    return [center[0] + (ORBIT_R * Math.cos(a)) / M_LON,
+            center[1] + (ORBIT_R * Math.sin(a)) / M_LAT];
+  }
+  function tangentEntry(sp, center) {
+    var px = (sp.lon - center[0]) * M_LON, py = (sp.lat - center[1]) * M_LAT;
+    var dist = Math.hypot(px, py), phi = Math.atan2(py, px);
+    if (dist > ORBIT_R + 1) {
+      var al = Math.acos(Math.min(1, ORBIT_R / dist));
+      var candidates = [phi + al, phi - al], best = null;
+      for (var i = 0; i < candidates.length; i++) {
+        var th = candidates[i];
+        var p = orbitPoint(center, th);
+        var vx = (p[0] - sp.lon) * M_LON, vy = (p[1] - sp.lat) * M_LAT;
+        var tx = -Math.sin(th), ty = Math.cos(th);
+        var dot = vx * tx + vy * ty;
+        if (!best || dot > best.dot) best = { phase: th, point: p, dot: dot, tangent: [tx, ty], mode: "tangent" };
+      }
+      return best;
+    }
+    return { phase: phi, point: orbitPoint(center, phi), mode: "spiral" };
+  }
+  function spiralPos(center, r0, phi, delta, u) {
+    var s = u * u * (3 - 2 * u), r = r0 + (ORBIT_R - r0) * s, a = phi + delta * u;
+    return [center[0] + (r * Math.cos(a)) / M_LON, center[1] + (r * Math.sin(a)) / M_LAT];
+  }
+  function spiralDeriv(center, r0, phi, delta, u) {
+    var s = u * u * (3 - 2 * u), ds = 6 * u * (1 - u);
+    var r = r0 + (ORBIT_R - r0) * s, dr = (ORBIT_R - r0) * ds, a = phi + delta * u;
+    return [dr * Math.cos(a) - r * delta * Math.sin(a), dr * Math.sin(a) + r * delta * Math.cos(a)];
+  }
+  function hermite(a, b, m0, m1, u) {
+    var u2 = u * u, u3 = u2 * u;
+    return (2 * u3 - 3 * u2 + 1) * a + (u3 - 2 * u2 + u) * m0 + (-2 * u3 + 3 * u2) * b + (u3 - u2) * m1;
+  }
+  function hermiteDeriv(a, b, m0, m1, u) {
+    var u2 = u * u;
+    return (6 * u2 - 6 * u) * a + (3 * u2 - 4 * u + 1) * m0 + (-6 * u2 + 6 * u) * b + (3 * u2 - 2 * u) * m1;
+  }
+  function circleTrack(center, phase) {
+    var track = [];
+    for (var n = 0; n <= 64; n++) track.push(orbitPoint(center, phase + (n / 64) * Math.PI * 2));
+    return track;
+  }
+  function spiralEntry(sp, center, endPhase) {
+    var r0 = Math.hypot((sp.lon - center[0]) * M_LON, (sp.lat - center[1]) * M_LAT);
+    var phi0 = Math.atan2((sp.lat - center[1]) * M_LAT, (sp.lon - center[0]) * M_LON);
+    var delta = endPhase - phi0;
+    while (delta <= 0) delta += Math.PI * 2;
+    var len = 0, prev = [sp.lon, sp.lat];
+    for (var q = 1; q <= 64; q++) {
+      var cp = spiralPos(center, r0, phi0, delta, q / 64);
+      len += Math.hypot((cp[0] - prev[0]) * M_LON, (cp[1] - prev[1]) * M_LAT);
+      prev = cp;
+    }
+    var phase = phi0 + delta;
+    return { mode: "spiral", phase: phase, start: sp, startPhase: phi0, r0: r0, delta: delta, tTrans: len / V, arrive: T_REASSIGN + len / V, track: circleTrack(center, phase) };
+  }
+  function hermiteEntry(sp, center, endPhase) {
+    var r0 = Math.hypot((sp.lon - center[0]) * M_LON, (sp.lat - center[1]) * M_LAT);
+    var phi0 = Math.atan2((sp.lat - center[1]) * M_LAT, (sp.lon - center[0]) * M_LON);
+    var phi1 = endPhase;
+    while (phi1 <= phi0) phi1 += Math.PI * 2;
+    var target = orbitPoint(center, phi1);
+    var chord = Math.hypot((target[0] - sp.lon) * M_LON, (target[1] - sp.lat) * M_LAT);
+    var h0 = (sp.r || 0) * Math.PI / 180;
+    var dur = Math.max(20, chord / V * 1.4);
+    var dr0 = 0, dth0 = 0, dr1 = 0, dth1 = 0;
+    for (var it = 0; it < 4; it++) {
+      dr0 = V * dur * Math.sin(h0 + phi0);
+      dth0 = V * dur * Math.cos(h0 + phi0) / r0;
+      dr1 = 0;
+      dth1 = V * dur / ORBIT_R;
+      var len = 0, prev = null;
+      for (var q = 1; q <= 64; q++) {
+        var u = q / 64;
+        var rr = hermite(r0, ORBIT_R, dr0, dr1, u);
+        var aa = hermite(phi0, phi1, dth0, dth1, u);
+        var pp = [center[0] + (rr * Math.cos(aa)) / M_LON, center[1] + (rr * Math.sin(aa)) / M_LAT];
+        if (prev) len += Math.hypot((pp[0] - prev[0]) * M_LON, (pp[1] - prev[1]) * M_LAT);
+        prev = pp;
+      }
+      dur = Math.max(20, len / V);
+    }
+    return { mode: "hermite", phase: phi1, start: sp, r0: r0, phi0: phi0, phi1: phi1, dr0: dr0, dth0: dth0, dr1: dr1, dth1: dth1, tTrans: dur, arrive: T_REASSIGN + dur, track: circleTrack(center, phi1) };
+  }
+  function attachOrbit(d, center, no, data) {
+    data.center = center;
+    data.no = no;
+    d.orbit = data;
+    ORBIT_DRONES.push(d);
+  }
+  var ORBIT_GROUPS = [
+    { suspect: SUSPECTS[0], ks: [13, 14] },
+    { suspect: SUSPECTS[1], ks: [16, 17] }
+  ];
+  var ORBIT_DRONES = [];
+  ORBIT_GROUPS.forEach(function (g) {
+    var refD = null, otherD = null;
+    for (var j = 0; j < D.length; j++) {
+      if (D[j].type !== "blue") continue;
+      if (D[j].k === g.ks[0]) refD = D[j];
+      if (D[j].k === g.ks[1]) otherD = D[j];
+    }
+    if (!refD || !otherD) return;
+    var refSp = basePosOf(refD, T_REASSIGN);
+    var refEnt = tangentEntry(refSp, g.suspect.center);
+    var refPhase = refEnt.phase;
+    if (refEnt.mode === "tangent") {
+      var rdx = (refEnt.point[0] - refSp.lon) * M_LON, rdy = (refEnt.point[1] - refSp.lat) * M_LAT;
+      attachOrbit(refD, g.suspect.center, g.suspect.no, {
+        mode: "tangent", phase: refPhase, start: refSp, point: refEnt.point, tangent: refEnt.tangent,
+        tTrans: Math.hypot(rdx, rdy) / V, arrive: T_REASSIGN + Math.hypot(rdx, rdy) / V, track: circleTrack(g.suspect.center, refPhase)
+      });
+    } else {
+      attachOrbit(refD, g.suspect.center, g.suspect.no, spiralEntry(refSp, g.suspect.center, refPhase));
+    }
+    var otherPhase = refPhase + Math.PI;
+    var otherSp = basePosOf(otherD, T_REASSIGN);
+    var otherR = Math.hypot((otherSp.lon - g.suspect.center[0]) * M_LON, (otherSp.lat - g.suspect.center[1]) * M_LAT);
+    var otherData = otherR > ORBIT_R + 1 ? hermiteEntry(otherSp, g.suspect.center, otherPhase) : spiralEntry(otherSp, g.suspect.center, otherPhase);
+    attachOrbit(otherD, g.suspect.center, g.suspect.no, otherData);
+    var early = refD.orbit.arrive <= otherD.orbit.arrive ? refD : otherD;
+    var late = early === refD ? otherD : refD;
+    var gap = late.orbit.arrive - early.orbit.arrive;
+    var slowW = ORBIT_W * 0.45, fastW = ORBIT_W * 0.9;
+    var lock = late.orbit.arrive + (slowW * gap) / (fastW - slowW);
+    early.orbit.omegaBefore = slowW;
+    late.orbit.omegaBefore = fastW;
+    early.orbit.lockTime = lock;
+    late.orbit.lockTime = lock;
+  });
+  var T_REPLAN = T_REASSIGN + 0.1; /* start the six-UAV replan immediately after the 002 allocation message */
+  var PHOTO2 = [];
+  (function () {
+    var strip = 20000 / 6;
+    for (var i = 0; i < 6; i++) {
+      var cx = POT2[0] + ((i - 2.5) * strip) / M_LON;
+      var x1 = cx - 1000 / M_LON, x2 = cx + 1000 / M_LON;
+      var y0 = POT2[1] - 10000 / M_LAT, y1 = POT2[1] + 10000 / M_LAT;
+      PHOTO2.push(poly([[x1, y0], [x1, y1], [x2, y1], [x2, y0], [x1, y0]]));
+    }
+  })();
+  var PHOTO2_DRONES = D.filter(function (d) {
+    return d.type === "blue" && d.k >= 10 && d.k !== 13 && d.k !== 14 && d.k !== 16 && d.k !== 17;
+  });
+  PHOTO2_DRONES.forEach(function (d, i) {
+    var P = PHOTO2[i];
+    var sp = basePosOf(d, T_REPLAN);
+    var p0 = at(P, 0);
+    var dx = (p0.lon - sp.lon) * M_LON, dy = (p0.lat - sp.lat) * M_LAT;
+    var dist = Math.hypot(dx, dy);
+    d.replan = { path: P, start: sp, tTrans: dist / V, tOn: T_REPLAN + dist / V };
+  });
+  function posOf(d, t) {
+    if (d.orbit && t >= T_REASSIGN) {
+      var o = d.orbit;
+      if (t < o.arrive) {
+        var u = Math.max(0, Math.min(1, (t - T_REASSIGN) / Math.max(1e-6, o.tTrans)));
+        if (o.mode === "tangent") {
+          return {
+            lon: o.start.lon + (o.point[0] - o.start.lon) * u,
+            lat: o.start.lat + (o.point[1] - o.start.lat) * u,
+            r: Math.atan2(o.tangent[0], o.tangent[1]) * 180 / Math.PI
+          };
+        }
+        if (o.mode === "spiral") {
+          var cp = spiralPos(o.center, o.r0, o.startPhase, o.delta, u);
+          var dv = spiralDeriv(o.center, o.r0, o.startPhase, o.delta, u);
+          return { lon: cp[0], lat: cp[1], r: Math.atan2(dv[0], dv[1]) * 180 / Math.PI };
+        }
+        var rr = hermite(o.r0, ORBIT_R, o.dr0, o.dr1, u);
+        var aa = hermite(o.phi0, o.phi1, o.dth0, o.dth1, u);
+        var dr = hermiteDeriv(o.r0, ORBIT_R, o.dr0, o.dr1, u);
+        var da = hermiteDeriv(o.phi0, o.phi1, o.dth0, o.dth1, u);
+        var vx = dr * Math.cos(aa) - rr * da * Math.sin(aa);
+        var vy = dr * Math.sin(aa) + rr * da * Math.cos(aa);
+        return {
+          lon: o.center[0] + (rr * Math.cos(aa)) / M_LON,
+          lat: o.center[1] + (rr * Math.sin(aa)) / M_LAT,
+          r: Math.atan2(vx, vy) * 180 / Math.PI
+        };
+      }
+      var a2;
+      if (t < o.lockTime) {
+        a2 = o.phase + (t - o.arrive) * o.omegaBefore;
+      } else {
+        var lockPhase = o.phase + (o.lockTime - o.arrive) * o.omegaBefore;
+        a2 = lockPhase + (t - o.lockTime) * ORBIT_W;
+      }
+      return {
+        lon: o.center[0] + (ORBIT_R * Math.cos(a2)) / M_LON,
+        lat: o.center[1] + (ORBIT_R * Math.sin(a2)) / M_LAT,
+        r: Math.atan2(-Math.sin(a2), Math.cos(a2)) * 180 / Math.PI
+      };
+    }
+    if (d.replan && t >= T_REPLAN) {
+      var rp = d.replan;
+      if (t < rp.tOn) {
+        var f2 = (t - T_REPLAN) / Math.max(1e-6, rp.tTrans);
+        var p0 = at(rp.path, 0);
+        var dx2 = (p0.lon - rp.start.lon) * M_LON;
+        var dy2 = (p0.lat - rp.start.lat) * M_LAT;
+        return {
+          lon: rp.start.lon + (p0.lon - rp.start.lon) * f2,
+          lat: rp.start.lat + (p0.lat - rp.start.lat) * f2,
+          r: Math.atan2(dx2, dy2) * 180 / Math.PI
+        };
+      }
+      var o2 = at(rp.path, (t - rp.tOn) * V);
+      return { lon: o2.lon, lat: o2.lat, r: rotOf(o2) };
+    }
+    return basePosOf(d, t);
+  }
   function simulate(t) {
     t = Math.max(0, Math.min(TOTAL, t));
     var out = [];
@@ -276,6 +499,7 @@ window.FLIGHT06 = (function () {
       for (var h = HIST_N; h >= 0; h--) {
         var tt = t - h * HIST_DT;
         if (tt < 0) continue;
+        if (d.replan && t >= T_REPLAN && tt < T_REPLAN) continue;
         var q = posOf(d, tt);
         trail.push([+q.lon.toFixed(5), +q.lat.toFixed(5)]);
       }
@@ -285,8 +509,8 @@ window.FLIGHT06 = (function () {
   }
   /* ---------- 光电：60 度环形扇区（内 2km / 外 2.8km）+ 10 度每秒的扫描条带 ---------- */
   var SCAN = { r0: 2000, r1: 2800, half: Math.PI / 6, seg: 10, rate: 10, fade: 0.6 };
-  function scanOf(p, t, tOn) {
-    var hd = (p.r || 0) * Math.PI / 180;              /* 机头方位：0=正北，顺时针 */
+  function scanOf(p, t, tOn, aim) {
+    var hd = aim ? Math.atan2((aim[0] - p.lon) * M_LON, (aim[1] - p.lat) * M_LAT) : (p.r || 0) * Math.PI / 180;
     function pt(dm, rel) {                            /* dm 米；rel 相对机头的角（弧度） */
       var an = hd + rel;
       return [+(p.lon + (dm * Math.sin(an)) / M_LON).toFixed(5),
@@ -313,7 +537,9 @@ window.FLIGHT06 = (function () {
     for (var i = 0; i < D.length; i++) {
       var d = D[i];
       if (d.type !== "blue" || !d.path || t < (d.tStart || 0)) continue;
-      out.push(scanOf(posOf(d, t), t, d.tStart));
+      var p = posOf(d, t);
+      var aim = d.orbit && t >= T_REASSIGN ? d.orbit.center : null;
+      out.push(scanOf(p, t, d.tStart, aim));
     }
     return out;
   }
@@ -400,12 +626,12 @@ window.FLIGHT06 = (function () {
     var half = COV.cell / 2;
     var hx = half / M_LON, hy = half / M_LAT;
     var cells = [];
-    [POT1, POT2].forEach(function (c) {
+    [POT1, POT2].forEach(function (c, zi) {
       for (var i = 0; i < 40; i++) for (var j = 0; j < 40; j++) {
         var lon = c[0] + ((i - 19.5) * COV.cell) / M_LON;
         var lat = c[1] + ((j - 19.5) * COV.cell) / M_LAT;
         cells.push({
-          mx: lon * M_LON, my: lat * M_LAT,
+          zone: zi, mx: lon * M_LON, my: lat * M_LAT,
           ring: [[lon - hx, lat - hy], [lon + hx, lat - hy], [lon + hx, lat + hy], [lon - hx, lat + hy], [lon - hx, lat - hy]]
         });
       }
@@ -433,7 +659,8 @@ window.FLIGHT06 = (function () {
         var pr = par[k], r0e = Math.max(0, pr.r0 - 700), r1e = pr.r1 + 700;
         kinds[k].forEach(function (d) {
           if (tt < (d.tStart || 0)) return;
-          var p = posOf(d, tt), hd = (p.r || 0) * Math.PI / 180;
+          var p = posOf(d, tt);
+          var hd = (d.orbit && tt >= T_REASSIGN) ? Math.atan2((d.orbit.center[1] - p.lat) * M_LAT, (d.orbit.center[0] - p.lon) * M_LON) : (p.r || 0) * Math.PI / 180;
           var fx = Math.sin(hd), fy = Math.cos(hd);
           var px = p.lon * M_LON, py = p.lat * M_LAT;
           var arr = first[k];
@@ -452,14 +679,43 @@ window.FLIGHT06 = (function () {
       });
     }
     COV.first = first;
+    var afterPhoto = new Array(cells.length);
+    for (var ai = 0; ai < cells.length; ai++) afterPhoto[ai] = Infinity;
+    var ppr = par.photo, pr0 = Math.max(0, ppr.r0 - 700), pr1 = ppr.r1 + 700;
+    for (var at = T_REPLAN; at <= TOTAL; at += COV.step) {
+      kinds.photo.forEach(function (d) {
+        if (at < (d.tStart || 0)) return;
+        var p = posOf(d, at);
+        var hd = (d.orbit && at >= T_REASSIGN) ? Math.atan2((d.orbit.center[1] - p.lat) * M_LAT, (d.orbit.center[0] - p.lon) * M_LON) : (p.r || 0) * Math.PI / 180;
+        var fx = Math.sin(hd), fy = Math.cos(hd);
+        var px = p.lon * M_LON, py = p.lat * M_LAT;
+        for (var ci = 0; ci < cells.length; ci++) {
+          if (afterPhoto[ci] <= at) continue;
+          var dx = cells[ci].mx - px, dy = cells[ci].my - py;
+          if (dx > pr1 || dx < -pr1 || dy > pr1 || dy < -pr1) continue;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < pr0 || dist > pr1) continue;
+          if ((dx * fx + dy * fy) / dist < ppr.cos) continue;
+          afterPhoto[ci] = at;
+        }
+      });
+    }
+    COV.afterPhoto = afterPhoto;
   })();
   function coverage(t) {
-    var b = Math.floor(t / COV.step);
+    var b = (t < T_REPLAN ? 0 : 100000) + Math.floor(t / COV.step);
     if (COV.cache && COV.cacheT === b) return COV.cache;
     var out = {};
     Object.keys(COV.first).forEach(function (k) {
-      var arr = [], f = COV.first[k];
-      for (var i = 0; i < COV.cells.length; i++) if (f[i] <= t) arr.push(COV.cells[i]);
+      var arr = [], f = COV.first[k], af = COV.afterPhoto;
+      for (var i = 0; i < COV.cells.length; i++) {
+        var cell = COV.cells[i];
+        if (k === "photo" && cell.zone === 1) {
+          if ((t < T_REPLAN ? f[i] <= t : af[i] <= t)) arr.push(cell);
+        } else if (f[i] <= t) {
+          arr.push(cell);
+        }
+      }
       out[k] = arr;
     });
     COV.cache = out; COV.cacheT = b;
@@ -467,9 +723,14 @@ window.FLIGHT06 = (function () {
   }
   function tracks(t) {
     var o = [];
-    if (t < T_TRACKS) return o;             /* 第一架进入任务区之前不画 */
+    if (t < T_TRACKS) return o;
     for (var i = 0; i < D.length; i++) {
-      var d = D[i], P = d.path;
+      var d = D[i];
+      if (d.orbit && t >= T_REASSIGN) {
+        o.push({ type: d.type, pts: d.orbit.track.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
+        continue;
+      }
+      var P = (d.replan && t >= T_REPLAN) ? d.replan.path : d.path;
       if (!P || !P.pts) continue;
       o.push({ type: d.type, pts: P.pts.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
     }
@@ -481,5 +742,5 @@ window.FLIGHT06 = (function () {
     if (t < mn) return "编队飞行";
     return "侦察";
   }
-  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks, scans: scans, fans: fans, sarScans: sarScans, coverage: coverage, T_TRACKS: T_TRACKS };
+  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, T_REASSIGN: T_REASSIGN, T_REPLAN: T_REPLAN, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks, scans: scans, fans: fans, sarScans: sarScans, coverage: coverage, T_TRACKS: T_TRACKS };
 })();

@@ -184,9 +184,24 @@ function make(variant) {
                 '<div class="s6-tb-tags"><i>疑似雷达信号</i><i>待复核</i></div>' +
               '</div>' +
             '</div>' +
+            '<div class="s6-tb s6-target-item" style="display:none">' +
+              '<div class="s6-tb-head">' +
+                '<span class="s6-tb-no">002</span>' +
+                '<span class="s6-tb-name">疑似雷达目标</span>' +
+                '<i class="s6-tb-sus">疑似</i>' +
+                '<i class="s6-tb-arrow"></i>' +
+              '</div>' +
+              '<div class="s6-tb-body">' +
+                '<div class="s6-tb-row"><span>类型</span><b>雷达目标</b></div>' +
+                '<div class="s6-tb-row"><span>判定</span><b class="sus">疑似（未经确认）</b></div>' +
+                '<div class="s6-tb-row"><span>来源</span><b>电子干扰机-01</b></div>' +
+                '<div class="s6-tb-row"><span>区域</span><b>潜在目标部署区2</b></div>' +
+                '<div class="s6-tb-tags"><i>疑似雷达信号</i><i>待复核</i></div>' +
+              '</div>' +
+            '</div>' +
           '</div>' +
           '<section class="s6-ai">' +
-            '<div class="s6-ai-h">' + ic("mic", 16, "", 1.6) + '<span>AI语音</span></div>' +
+            '<div class="s6-ai-h">' + ic("mic", 16, "", 1.6) + '<span>AI决策助手</span></div>' +
             '<div class="s6-chat s6-chat-scroll">' +
               '<div class="s6-ai-log"></div>' +
             '</div>' +
@@ -358,40 +373,46 @@ function make(variant) {
       var st = { t: 0, speed: 8, run: false, started: false, last: 0, acc: 0 };
       var COLORS = { blue: "#38bdf8", yellow: "#facc15", red: "#f87171", green: "#4ade80" };
 
-      var targetItemEl = root.querySelector(".s6-target-item");
+      var targetItems = [].slice.call(root.querySelectorAll(".s6-target-item"));
       var targetCountEl = root.querySelector(".s6-target-count");
       var targetOn = false;
       var T_SCAN = 3900;
-      var SUSPECT = [114.34, 40.02];
-      var SR = 0.009;
-      var suspectRing = [
-        [SUSPECT[0], SUSPECT[1] + SR],
-        [SUSPECT[0] + SR * 1.2, SUSPECT[1]],
-        [SUSPECT[0], SUSPECT[1] - SR],
-        [SUSPECT[0] - SR * 1.2, SUSPECT[1]],
-        [SUSPECT[0], SUSPECT[1] + SR]
+      var SUSPECTS = [
+        { id: "s6-suspect-1", no: "001", center: [114.34, 40.02], label: [114.352, 40.024] },
+        { id: "s6-suspect-2", no: "002", center: [114.28, 40.08], label: [114.292, 40.084] }
       ];
-      var suspectLabel = null;
-      var suspectCreated = false;
-      function ensureSuspect() {
-        if (suspectCreated) return;
-        suspectCreated = true;
-        map.polygon("s6-suspect", suspectRing, { fill: "#f59e0b", fillOpacity: 0.22, line: "#f59e0b", width: 2.4 });
-        suspectLabel = map.label("疑似雷达目标", [SUSPECT[0] + 0.012, SUSPECT[1] + 0.004], "#fbbf24", 14);
+      var SR = 0.009;
+      var suspectLabels = [];
+      var suspectsCreated = false;
+      function ensureSuspects() {
+        if (suspectsCreated) return;
+        suspectsCreated = true;
+        SUSPECTS.forEach(function (s) {
+          var c = s.center;
+          var ring = [
+            [c[0], c[1] + SR],
+            [c[0] + SR * 1.2, c[1]],
+            [c[0], c[1] - SR],
+            [c[0] - SR * 1.2, c[1]],
+            [c[0], c[1] + SR]
+          ];
+          map.polygon(s.id, ring, { fill: "#f59e0b", fillOpacity: 0.22, line: "#f59e0b", width: 2.4 });
+          suspectLabels.push(map.label("疑似雷达目标 " + s.no, s.label, "#fbbf24", 14));
+        });
       }
       function renderTargetState(t) {
         var on = st.started && t >= T_SCAN;
         if (on === targetOn) return;
         targetOn = on;
-        if (targetItemEl) targetItemEl.style.display = on ? "" : "none";
-        if (targetCountEl) targetCountEl.textContent = on ? "1" : "0";
+        targetItems.forEach(function (el) { el.style.display = on ? "" : "none"; });
+        if (targetCountEl) targetCountEl.textContent = on ? String(targetItems.length) : "0";
         if (on) {
-          ensureSuspect();
+          ensureSuspects();
           if (map.setVis) map.setVis(["s6-suspect"], true);
-          if (suspectLabel) suspectLabel.set(1);
-        } else if (suspectCreated) {
+          suspectLabels.forEach(function (l) { l.set(1); });
+        } else if (suspectsCreated) {
           if (map.setVis) map.setVis(["s6-suspect"], false);
-          if (suspectLabel) suspectLabel.set(0);
+          suspectLabels.forEach(function (l) { l.set(0); });
         }
       }
       var aiChatEl = root.querySelector(".s6-chat-scroll");
@@ -403,10 +424,12 @@ function make(variant) {
         { t: T_JOIN, who: "ai", text: "无人机完成编队，开始沿规划航路飞行。" },
         { t: T_ARRIVE, who: "ai", text: "机群抵达任务区，开始分区侦察。" },
         { t: FL.T_TRACKS || 0, who: "ai", text: "光电集群开始网格扫描，雷达开始 SAR/GMTI 探测，电子集群开始干扰压制。" },
-        { t: T_SCAN, who: "ai", text: "在潜在目标部署区2扫描发现一个疑似雷达目标，已加入目标档案。" },
-        { t: T_SCAN, who: "ai", text: "建议采用方案：派出两架光电机执行侦察并打击001号目标。" },
+        { t: T_SCAN, who: "ai", text: "在潜在目标部署区2扫描发现2个疑似雷达目标，已加入目标档案。" },
+        { t: T_SCAN, who: "ai", text: "建议采用方案：为001、002两个疑似雷达目标各派出两架光电无人机执行侦察和打击任务。" },
         { t: T_SCAN + 2, who: "user", text: "方案确认。" },
-        { t: FL.TOTAL * 0.5, who: "ai", text: "侦察覆盖持续扩大，态势数据实时回传。" }
+        { t: FL.T_REASSIGN || 0, who: "ai", text: "已分配14号、15号光电无人机进行001疑似目标察打任务。" },
+        { t: FL.T_REASSIGN || 0, who: "ai", text: "已分配17号、18号光电无人机进行002疑似目标察打任务。" },
+        { t: FL.T_REPLAN || 0, who: "ai", text: "重新规划剩余的6架光电无人机侦察方式。" }
       ].filter(function (ev) { return ev.t > 0; }).sort(function (a, b) { return a.t - b.t; });
       function renderAiLog(t) {
         if (!aiLogEl) return;
@@ -621,7 +644,7 @@ function make(variant) {
           if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); }
           if (map.beam) map.beam("sbeam", []);
           if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); }
-          if (suspectCreated) { if (map.setVis) map.setVis(["s6-suspect"], false); if (suspectLabel) suspectLabel.set(0); }
+          if (suspectsCreated) { if (map.setVis) map.setVis(["s6-suspect"], false); suspectLabels.forEach(function (l) { l.set(0); }); }
           targetOn = false;
         } catch (e) {}
       };
