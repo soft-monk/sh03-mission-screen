@@ -557,12 +557,20 @@ function make(variant) {
         for (var i = 0; i < smallCards.length; i++) if (smallCards[i].getAttribute("data-video") === key) return smallCards[i];
         return null;
       }
+      function updateSmallBarVisibility() {
+        if (!smallBar) return;
+        var any = false;
+        smallCards.forEach(function (card) { if (card.style.display !== "none") any = true; });
+        if (any) { smallBar.classList.add("on"); smallBar.style.pointerEvents = ""; }
+        else { smallBar.classList.remove("on"); smallBar.style.pointerEvents = "none"; }
+      }
       function closeVideoChannel(key) {
         removedChannels[key] = true;
         var v = channelOf(key);
         if (v) { v.__dead = true; try { v.pause(); } catch (e) {} }
         var card = cardOf(key);
         if (card) card.style.display = "none";
+        updateSmallBarVisibility();
         expanded = expanded.filter(function (k) { return k !== key; });
         reflowLarge();
       }
@@ -862,7 +870,6 @@ function make(variant) {
           largeBox.style.display = "none";
           return;
         }
-        smallBar.classList.add("on");
         if (!expanded.length) { largeBox.classList.remove("on"); largeBox.style.display = "none"; }
         if (!videoStarted) {
           videoStarted = true;
@@ -895,6 +902,7 @@ function make(variant) {
         } else if (extraStarted) {
           resetExtraVideos();
         }
+        updateSmallBarVisibility();
         checkVideoAi();
         if (videoA && videoA.ended && !removedChannels.A && !videoA.__black) blackenAttack("A");
         if (videoB && videoB.ended && !removedChannels.B) closeVideoChannel("B");
