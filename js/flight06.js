@@ -409,6 +409,40 @@ window.FLIGHT06 = (function () {
     early.orbit.lockTime = lock;
     late.orbit.lockTime = lock;
   });
+  function orbitAngleAt(o, t) {
+    if (t < o.lockTime) return o.phase + (t - o.arrive) * o.omegaBefore;
+    var lockPhase = o.phase + (o.lockTime - o.arrive) * o.omegaBefore;
+    return lockPhase + (t - o.lockTime) * ORBIT_W;
+  }
+  var ATTACK_NUMBERS = { 17: true, 14: true };
+  function attackDrone(no) {
+    for (var i = 0; i < D.length; i++) if (D[i].type === "blue" && D[i].k === no - 1) return D[i];
+    return null;
+  }
+  function startAttack(no, t) {
+    var d = attackDrone(no);
+    if (!d || !d.orbit) return;
+    var o = d.orbit;
+    var t0 = Math.max(T_REASSIGN, t);
+    var a = orbitAngleAt(o, t0);
+    var ux = Math.cos(a), uy = Math.sin(a);
+    var tx = -Math.sin(a), ty = Math.cos(a);
+    var P0 = [ORBIT_R * ux, ORBIT_R * uy];
+    var P1 = [P0[0] + tx * 1400, P0[1] + ty * 1400];
+    var P2 = [ux * 600, uy * 600];
+    d.attack = { t0: t0, tHit: t0 + 27, tGone: Infinity, center: o.center, P0: P0, P1: P1, P2: P2, P3: [0, 0] };
+  }
+  function endAttack(no, t) {
+    var d = attackDrone(no);
+    if (d && d.attack) d.attack.tGone = (t == null ? 0 : t);
+  }
+  function resetAttack(no) {
+    var d = attackDrone(no);
+    if (d) d.attack = null;
+  }
+  function resetAttacks() {
+    for (var i = 0; i < D.length; i++) D[i].attack = null;
+  }
   var T_REPLAN = T_REASSIGN + 0.1; /* start the six-UAV replan immediately after the 002 allocation message */
   var PHOTO2 = [];
   (function () {
@@ -432,6 +466,20 @@ window.FLIGHT06 = (function () {
     d.replan = { path: P, start: sp, tTrans: dist / V, tOn: T_REPLAN + dist / V };
   });
   function posOf(d, t) {
+    if (d.attack && t >= d.attack.t0) {
+      var atk = d.attack;
+      var u = Math.max(0, Math.min(1, (t - atk.t0) / 27));
+      var v = 1 - u;
+      var x = v*v*v*atk.P0[0] + 3*v*v*u*atk.P1[0] + 3*v*u*u*atk.P2[0] + u*u*u*atk.P3[0];
+      var y = v*v*v*atk.P0[1] + 3*v*v*u*atk.P1[1] + 3*v*u*u*atk.P2[1] + u*u*u*atk.P3[1];
+      var dx = 3*v*v*(atk.P1[0]-atk.P0[0]) + 6*v*u*(atk.P2[0]-atk.P1[0]) + 3*u*u*(atk.P3[0]-atk.P2[0]);
+      var dy = 3*v*v*(atk.P1[1]-atk.P0[1]) + 6*v*u*(atk.P2[1]-atk.P1[1]) + 3*u*u*(atk.P3[1]-atk.P2[1]);
+      return {
+        lon: atk.center[0] + x / M_LON,
+        lat: atk.center[1] + y / M_LAT,
+        r: Math.atan2(dx, dy) * 180 / Math.PI
+      };
+    }
     if (d.orbit && t >= T_REASSIGN) {
       var o = d.orbit;
       if (t < o.arrive) {
@@ -495,7 +543,9 @@ window.FLIGHT06 = (function () {
     t = Math.max(0, Math.min(TOTAL, t));
     var out = [];
     for (var i = 0; i < D.length; i++) {
-      var d = D[i], p = posOf(d, t), trail = [];
+      var d = D[i];
+      if (d.attack && d.attack.tGone !== Infinity && t >= d.attack.tGone) continue;
+      var p = posOf(d, t), trail = [];
       for (var h = HIST_N; h >= 0; h--) {
         var tt = t - h * HIST_DT;
         if (tt < 0) continue;
@@ -537,6 +587,7 @@ window.FLIGHT06 = (function () {
     for (var i = 0; i < D.length; i++) {
       var d = D[i];
       if (d.type !== "blue" || !d.path || t < (d.tStart || 0)) continue;
+      if (d.attack && d.attack.tGone !== Infinity && t >= d.attack.tGone) continue;
       var p = posOf(d, t);
       var aim = d.orbit && t >= T_REASSIGN ? d.orbit.center : null;
       out.push(scanOf(p, t, d.tStart, aim));
@@ -659,6 +710,7 @@ window.FLIGHT06 = (function () {
         var pr = par[k], r0e = Math.max(0, pr.r0 - 700), r1e = pr.r1 + 700;
         kinds[k].forEach(function (d) {
           if (tt < (d.tStart || 0)) return;
+          if (d.attack && d.attack.tGone !== Infinity && tt >= d.attack.tGone) return;
           var p = posOf(d, tt);
           var hd = (d.orbit && tt >= T_REASSIGN) ? Math.atan2((d.orbit.center[1] - p.lat) * M_LAT, (d.orbit.center[0] - p.lon) * M_LON) : (p.r || 0) * Math.PI / 180;
           var fx = Math.sin(hd), fy = Math.cos(hd);
@@ -685,6 +737,7 @@ window.FLIGHT06 = (function () {
     for (var at = T_REPLAN; at <= TOTAL; at += COV.step) {
       kinds.photo.forEach(function (d) {
         if (at < (d.tStart || 0)) return;
+        if (d.attack && d.attack.tGone !== Infinity && at >= d.attack.tGone) return;
         var p = posOf(d, at);
         var hd = (d.orbit && at >= T_REASSIGN) ? Math.atan2((d.orbit.center[1] - p.lat) * M_LAT, (d.orbit.center[0] - p.lon) * M_LON) : (p.r || 0) * Math.PI / 180;
         var fx = Math.sin(hd), fy = Math.cos(hd);
@@ -726,6 +779,7 @@ window.FLIGHT06 = (function () {
     if (t < T_TRACKS) return o;
     for (var i = 0; i < D.length; i++) {
       var d = D[i];
+      if (d.attack && d.attack.tGone !== Infinity && t >= d.attack.tGone) continue;
       if (d.orbit && t >= T_REASSIGN) {
         o.push({ type: d.type, pts: d.orbit.track.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
         continue;
@@ -742,5 +796,5 @@ window.FLIGHT06 = (function () {
     if (t < mn) return "编队飞行";
     return "侦察";
   }
-  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, T_REASSIGN: T_REASSIGN, T_REPLAN: T_REPLAN, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks, scans: scans, fans: fans, sarScans: sarScans, coverage: coverage, T_TRACKS: T_TRACKS };
+  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, T_REASSIGN: T_REASSIGN, T_REPLAN: T_REPLAN, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks, scans: scans, fans: fans, sarScans: sarScans, coverage: coverage, T_TRACKS: T_TRACKS, startAttack: startAttack, endAttack: endAttack, resetAttack: resetAttack, resetAttacks: resetAttacks };
 })();

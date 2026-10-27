@@ -644,6 +644,7 @@ function make(variant) {
         trackerD.stop();
         extraCards.forEach(function (card) { card.style.display = "none"; });
         expanded = expanded.filter(function (k) { return k === "A" || k === "B"; });
+        if (window.FLIGHT06 && FLIGHT06.resetAttack) FLIGHT06.resetAttack(14);
         reflowLarge();
         renderTargetState(st.t);
       }
@@ -667,6 +668,7 @@ function make(variant) {
           card.style.display = (k === "A" || k === "B") ? "" : "none";
         });
         resetDestroyedState();
+        if (window.FLIGHT06 && FLIGHT06.resetAttacks) FLIGHT06.resetAttacks();
         expanded = [];
         reflowLarge();
         renderTargetState(st.started ? st.t : -1);
@@ -837,8 +839,10 @@ function make(variant) {
           if (rule.video && (rule.video.currentTime >= rule.at || rule.video.ended)) {
             videoAiFired[rule.key] = true;
             AI_EVENTS.push({ t: st.t, who: "ai", text: rule.text, videoAi: true, group: rule.group });
-            if (rule.key === "002-destroy") applyDestroyed("002", "A");
-            if (rule.key === "001-destroy") applyDestroyed("001", "C");
+            if (rule.key === "002-attack" && window.FLIGHT06 && FLIGHT06.startAttack) FLIGHT06.startAttack(17, st.t);
+            if (rule.key === "001-attack" && window.FLIGHT06 && FLIGHT06.startAttack) FLIGHT06.startAttack(14, st.t);
+            if (rule.key === "002-destroy") { applyDestroyed("002", "A"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(17, st.t); }
+            if (rule.key === "001-destroy") { applyDestroyed("001", "C"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(14, st.t); }
             changed = true;
           }
         });
