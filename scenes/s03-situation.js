@@ -508,6 +508,13 @@ function make(variant) {
       var extraStarted = false;
       var mirrorGen = 0;
       var VIDEO_TITLES = { A: "17光电-攻击", B: "18光电-侦察", C: "14光电-攻击", D: "15光电-侦察" };
+      var videoAiRules = [
+        { key: "002-attack", group: "002", video: videoA, at: 41, text: "17光电开始攻击" },
+        { key: "002-destroy", group: "002", video: videoB, at: 83, text: "智能毁伤评估，002雷达目标已被摧毁" },
+        { key: "001-attack", group: "001", video: videoC, at: 41, text: "14光电开始攻击" },
+        { key: "001-destroy", group: "001", video: videoD, at: 83, text: "智能毁伤评估，001雷达目标已被摧毁" }
+      ];
+      var videoAiFired = {};
       function channelOf(key) { return key === "A" ? videoA : key === "B" ? videoB : key === "C" ? videoC : key === "D" ? videoD : null; }
       function makeFrameTracker(video) {
         var times = [], on = false;
@@ -551,6 +558,9 @@ function make(variant) {
       }
       function resetExtraVideos() {
         extraStarted = false;
+        delete videoAiFired["001-attack"];
+        delete videoAiFired["001-destroy"];
+        AI_EVENTS = AI_EVENTS.filter(function (ev) { return !(ev.videoAi && ev.group === "001"); });
         [videoC, videoD].forEach(function (v) { try { if (v) { v.pause(); v.__frozen = false; v.currentTime = 0; } } catch (e) {} });
         trackerC.stop();
         trackerD.stop();
@@ -561,6 +571,8 @@ function make(variant) {
       function resetVideos() {
         videoStarted = false;
         extraStarted = false;
+        videoAiFired = {};
+        AI_EVENTS = AI_EVENTS.filter(function (ev) { return !ev.videoAi; });
         mirrorGen++;
         pauseVideos();
         trackerA.stop();
@@ -719,6 +731,21 @@ function make(variant) {
         v.addEventListener("loadeddata", function () { paintKey(key); });
         v.addEventListener("seeked", function () { paintKey(key); });
       });
+      function checkVideoAi() {
+        var changed = false;
+        videoAiRules.forEach(function (rule) {
+          if (videoAiFired[rule.key]) return;
+          if (rule.video && (rule.video.currentTime >= rule.at || rule.video.ended)) {
+            videoAiFired[rule.key] = true;
+            AI_EVENTS.push({ t: st.t, who: "ai", text: rule.text, videoAi: true, group: rule.group });
+            changed = true;
+          }
+        });
+        if (changed) {
+          AI_EVENTS.sort(function (a, b) { return a.t - b.t; });
+          renderAiLog(st.t);
+        }
+      }
       function renderVideos(t) {
         if (!smallBar) return;
         var active = st.started && t >= T_VIDEO_002;
@@ -760,6 +787,7 @@ function make(variant) {
         } else if (extraStarted) {
           resetExtraVideos();
         }
+        checkVideoAi();
         if (videoA && videoA.ended && !videoA.__frozen) freezeVideo(videoA, trackerA, "A");
         if (videoB && videoB.ended && !videoB.__frozen) freezeVideo(videoB, trackerB, "B");
         if (extraStarted) {
@@ -790,9 +818,7 @@ function make(variant) {
         { t: FL.T_REASSIGN || 0, who: "ai", text: "已分配17号、18号光电无人机进行002疑似目标察打任务。" },
         { t: FL.T_REPLAN || 0, who: "ai", text: "重新规划剩余的6架光电无人机侦察方式。" },
         { t: T_CONFIRM_002, who: "ai", text: "智能评估对照，确认002雷达目标" },
-        { t: 4253.80, who: "ai", text: "17光电开始攻击" },
         { t: T_CONFIRM_001, who: "ai", text: "智能评估对照，确认001雷达目标" },
-        { t: 4288.13, who: "ai", text: "14光电开始攻击" }
       ].filter(function (ev) { return ev.t > 0; }).sort(function (a, b) { return a.t - b.t; });
       function renderAiLog(t) {
         if (!aiLogEl) return;
