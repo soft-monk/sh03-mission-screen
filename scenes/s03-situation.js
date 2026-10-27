@@ -209,6 +209,34 @@ function make(variant) {
         '</section>';
     }
 
+    var SH06_VIDEO_HTML = (sc && sc.id === "SH-06")
+      ? ('<div class="s6-video-source">' +
+          '<video class="s6-video-a" src="assets/video/goal001_A_ir.mp4" muted playsinline preload="auto"></video>' +
+          '<video class="s6-video-b" src="assets/video/goal001_B_ir.mp4" muted playsinline preload="auto"></video>' +
+          '<video class="s6-video-c" src="assets/video/goal001_A_ir.mp4" muted playsinline preload="auto"></video>' +
+          '<video class="s6-video-d" src="assets/video/goal001_B_ir.mp4" muted playsinline preload="auto"></video>' +
+        '</div>' +
+        '<section class="s6-video-smallbar">' +
+          '<div class="s6-video-card s6-video-small-card" data-video="A">' +
+            '<div class="s6-video-title">17光电-攻击</div>' +
+            '<canvas class="s6-video-small-canvas" data-video="A"></canvas>' +
+          '</div>' +
+          '<div class="s6-video-card s6-video-small-card" data-video="B">' +
+            '<div class="s6-video-title">18光电-侦察</div>' +
+            '<canvas class="s6-video-small-canvas" data-video="B"></canvas>' +
+          '</div>' +
+          '<div class="s6-video-card s6-video-small-card s6-video-extra" data-video="C" style="display:none">' +
+            '<div class="s6-video-title">14光电-攻击</div>' +
+            '<canvas class="s6-video-small-canvas" data-video="C"></canvas>' +
+          '</div>' +
+          '<div class="s6-video-card s6-video-small-card s6-video-extra" data-video="D" style="display:none">' +
+            '<div class="s6-video-title">15光电-侦察</div>' +
+            '<canvas class="s6-video-small-canvas" data-video="D"></canvas>' +
+          '</div>' +
+        '</section>' +
+        '<section class="s6-video-large"><div class="s6-video-grid"></div></section>')
+      : "";
+
     root.innerHTML =
       '<div class="s3-map"></div>' +
       '<aside class="s3-menu"></aside>' +
@@ -218,6 +246,7 @@ function make(variant) {
       '<div class="s3-coord">116.53850, 39.76102</div>' +
       (IS_SELECT ? '<div class="s3-cards"></div><div class="s3-prompt">请选择任务场景</div>' : (IS_MISSION ? VOICE_HTML : FRAME_HTML)) +
       SH06_RIGHT_HTML +
+      SH06_VIDEO_HTML +
       '<button class="s3-mic">' + ic("mic", 26, "", 1.7) + '</button>' +
       '<footer class="s3-status"></footer>';
 
@@ -225,9 +254,7 @@ function make(variant) {
     [].slice.call(root.querySelectorAll(".s6-tb-head")).forEach(function (head) {
       head.addEventListener("click", function () {
         var item = head.parentNode;
-        var open = !item.classList.contains("open");
-        [].slice.call(root.querySelectorAll(".s6-tb")).forEach(function (o) { o.classList.remove("open"); });
-        if (open) item.classList.add("open");
+        item.classList.toggle("open");
       });
     });
     /* 共享同一块地图：后面每一屏都复用，不重建 */
@@ -377,8 +404,10 @@ function make(variant) {
       var targetCountEl = root.querySelector(".s6-target-count");
       var targetOn = false;
       var T_SCAN = 3900;
-      var T_CONFIRM_001 = 4498.48;
-      var T_CONFIRM_002 = 4212.80;
+      var T_VIDEO_002 = 4212.80;
+      var T_CONFIRM_002 = 4212.81;
+      var T_EXTRA_VIDEO = 4247.13;
+      var T_CONFIRM_001 = 4247.14;
       var SUSPECTS = [
         { id: "s6-suspect-1", confirmedId: "s6-confirm-1", no: "001", center: [114.34, 40.02], label: [114.352, 40.024], confirmAt: T_CONFIRM_001 },
         { id: "s6-suspect-2", confirmedId: "s6-confirm-2", no: "002", center: [114.28, 40.08], label: [114.292, 40.084], confirmAt: T_CONFIRM_002 }
@@ -458,6 +487,293 @@ function make(variant) {
           map.setVis([s.confirmedId], confirmed);
         });
       }
+      var smallBar = root.querySelector(".s6-video-smallbar");
+      var largeBox = root.querySelector(".s6-video-large");
+      var largeGrid = root.querySelector(".s6-video-grid");
+      var videoA = root.querySelector(".s6-video-a");
+      var videoB = root.querySelector(".s6-video-b");
+      var videoC = root.querySelector(".s6-video-c");
+      var videoD = root.querySelector(".s6-video-d");
+      var smallCards = [].slice.call(root.querySelectorAll(".s6-video-small-card"));
+      var extraCards = [].slice.call(root.querySelectorAll(".s6-video-extra"));
+      var smallCanvases = {
+        A: root.querySelector(".s6-video-small-canvas[data-video=\"A\"]"),
+        B: root.querySelector(".s6-video-small-canvas[data-video=\"B\"]"),
+        C: root.querySelector(".s6-video-small-canvas[data-video=\"C\"]"),
+        D: root.querySelector(".s6-video-small-canvas[data-video=\"D\"]")
+      };
+      var expanded = [];
+      var largeMap = {};
+      var videoStarted = false;
+      var extraStarted = false;
+      var mirrorGen = 0;
+      var VIDEO_TITLES = { A: "17光电-攻击", B: "18光电-侦察", C: "14光电-攻击", D: "15光电-侦察" };
+      function channelOf(key) { return key === "A" ? videoA : key === "B" ? videoB : key === "C" ? videoC : key === "D" ? videoD : null; }
+      function makeFrameTracker(video) {
+        var times = [], on = false;
+        function tick(now, meta) {
+          if (!on) return;
+          times.push(meta.mediaTime);
+          if (times.length > 12) times.shift();
+          if (!video.ended) video.requestVideoFrameCallback(tick);
+        }
+        return {
+          start: function () {
+            times = [];
+            if (!video || !video.requestVideoFrameCallback) return;
+            on = true;
+            video.requestVideoFrameCallback(tick);
+          },
+          stop: function () { on = false; },
+          fifthFromEnd: function () {
+            if (times.length >= 5) return times[times.length - 5];
+            return Math.max(0, (video.duration || 0) - 5 / 30);
+          }
+        };
+      }
+      var trackerA = makeFrameTracker(videoA);
+      var trackerB = makeFrameTracker(videoB);
+      var trackerC = makeFrameTracker(videoC);
+      var trackerD = makeFrameTracker(videoD);
+      function setVideoRate() {
+        [videoA, videoB, videoC, videoD].forEach(function (v) { if (v) v.playbackRate = st.speed; });
+      }
+      function pauseVideos() {
+        [videoA, videoB, videoC, videoD].forEach(function (v) { try { if (v) v.pause(); } catch (e) {} });
+      }
+      function freezeVideo(video, tracker, key) {
+        if (!video || video.__frozen) return;
+        video.__frozen = true;
+        tracker.stop();
+        var ft = tracker.fifthFromEnd();
+        try { video.pause(); video.currentTime = ft; } catch (e) {}
+        setTimeout(function () { paintKey(key); }, 0);
+      }
+      function resetExtraVideos() {
+        extraStarted = false;
+        [videoC, videoD].forEach(function (v) { try { if (v) { v.pause(); v.__frozen = false; v.currentTime = 0; } } catch (e) {} });
+        trackerC.stop();
+        trackerD.stop();
+        extraCards.forEach(function (card) { card.style.display = "none"; });
+        expanded = expanded.filter(function (k) { return k === "A" || k === "B"; });
+        reflowLarge();
+      }
+      function resetVideos() {
+        videoStarted = false;
+        extraStarted = false;
+        mirrorGen++;
+        pauseVideos();
+        trackerA.stop();
+        trackerB.stop();
+        trackerC.stop();
+        trackerD.stop();
+        [videoA, videoB, videoC, videoD].forEach(function (v) {
+          try { if (v) { v.__frozen = false; v.currentTime = 0; } } catch (e) {}
+        });
+        extraCards.forEach(function (card) { card.style.display = "none"; });
+        expanded = [];
+        reflowLarge();
+      }
+      function playVideos() {
+        setVideoRate();
+        [videoA, videoB].forEach(function (v) {
+          if (v && !v.__frozen) {
+            try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+          }
+        });
+      }
+      function playExtraVideos() {
+        setVideoRate();
+        [videoC, videoD].forEach(function (v) {
+          if (v && !v.__frozen) {
+            try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+          }
+        });
+      }
+      function sizeCanvas(canvas) {
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        var cw = Math.max(1, canvas.clientWidth || 1);
+        var ch = Math.max(1, canvas.clientHeight || 1);
+        var w = Math.round(cw * dpr), h = Math.round(ch * dpr);
+        if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+      }
+      function drawVideoToCanvas(src, canvas) {
+        if (!src || !canvas) return false;
+        sizeCanvas(canvas);
+        if (src.readyState < 2 || !src.videoWidth || !src.videoHeight) return false;
+        var ctx = canvas.__ctx || (canvas.__ctx = canvas.getContext("2d"));
+        if (!ctx) return false;
+        var cw = canvas.width, ch = canvas.height;
+        ctx.clearRect(0, 0, cw, ch);
+        var scale = Math.min(cw / src.videoWidth, ch / src.videoHeight);
+        var dw = src.videoWidth * scale, dh = src.videoHeight * scale;
+        var dx = (cw - dw) / 2, dy = (ch - dh) / 2;
+        ctx.drawImage(src, dx, dy, dw, dh);
+        return true;
+      }
+      function paintCell(key) {
+        var entry = largeMap[key];
+        if (!entry) return;
+        if (drawVideoToCanvas(channelOf(key), entry.canvas)) entry.cell.style.visibility = "visible";
+      }
+      function paintSmall(key) {
+        drawVideoToCanvas(channelOf(key), smallCanvases[key]);
+      }
+      function paintKey(key) {
+        paintSmall(key);
+        paintExpanded(key);
+      }
+      function paintExpanded(key) {
+        if (expanded.indexOf(key) < 0) return;
+        paintCell(key);
+      }
+      function createLargeCell(key) {
+        if (!channelOf(key)) return;
+        var cell = document.createElement("div");
+        cell.className = "s6-video-cell";
+        cell.style.visibility = "hidden";
+        var title = document.createElement("div");
+        title.className = "s6-video-title";
+        title.textContent = VIDEO_TITLES[key] || key;
+        var canvas = document.createElement("canvas");
+        canvas.className = "s6-video-canvas";
+        cell.appendChild(title);
+        cell.appendChild(canvas);
+        largeGrid.appendChild(cell);
+        largeMap[key] = { cell: cell, canvas: canvas, ctx: null };
+        requestAnimationFrame(function () { paintCell(key); });
+      }
+      function layoutLargeGrid() {
+        var n = expanded.length;
+        if (!n) return;
+        var cols = n >= 2 ? 2 : 1;
+        var rows = n >= 3 ? 2 : 1;
+        var gap = 10, titleH = 28, border = 2;
+        var W = largeBox.clientWidth, H = largeBox.clientHeight;
+        var maxByW = (W - (cols - 1) * gap) / cols;
+        var maxByH = ((H - (rows - 1) * gap) / rows - titleH - border) * 16 / 9 + border;
+        var cellW = Math.max(120, Math.min(maxByW, maxByH));
+        var canvasW = Math.max(1, cellW - border);
+        var cellH = canvasW * 9 / 16 + titleH + border;
+        var gridW = cols * cellW + (cols - 1) * gap;
+        var gridH = rows * cellH + (rows - 1) * gap;
+        largeGrid.style.gridTemplateColumns = "repeat(" + cols + "," + cellW.toFixed(2) + "px)";
+        largeGrid.style.gridTemplateRows = "repeat(" + rows + "," + cellH.toFixed(2) + "px)";
+        largeGrid.style.width = gridW.toFixed(2) + "px";
+        largeGrid.style.height = gridH.toFixed(2) + "px";
+      }
+      function reflowLarge() {
+        largeGrid.innerHTML = "";
+        largeMap = {};
+        var n = expanded.length;
+        if (!n) {
+          largeBox.classList.remove("on");
+          largeBox.style.display = "none";
+          largeGrid.style.gridTemplateColumns = "";
+          largeGrid.style.gridTemplateRows = "";
+          return;
+        }
+        largeBox.style.display = "flex";
+        largeBox.classList.add("on");
+        expanded.forEach(createLargeCell);
+        layoutLargeGrid();
+      }
+      function startMirror(key, video, gen) {
+        if (!video) return;
+        if (video.requestVideoFrameCallback) {
+          function tick() {
+            if (gen !== mirrorGen) return;
+            paintKey(key);
+            if (!video.ended) video.requestVideoFrameCallback(tick);
+          }
+          video.requestVideoFrameCallback(tick);
+        } else {
+          function loop() {
+            if (gen !== mirrorGen) return;
+            paintKey(key);
+            requestAnimationFrame(loop);
+          }
+          requestAnimationFrame(loop);
+        }
+      }
+      function startMirrors() {
+        mirrorGen++;
+        var gen = mirrorGen;
+        startMirror("A", videoA, gen);
+        startMirror("B", videoB, gen);
+        startMirror("C", videoC, gen);
+        startMirror("D", videoD, gen);
+      }
+      function toggleLarge(key) {
+        var idx = expanded.indexOf(key);
+        if (idx >= 0) expanded.splice(idx, 1);
+        else if (expanded.length < 4) expanded.push(key);
+        reflowLarge();
+      }
+      smallCards.forEach(function (card) {
+        card.addEventListener("click", function () { toggleLarge(card.getAttribute("data-video")); });
+      });
+      [["A", videoA], ["B", videoB], ["C", videoC], ["D", videoD]].forEach(function (pair) {
+        var key = pair[0], v = pair[1];
+        if (!v) return;
+        v.addEventListener("loadeddata", function () { paintKey(key); });
+        v.addEventListener("seeked", function () { paintKey(key); });
+      });
+      function renderVideos(t) {
+        if (!smallBar) return;
+        var active = st.started && t >= T_VIDEO_002;
+        var extraActive = st.started && t >= T_EXTRA_VIDEO;
+        if (!active) {
+          resetVideos();
+          smallBar.classList.remove("on");
+          largeBox.classList.remove("on");
+          largeBox.style.display = "none";
+          return;
+        }
+        smallBar.classList.add("on");
+        if (!expanded.length) { largeBox.classList.remove("on"); largeBox.style.display = "none"; }
+        if (!videoStarted) {
+          videoStarted = true;
+          expanded = [];
+          reflowLarge();
+          [videoA, videoB].forEach(function (v) { try { if (v) { v.__frozen = false; v.currentTime = 0; } } catch (e) {} });
+          trackerA.start();
+          trackerB.start();
+          startMirrors();
+          playVideos();
+          paintKey("A");
+          paintKey("B");
+        } else {
+          setVideoRate();
+        }
+        if (extraActive) {
+          extraCards.forEach(function (card) { card.style.display = ""; });
+          if (!extraStarted) {
+            extraStarted = true;
+            [videoC, videoD].forEach(function (v) { try { if (v) { v.__frozen = false; v.currentTime = 0; } } catch (e) {} });
+            trackerC.start();
+            trackerD.start();
+            playExtraVideos();
+            paintKey("C");
+            paintKey("D");
+          }
+        } else if (extraStarted) {
+          resetExtraVideos();
+        }
+        if (videoA && videoA.ended && !videoA.__frozen) freezeVideo(videoA, trackerA, "A");
+        if (videoB && videoB.ended && !videoB.__frozen) freezeVideo(videoB, trackerB, "B");
+        if (extraStarted) {
+          if (videoC && videoC.ended && !videoC.__frozen) freezeVideo(videoC, trackerC, "C");
+          if (videoD && videoD.ended && !videoD.__frozen) freezeVideo(videoD, trackerD, "D");
+        }
+        if (!st.run) pauseVideos();
+        else {
+          if (!(videoA.__frozen && videoB.__frozen) &&
+              ((!videoA.__frozen && videoA.paused) || (!videoB.__frozen && videoB.paused))) playVideos();
+          if (extraStarted && !(videoC.__frozen && videoD.__frozen) &&
+              ((!videoC.__frozen && videoC.paused) || (!videoD.__frozen && videoD.paused))) playExtraVideos();
+        }
+      }
       var aiChatEl = root.querySelector(".s6-chat-scroll");
       var aiLogEl = root.querySelector(".s6-ai-log");
       var T_JOIN = FL.T_LIFT + 90; /* matches TOFF in flight06.js */
@@ -474,7 +790,9 @@ function make(variant) {
         { t: FL.T_REASSIGN || 0, who: "ai", text: "已分配17号、18号光电无人机进行002疑似目标察打任务。" },
         { t: FL.T_REPLAN || 0, who: "ai", text: "重新规划剩余的6架光电无人机侦察方式。" },
         { t: T_CONFIRM_002, who: "ai", text: "智能评估对照，确认002雷达目标" },
-        { t: T_CONFIRM_001, who: "ai", text: "智能评估对照，确认001雷达目标" }
+        { t: 4253.80, who: "ai", text: "17光电开始攻击" },
+        { t: T_CONFIRM_001, who: "ai", text: "智能评估对照，确认001雷达目标" },
+        { t: 4288.13, who: "ai", text: "14光电开始攻击" }
       ].filter(function (ev) { return ev.t > 0; }).sort(function (a, b) { return a.t - b.t; });
       function renderAiLog(t) {
         if (!aiLogEl) return;
@@ -530,9 +848,10 @@ function make(variant) {
       })();
 
       function push() {
-        if (!st.started) { renderAiLog(-1); renderTargetState(-1); map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); if (map.scan) map.scan("scan", []); if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); } if (map.beam) map.beam("sbeam", []); if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); } paint(); return; }
+        if (!st.started) { renderAiLog(-1); renderTargetState(-1); renderVideos(-1); map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); if (map.scan) map.scan("scan", []); if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); } if (map.beam) map.beam("sbeam", []); if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); } paint(); return; }
         renderAiLog(st.t);
         renderTargetState(st.t);
+        renderVideos(st.t);
         if (map.fan && FL.fans) {
           var fs0 = FL.fans(st.t);
           map.fan("rfan", fs0.filter(function (f) { return f.kind === "radar"; }).map(function (s) {
@@ -573,6 +892,7 @@ function make(variant) {
         b.addEventListener("click", function () {
           st.speed = +b.getAttribute("data-s");
           spds.forEach(function (o) { o.classList.toggle("on", o === b); });
+          renderVideos(st.t);
         });
       });
       goBtn.addEventListener("click", function () {
@@ -690,6 +1010,7 @@ function make(variant) {
           if (map.beam) map.beam("sbeam", []);
           if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); }
           if (targetsCreated) { SUSPECTS.forEach(function (s) { map.setVis([s.id], false); map.setVis([s.confirmedId], false); s.targetLabel.set(0); }); }
+          pauseVideos();
           targetOn = false;
           confirmedState["001"] = null;
           confirmedState["002"] = null;
@@ -940,6 +1261,23 @@ function make(variant) {
         "  border-bottom:5px solid transparent;border-right:5px solid rgba(12,34,58,.95)}",
         ".s6-msg.user .s6-bubble{background:rgba(22,101,52,.88);border-color:rgba(74,222,128,.45);color:#dcfce7}",
         ".s6-msg.user .s6-bubble:before{left:auto;right:-5px;border-right:0;border-left:5px solid rgba(22,101,52,.88)}",
+        ".s6-video-source{position:absolute;left:0;top:0;width:1px;height:1px;overflow:hidden;opacity:.001;pointer-events:none;z-index:-1}",
+        ".s6-video-source video{display:block;width:1px;height:1px}",
+        ".s6-video-smallbar{position:absolute;left:7.8%;right:21%;top:60%;height:23%;display:none;align-items:center;justify-content:center;gap:16px;z-index:20;pointer-events:none;}",
+        ".s6-video-smallbar.on{display:flex;pointer-events:auto}",
+        ".s6-video-card{display:flex;flex-direction:column;min-width:0;border-radius:9px;overflow:hidden;background:transparent;",
+        "  border:1px solid rgba(239,68,68,.65);box-shadow:0 0 24px rgba(239,68,68,.18)}",
+        ".s6-video-small-card{width:calc(25% - 12px);flex:none;cursor:pointer}",
+        ".s6-video-large{position:absolute;left:7.8%;right:21%;top:14%;height:45%;z-index:19;display:none;opacity:0;pointer-events:none;",
+        "  transition:opacity .3s ease}",
+        ".s6-video-large.on{display:flex;align-items:center;justify-content:center;opacity:1}",
+        ".s6-video-grid{display:grid;gap:10px;width:auto;height:auto}",
+        ".s6-video-cell{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;border-radius:9px;box-sizing:border-box;",
+        "  border:1px solid rgba(239,68,68,.65);background:transparent;box-shadow:0 0 24px rgba(239,68,68,.18)}",
+        ".s6-video-title{height:28px;line-height:28px;padding:0 12px;font-size:12px;letter-spacing:1px;color:#fecaca;",
+        "  background:linear-gradient(180deg,rgba(127,29,29,.5),rgba(60,10,10,.6));border-bottom:1px solid rgba(239,68,68,.25)}",
+        ".s6-video-small-canvas{display:block;width:100%;aspect-ratio:16/9;height:auto;background:transparent;pointer-events:none}",
+        ".s6-video-canvas{display:block;flex:none;width:100%;aspect-ratio:16/9;height:auto;background:transparent;pointer-events:none}",
         ".s6-ctl{position:absolute;left:116px;right:376px;bottom:62px;z-index:14;border-radius:12px;padding:12px 16px 10px;",
         "  background:linear-gradient(180deg,rgba(6,18,32,.95),rgba(4,12,22,.97));border:1px solid rgba(56,189,248,.24)}",
         ".s6-line{display:flex;align-items:center;gap:14px}",
