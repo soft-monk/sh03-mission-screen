@@ -184,7 +184,7 @@ function make(variant) {
                 '<div class="s6-tb-tags"><i>疑似雷达信号</i><i>待复核</i></div>' +
               '</div>' +
             '</div>' +
-            '<div class="s6-tb s6-target-item" data-target="002" style="display:none">' +
+            '<div class="s6-tb s6-target-item open" data-target="002" style="display:none">' +
               '<div class="s6-tb-head">' +
                 '<span class="s6-tb-no">002</span>' +
                 '<span class="s6-tb-name">疑似雷达目标</span>' +
@@ -949,10 +949,12 @@ function make(variant) {
           lb.textContent = marks[i][1];
           segLbls.appendChild(lb);
         }
-        var scanLb = document.createElement("span");
-        scanLb.style.left = ((T_SCAN / FL.TOTAL) * 100).toFixed(4) + "%";
-        scanLb.textContent = "目标扫描";
-        segLbls.appendChild(scanLb);
+        var videoJump = document.createElement("span");
+        videoJump.className = "s6-jump";
+        videoJump.style.left = (((T_VIDEO_002 - 10) / FL.TOTAL) * 100).toFixed(4) + "%";
+        videoJump.innerHTML = "<b class=\"s6-lb-text\">光电察打</b>";
+        videoJump.addEventListener("click", function () { st.t = Math.max(0, T_VIDEO_002 - 10); push(); });
+        segLbls.appendChild(videoJump);
       })();
 
       function push() {
@@ -1417,6 +1419,13 @@ function make(variant) {
         ".s6-seglbls span{position:absolute;top:0;transform:translateX(-2px);font-size:11px;line-height:1;letter-spacing:.5px;white-space:nowrap;color:#9fb6d4;",
         "  background:rgba(8,20,34,.92);border:1px solid rgba(56,189,248,.22);border-radius:4px;padding:3px 7px;font-weight:500}",
         ".s6-seglbls span:before{content:'';position:absolute;left:0;top:-8px;width:1px;height:8px;background:rgba(125,211,252,.7);",
+        ".s6-seglbls .s6-jump{background:none;border:0;padding:0}",
+        ".s6-seglbls .s6-lb-text{position:absolute;top:0;display:inline-block;white-space:nowrap;font-style:normal;font-weight:500;",
+        "  font-size:11px;line-height:1;letter-spacing:.5px;color:inherit;background:rgba(8,20,34,.92);",
+        "  border:1px solid rgba(56,189,248,.22);border-radius:4px;padding:3px 7px}",
+        ".s6-seglbls .s6-jump{pointer-events:auto;cursor:pointer;color:#fbbf24;text-shadow:0 1px 4px rgba(0,0,0,.9)}",
+        ".s6-seglbls .s6-jump .s6-lb-text{left:12px}",
+        ".s6-seglbls .s6-jump:before{background:#f59e0b;box-shadow:0 0 7px rgba(245,158,11,.75)}",
         "  box-shadow:0 0 5px rgba(56,189,248,.45)}",
         "  background:#eaf6ff;box-shadow:0 0 10px rgba(56,189,248,.9);text-decoration:none}",        ".s6-col .st.b{color:#60a5fa}",        ".s5-confirm:hover{filter:brightness(1.12)}",        ".s5-m b i{font-style:normal;font-size:12px;margin-left:1px}",        ".s4-mic{width:104px;height:104px;flex:none;border-radius:50%;display:grid;place-items:center;color:#eaf6ff;",
         "  background:radial-gradient(circle at 50% 35%,#2563eb,#0a1d3c 72%);border:1px solid rgba(96,165,250,.55);",
