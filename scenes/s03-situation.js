@@ -153,10 +153,10 @@ function make(variant) {
       ? ('<section class="s6-res">' +
           '<div class="s6-grid">' +
             UAVS.map(function (u) {
-              return '<div class="s6-col" style="--c:' + u.c + '">' +
+              return '<div class="s6-col" data-uav="' + u.k + '" data-used="' + u.used + '" data-rest="' + u.rest + '" style="--c:' + u.c + '">' +
                 '<img src="assets/img/' + u.img + '" alt="">' +
                 '<div class="lb">' + u.k.replace("无人机", "") + '</div>' +
-                '<div class="s6-nums"><b class="g">' + u.used + '</b><i>/</i><b class="r">0</b><i>/</i><b class="b">' + u.rest + '</b></div>' +
+                '<div class="s6-nums"><b class="g s6-used">' + u.used + '</b><i>/</i><b class="r s6-lost">0</b><i>/</i><b class="b s6-rest">' + u.rest + '</b></div>' +
               '</div>';
             }).join("") +
           '</div>' +
@@ -415,6 +415,7 @@ function make(variant) {
       var SR = 0.009;
       var targetsCreated = false;
       var confirmedState = { "001": null, "002": null };
+      var destroyedState = { "001": null, "002": null };
       var itemByNo = {};
       targetItems.forEach(function (el) { itemByNo[el.getAttribute("data-target")] = el; });
       function ensureTargets() {
@@ -434,27 +435,43 @@ function make(variant) {
           s.targetLabel = map.label("疑似雷达目标 " + s.no, s.label, "#fbbf24", 14, "target-label-" + s.no);
         });
       }
-      function setTargetItemState(s, confirmed) {
+      function setTargetItemState(s, confirmed, destroyed) {
         var no = s.no;
         var el = itemByNo[no];
         if (el) {
-          el.classList.toggle("confirmed", confirmed);
+          el.classList.toggle("confirmed", confirmed && !destroyed);
+          el.classList.toggle("destroyed", destroyed);
           var name = el.querySelector(".s6-tb-name");
           if (name) name.textContent = confirmed ? no + "雷达目标" : "疑似雷达目标";
           var badge = el.querySelector(".s6-tb-sus");
-          if (badge) badge.style.display = confirmed ? "none" : "";
+          if (badge) {
+            if (destroyed) {
+              badge.textContent = "已摧毁";
+              badge.style.display = "";
+              badge.classList.add("dest");
+            } else if (confirmed) {
+              badge.style.display = "none";
+              badge.classList.remove("dest");
+              badge.textContent = "疑似";
+            } else {
+              badge.style.display = "";
+              badge.classList.remove("dest");
+              badge.textContent = "疑似";
+            }
+          }
           var judge = el.querySelector(".s6-tb-judge");
           if (judge) {
-            judge.textContent = confirmed ? "已确认" : "疑似（未经确认）";
+            judge.textContent = destroyed ? "已摧毁" : confirmed ? "已确认" : "疑似（未经确认）";
             judge.classList.toggle("sus", !confirmed);
-            judge.classList.toggle("confirmed", confirmed);
+            judge.classList.toggle("confirmed", confirmed && !destroyed);
+            judge.classList.toggle("destroyed", destroyed);
           }
           var tags = el.querySelector(".s6-tb-tags");
-          if (tags) tags.innerHTML = confirmed ? "<i>雷达信号</i><i>已确认</i>" : "<i>疑似雷达信号</i><i>待复核</i>";
+          if (tags) tags.innerHTML = destroyed ? "<i>雷达信号</i><i>已摧毁</i>" : confirmed ? "<i>雷达信号</i><i>已确认</i>" : "<i>疑似雷达信号</i><i>待复核</i>";
         }
         if (s.targetLabel) {
-          s.targetLabel.setText(confirmed ? no + "雷达目标" : "疑似雷达目标 " + no);
-          s.targetLabel.setColor(confirmed ? "#ef4444" : "#fbbf24");
+          s.targetLabel.setText(destroyed ? no + "雷达目标（已摧毁）" : confirmed ? no + "雷达目标" : "疑似雷达目标 " + no);
+          s.targetLabel.setColor(confirmed || destroyed ? "#ef4444" : "#fbbf24");
         }
       }
       function renderTargetState(t) {
@@ -473,18 +490,22 @@ function make(variant) {
             }
             confirmedState["001"] = null;
             confirmedState["002"] = null;
+            destroyedState["001"] = null;
+            destroyedState["002"] = null;
           }
         }
         if (!on) return;
         ensureTargets();
         SUSPECTS.forEach(function (s) {
           var confirmed = t >= s.confirmAt;
+          var destroyed = !!destroyedState[s.no];
           s.targetLabel.set(1);
-          if (confirmedState[s.no] === confirmed) return;
+          if (confirmedState[s.no] === confirmed && destroyedState[s.no] === destroyed) return;
           confirmedState[s.no] = confirmed;
-          setTargetItemState(s, confirmed);
+          destroyedState[s.no] = destroyed;
+          setTargetItemState(s, confirmed, destroyed);
           map.setVis([s.id], !confirmed);
-          map.setVis([s.confirmedId], confirmed);
+          map.setVis([s.confirmedId], confirmed || destroyed);
         });
       }
       var smallBar = root.querySelector(".s6-video-smallbar");
@@ -504,6 +525,7 @@ function make(variant) {
       };
       var expanded = [];
       var largeMap = {};
+      var removedChannels = {};
       var videoStarted = false;
       var extraStarted = false;
       var mirrorGen = 0;
@@ -515,6 +537,46 @@ function make(variant) {
         { key: "001-destroy", group: "001", video: videoD, at: 83, text: "智能毁伤评估，001雷达目标已被摧毁" }
       ];
       var videoAiFired = {};
+      var photoResCol = root.querySelector(".s6-col");
+      var opticalLost = 0;
+      function updateOpticalResources() {
+        if (!photoResCol) return;
+        var baseUsed = +(photoResCol.getAttribute("data-used") || 20);
+        var baseRest = +(photoResCol.getAttribute("data-rest") || 28);
+        var usedEl = photoResCol.querySelector(".s6-used");
+        var lostEl = photoResCol.querySelector(".s6-lost");
+        var restEl = photoResCol.querySelector(".s6-rest");
+        if (usedEl) usedEl.textContent = String(Math.max(0, baseUsed - opticalLost));
+        if (lostEl) lostEl.textContent = String(opticalLost);
+        if (restEl) restEl.textContent = String(baseRest);
+      }
+      function cardOf(key) {
+        for (var i = 0; i < smallCards.length; i++) if (smallCards[i].getAttribute("data-video") === key) return smallCards[i];
+        return null;
+      }
+      function closeVideoChannel(key) {
+        removedChannels[key] = true;
+        var v = channelOf(key);
+        if (v) { v.__dead = true; try { v.pause(); } catch (e) {} }
+        var card = cardOf(key);
+        if (card) card.style.display = "none";
+        expanded = expanded.filter(function (k) { return k !== key; });
+        reflowLarge();
+      }
+      function applyDestroyed(no, key) {
+        if (destroyedState[no]) return;
+        destroyedState[no] = true;
+        opticalLost = Math.min(2, opticalLost + 1);
+        updateOpticalResources();
+        closeVideoChannel(key);
+        renderTargetState(st.t);
+      }
+      function resetDestroyedState() {
+        destroyedState["001"] = false;
+        destroyedState["002"] = false;
+        opticalLost = 0;
+        updateOpticalResources();
+      }
       function channelOf(key) { return key === "A" ? videoA : key === "B" ? videoB : key === "C" ? videoC : key === "D" ? videoD : null; }
       function makeFrameTracker(video) {
         var times = [], on = false;
@@ -543,7 +605,12 @@ function make(variant) {
       var trackerC = makeFrameTracker(videoC);
       var trackerD = makeFrameTracker(videoD);
       function setVideoRate() {
-        [videoA, videoB, videoC, videoD].forEach(function (v) { if (v) v.playbackRate = st.speed; });
+        var rate = st.speed;
+        [videoA, videoB, videoC, videoD].forEach(function (v) {
+          if (!v) return;
+          try { v.playbackRate = rate; }
+          catch (e) { try { v.playbackRate = Math.min(16, rate); } catch (e2) {} }
+        });
       }
       function pauseVideos() {
         [videoA, videoB, videoC, videoD].forEach(function (v) { try { if (v) v.pause(); } catch (e) {} });
@@ -561,12 +628,16 @@ function make(variant) {
         delete videoAiFired["001-attack"];
         delete videoAiFired["001-destroy"];
         AI_EVENTS = AI_EVENTS.filter(function (ev) { return !(ev.videoAi && ev.group === "001"); });
-        [videoC, videoD].forEach(function (v) { try { if (v) { v.pause(); v.__frozen = false; v.currentTime = 0; } } catch (e) {} });
+        if (destroyedState["001"]) { destroyedState["001"] = false; opticalLost = Math.max(0, opticalLost - 1); updateOpticalResources(); }
+        removedChannels.C = false;
+        removedChannels.D = false;
+        [videoC, videoD].forEach(function (v) { try { if (v) { v.pause(); v.__frozen = false; v.__dead = false; v.currentTime = 0; } } catch (e) {} });
         trackerC.stop();
         trackerD.stop();
         extraCards.forEach(function (card) { card.style.display = "none"; });
         expanded = expanded.filter(function (k) { return k === "A" || k === "B"; });
         reflowLarge();
+        renderTargetState(st.t);
       }
       function resetVideos() {
         videoStarted = false;
@@ -580,16 +651,22 @@ function make(variant) {
         trackerC.stop();
         trackerD.stop();
         [videoA, videoB, videoC, videoD].forEach(function (v) {
-          try { if (v) { v.__frozen = false; v.currentTime = 0; } } catch (e) {}
+          try { if (v) { v.__frozen = false; v.__dead = false; v.currentTime = 0; } } catch (e) {}
         });
-        extraCards.forEach(function (card) { card.style.display = "none"; });
+        removedChannels = {};
+        smallCards.forEach(function (card) {
+          var k = card.getAttribute("data-video");
+          card.style.display = (k === "A" || k === "B") ? "" : "none";
+        });
+        resetDestroyedState();
         expanded = [];
         reflowLarge();
+        renderTargetState(st.started ? st.t : -1);
       }
       function playVideos() {
         setVideoRate();
         [videoA, videoB].forEach(function (v) {
-          if (v && !v.__frozen) {
+          if (v && !v.__frozen && !v.__dead) {
             try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
           }
         });
@@ -597,7 +674,7 @@ function make(variant) {
       function playExtraVideos() {
         setVideoRate();
         [videoC, videoD].forEach(function (v) {
-          if (v && !v.__frozen) {
+          if (v && !v.__frozen && !v.__dead) {
             try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
           }
         });
@@ -738,6 +815,8 @@ function make(variant) {
           if (rule.video && (rule.video.currentTime >= rule.at || rule.video.ended)) {
             videoAiFired[rule.key] = true;
             AI_EVENTS.push({ t: st.t, who: "ai", text: rule.text, videoAi: true, group: rule.group });
+            if (rule.key === "002-destroy") applyDestroyed("002", "A");
+            if (rule.key === "001-destroy") applyDestroyed("001", "C");
             changed = true;
           }
         });
@@ -774,7 +853,10 @@ function make(variant) {
           setVideoRate();
         }
         if (extraActive) {
-          extraCards.forEach(function (card) { card.style.display = ""; });
+          extraCards.forEach(function (card) {
+            var k = card.getAttribute("data-video");
+            card.style.display = removedChannels[k] ? "none" : "";
+          });
           if (!extraStarted) {
             extraStarted = true;
             [videoC, videoD].forEach(function (v) { try { if (v) { v.__frozen = false; v.currentTime = 0; } } catch (e) {} });
@@ -788,11 +870,11 @@ function make(variant) {
           resetExtraVideos();
         }
         checkVideoAi();
-        if (videoA && videoA.ended && !videoA.__frozen) freezeVideo(videoA, trackerA, "A");
-        if (videoB && videoB.ended && !videoB.__frozen) freezeVideo(videoB, trackerB, "B");
+        if (videoA && videoA.ended && !videoA.__frozen && !removedChannels.A) freezeVideo(videoA, trackerA, "A");
+        if (videoB && videoB.ended && !videoB.__frozen && !removedChannels.B) closeVideoChannel("B");
         if (extraStarted) {
-          if (videoC && videoC.ended && !videoC.__frozen) freezeVideo(videoC, trackerC, "C");
-          if (videoD && videoD.ended && !videoD.__frozen) freezeVideo(videoD, trackerD, "D");
+          if (videoC && videoC.ended && !videoC.__frozen && !removedChannels.C) freezeVideo(videoC, trackerC, "C");
+          if (videoD && videoD.ended && !videoD.__frozen && !removedChannels.D) closeVideoChannel("D");
         }
         if (!st.run) pauseVideos();
         else {
@@ -1262,6 +1344,11 @@ function make(variant) {
         ".s6-tb.confirmed .s6-tb-arrow{border-color:#fca5a5}",
         ".s6-tb-row b.confirmed{color:#f87171}",
         ".s6-tb.confirmed .s6-tb-tags i{color:#fca5a5;background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3)}",
+        ".s6-tb.destroyed .s6-tb-head{background:rgba(70,10,10,.78);box-shadow:inset 2px 0 0 #dc2626}",
+        ".s6-tb.destroyed .s6-tb-no,.s6-tb.destroyed .s6-tb-name{color:#fecaca}",
+        ".s6-tb-sus.dest{color:#fecaca;background:rgba(127,29,29,.55);border-color:rgba(248,113,113,.65)}",
+        ".s6-tb-row b.destroyed{color:#f87171}",
+        ".s6-tb.destroyed .s6-tb-tags i{color:#fca5a5;background:rgba(127,29,29,.25);border-color:rgba(248,113,113,.45)}",
         ".s6-tb-tags i{font-style:normal;font-size:11px;color:#9fc4e6;background:rgba(56,189,248,.1);",
         "  border:1px solid rgba(56,189,248,.22);border-radius:3px;padding:1px 6px}",
         ".s6-ai{border-radius:12px;padding:12px 14px;background:linear-gradient(180deg,rgba(6,18,32,.97),rgba(4,12,22,.98));",
