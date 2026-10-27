@@ -626,6 +626,11 @@ function make(variant) {
         try { video.pause(); video.currentTime = ft; } catch (e) {}
         setTimeout(function () { paintKey(key); }, 0);
       }
+      function blackenAttack(key) {
+        var v = channelOf(key);
+        if (v) v.__black = true;
+        paintKey(key);
+      }
       function resetExtraVideos() {
         extraStarted = false;
         delete videoAiFired["001-attack"];
@@ -634,7 +639,7 @@ function make(variant) {
         if (destroyedState["001"]) { destroyedState["001"] = false; opticalLost = Math.max(0, opticalLost - 1); updateOpticalResources(); }
         removedChannels.C = false;
         removedChannels.D = false;
-        [videoC, videoD].forEach(function (v) { try { if (v) { v.pause(); v.__frozen = false; v.__dead = false; v.currentTime = 0; } } catch (e) {} });
+        [videoC, videoD].forEach(function (v) { try { if (v) { v.pause(); v.__frozen = false; v.__dead = false; v.__black = false; v.currentTime = 0; } } catch (e) {} });
         trackerC.stop();
         trackerD.stop();
         extraCards.forEach(function (card) { card.style.display = "none"; });
@@ -654,7 +659,7 @@ function make(variant) {
         trackerC.stop();
         trackerD.stop();
         [videoA, videoB, videoC, videoD].forEach(function (v) {
-          try { if (v) { v.__frozen = false; v.__dead = false; v.currentTime = 0; } } catch (e) {}
+          try { if (v) { v.__frozen = false; v.__dead = false; v.__black = false; v.currentTime = 0; } } catch (e) {}
         });
         removedChannels = {};
         smallCards.forEach(function (card) {
@@ -692,10 +697,11 @@ function make(variant) {
       function drawVideoToCanvas(src, canvas) {
         if (!src || !canvas) return false;
         sizeCanvas(canvas);
-        if (src.readyState < 2 || !src.videoWidth || !src.videoHeight) return false;
         var ctx = canvas.__ctx || (canvas.__ctx = canvas.getContext("2d"));
         if (!ctx) return false;
         var cw = canvas.width, ch = canvas.height;
+        if (src.__black) { ctx.fillStyle = "#000"; ctx.fillRect(0, 0, cw, ch); return true; }
+        if (src.readyState < 2 || !src.videoWidth || !src.videoHeight) return false;
         ctx.clearRect(0, 0, cw, ch);
         var scale = Math.min(cw / src.videoWidth, ch / src.videoHeight);
         var dw = src.videoWidth * scale, dh = src.videoHeight * scale;
@@ -814,6 +820,16 @@ function make(variant) {
         v.addEventListener("loadeddata", function () { paintKey(key); });
         v.addEventListener("seeked", function () { paintKey(key); });
       });
+      [["B", videoB], ["D", videoD]].forEach(function (pair) {
+        var key = pair[0], v = pair[1];
+        if (!v) return;
+        v.addEventListener("ended", function () { closeVideoChannel(key); });
+      });
+      [["A", videoA], ["C", videoC]].forEach(function (pair) {
+        var key = pair[0], v = pair[1];
+        if (!v) return;
+        v.addEventListener("ended", function () { blackenAttack(key); });
+      });
       function checkVideoAi() {
         var changed = false;
         videoAiRules.forEach(function (rule) {
@@ -876,10 +892,10 @@ function make(variant) {
           resetExtraVideos();
         }
         checkVideoAi();
-        if (videoA && videoA.ended && !videoA.__frozen && !removedChannels.A) freezeVideo(videoA, trackerA, "A");
+        if (videoA && videoA.ended && !removedChannels.A && !videoA.__black) blackenAttack("A");
         if (videoB && videoB.ended && !removedChannels.B) closeVideoChannel("B");
         if (extraStarted) {
-          if (videoC && videoC.ended && !videoC.__frozen && !removedChannels.C) freezeVideo(videoC, trackerC, "C");
+          if (videoC && videoC.ended && !removedChannels.C && !videoC.__black) blackenAttack("C");
           if (videoD && videoD.ended && !removedChannels.D) closeVideoChannel("D");
         }
         if (!st.run) pauseVideos();
