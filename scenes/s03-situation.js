@@ -927,6 +927,7 @@ function make(variant) {
         { t: FL.T_REPLAN || 0, who: "ai", text: "重新规划剩余的6架光电无人机侦察方式。" },
         { t: T_CONFIRM_002, who: "ai", text: "智能评估对照，确认002雷达目标" },
         { t: T_CONFIRM_001, who: "ai", text: "智能评估对照，确认001雷达目标" },
+        { t: 4392.33, who: "ai", text: "重新规划“潜在目标部署区-2”剩余的8架光电无人机侦察方式。" },
       ].filter(function (ev) { return ev.t > 0; }).sort(function (a, b) { return a.t - b.t; });
       function renderAiLog(t) {
         if (!aiLogEl) return;
