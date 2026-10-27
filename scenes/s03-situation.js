@@ -416,6 +416,7 @@ function make(variant) {
       var targetsCreated = false;
       var confirmedState = { "001": null, "002": null };
       var destroyedState = { "001": null, "002": null };
+      var renderedDestroyed = { "001": null, "002": null };
       var itemByNo = {};
       targetItems.forEach(function (el) { itemByNo[el.getAttribute("data-target")] = el; });
       function ensureTargets() {
@@ -492,6 +493,8 @@ function make(variant) {
             confirmedState["002"] = null;
             destroyedState["001"] = null;
             destroyedState["002"] = null;
+            renderedDestroyed["001"] = null;
+            renderedDestroyed["002"] = null;
           }
         }
         if (!on) return;
@@ -500,9 +503,9 @@ function make(variant) {
           var confirmed = t >= s.confirmAt;
           var destroyed = !!destroyedState[s.no];
           s.targetLabel.set(1);
-          if (confirmedState[s.no] === confirmed && destroyedState[s.no] === destroyed) return;
+          if (confirmedState[s.no] === confirmed && renderedDestroyed[s.no] === destroyed) return;
           confirmedState[s.no] = confirmed;
-          destroyedState[s.no] = destroyed;
+          renderedDestroyed[s.no] = destroyed;
           setTargetItemState(s, confirmed, destroyed);
           map.setVis([s.id], !confirmed);
           map.setVis([s.confirmedId], confirmed || destroyed);
@@ -794,13 +797,16 @@ function make(variant) {
         startMirror("D", videoD, gen);
       }
       function toggleLarge(key) {
-        var idx = expanded.indexOf(key);
-        if (idx >= 0) expanded.splice(idx, 1);
-        else if (expanded.length < 4) expanded.push(key);
+        if (removedChannels[key]) return;
+        if (expanded.length === 1 && expanded[0] === key) expanded = [];
+        else expanded = [key];
         reflowLarge();
       }
       smallCards.forEach(function (card) {
-        card.addEventListener("click", function () { toggleLarge(card.getAttribute("data-video")); });
+        card.addEventListener("click", function () {
+          toggleLarge(card.getAttribute("data-video"));
+          if (!st.run) push();
+        });
       });
       [["A", videoA], ["B", videoB], ["C", videoC], ["D", videoD]].forEach(function (pair) {
         var key = pair[0], v = pair[1];
@@ -871,10 +877,10 @@ function make(variant) {
         }
         checkVideoAi();
         if (videoA && videoA.ended && !videoA.__frozen && !removedChannels.A) freezeVideo(videoA, trackerA, "A");
-        if (videoB && videoB.ended && !videoB.__frozen && !removedChannels.B) closeVideoChannel("B");
+        if (videoB && videoB.ended && !removedChannels.B) closeVideoChannel("B");
         if (extraStarted) {
           if (videoC && videoC.ended && !videoC.__frozen && !removedChannels.C) freezeVideo(videoC, trackerC, "C");
-          if (videoD && videoD.ended && !videoD.__frozen && !removedChannels.D) closeVideoChannel("D");
+          if (videoD && videoD.ended && !removedChannels.D) closeVideoChannel("D");
         }
         if (!st.run) pauseVideos();
         else {
