@@ -730,6 +730,7 @@ window.FLIGHT06 = (function () {
       }
     });
     COV.cells = cells;
+    COV.zoneSize = 1600;
     var kinds = { photo: [], gmti: [], sar: [], ewar: [] };
     D.forEach(function (d) {
       var k = d.type === "blue" ? "photo" : d.type === "red" ? "ewar" : (d.type === "yellow" ? (d.sar ? "sar" : "gmti") : null);
@@ -758,7 +759,10 @@ window.FLIGHT06 = (function () {
           var fx = Math.sin(hd), fy = Math.cos(hd);
           var px = p.lon * M_LON, py = p.lat * M_LAT;
           var arr = first[k];
-          for (var ci = 0; ci < cells.length; ci++) {
+          var ciStart = 0, ciEnd = cells.length;
+          if (k === "ewar") { ciStart = COV.zoneSize; }
+          else if (k === "gmti" || k === "sar") { ciEnd = COV.zoneSize; }
+          for (var ci = ciStart; ci < ciEnd; ci++) {
             if (arr[ci] <= tt) continue;
             var dx = cells[ci].mx - px, dy = cells[ci].my - py;
             if (dx > r1e || dx < -r1e || dy > r1e || dy < -r1e) continue;
@@ -826,7 +830,10 @@ window.FLIGHT06 = (function () {
     var out = {};
     Object.keys(COV.first).forEach(function (k) {
       var arr = [], f = COV.first[k], af = COV.afterPhoto, af2 = COV.afterPhoto2;
-      for (var i = 0; i < COV.cells.length; i++) {
+      var iStart = 0, iEnd = COV.cells.length;
+      if (k === "ewar") iStart = COV.zoneSize;
+      else if (k === "gmti" || k === "sar") iEnd = COV.zoneSize;
+      for (var i = iStart; i < iEnd; i++) {
         var cell = COV.cells[i];
         if (k === "photo" && cell.zone === 1) {
           var hit = t < T_REPLAN ? f[i] <= t : t < T_REPLAN2 ? af[i] <= t : af2[i] <= t;
