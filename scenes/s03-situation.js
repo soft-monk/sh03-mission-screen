@@ -172,7 +172,7 @@ function make(variant) {
             '<div class="s6-tb s6-target-item open" data-target="001" style="display:none">' +
               '<div class="s6-tb-head">' +
                 '<span class="s6-tb-no">001</span>' +
-                '<span class="s6-tb-name">疑似雷达目标</span>' +
+                '<span class="s6-tb-name">001预警雷达</span>' +
                 '<i class="s6-tb-sus">疑似</i>' +
                 '<i class="s6-tb-arrow"></i>' +
               '</div>' +
@@ -187,7 +187,7 @@ function make(variant) {
             '<div class="s6-tb s6-target-item open" data-target="002" style="display:none">' +
               '<div class="s6-tb-head">' +
                 '<span class="s6-tb-no">002</span>' +
-                '<span class="s6-tb-name">疑似雷达目标</span>' +
+                '<span class="s6-tb-name">002火控雷达</span>' +
                 '<i class="s6-tb-sus">疑似</i>' +
                 '<i class="s6-tb-arrow"></i>' +
               '</div>' +
@@ -409,8 +409,8 @@ function make(variant) {
       var T_EXTRA_VIDEO = 4247.13;
       var T_CONFIRM_001 = 4247.14;
       var SUSPECTS = [
-        { id: "s6-suspect-1", confirmedId: "s6-confirm-1", no: "001", center: [114.34, 40.02], label: [114.352, 40.024], confirmAt: T_CONFIRM_001 },
-        { id: "s6-suspect-2", confirmedId: "s6-confirm-2", no: "002", center: [114.28, 40.08], label: [114.292, 40.084], confirmAt: T_CONFIRM_002 }
+        { id: "s6-suspect-1", confirmedId: "s6-confirm-1", no: "001", name: "001预警雷达", center: [114.34, 40.02], label: [114.352, 40.024], confirmAt: T_CONFIRM_001 },
+        { id: "s6-suspect-2", confirmedId: "s6-confirm-2", no: "002", name: "002火控雷达", center: [114.28, 40.08], label: [114.292, 40.084], confirmAt: T_CONFIRM_002 }
       ];
       var SR = 0.009;
       var targetsCreated = false;
@@ -433,7 +433,7 @@ function make(variant) {
           ];
           map.polygon(s.id, ring, { fill: "#f59e0b", fillOpacity: 0.22, line: "#f59e0b", width: 2.4 });
           map.polygon(s.confirmedId, ring, { fill: "#ef4444", fillOpacity: 0.3, line: "#ef4444", width: 3 });
-          s.targetLabel = map.label("疑似雷达目标 " + s.no, s.label, "#fbbf24", 14, "target-label-" + s.no);
+          s.targetLabel = map.label(s.name + "（疑似）", s.label, "#fbbf24", 14, "target-label-" + s.no);
         });
       }
       function setTargetItemState(s, confirmed, destroyed) {
@@ -443,7 +443,7 @@ function make(variant) {
           el.classList.toggle("confirmed", confirmed && !destroyed);
           el.classList.toggle("destroyed", destroyed);
           var name = el.querySelector(".s6-tb-name");
-          if (name) name.textContent = confirmed ? no + "雷达目标" : "疑似雷达目标";
+          if (name) name.textContent = s.name;
           var badge = el.querySelector(".s6-tb-sus");
           if (badge) {
             if (destroyed) {
@@ -471,7 +471,7 @@ function make(variant) {
           if (tags) tags.innerHTML = destroyed ? "<i>雷达信号</i><i>已摧毁</i>" : confirmed ? "<i>雷达信号</i><i>已确认</i>" : "<i>疑似雷达信号</i><i>待复核</i>";
         }
         if (s.targetLabel) {
-          s.targetLabel.setText(destroyed ? no + "雷达目标（已摧毁）" : confirmed ? no + "雷达目标" : "疑似雷达目标 " + no);
+          s.targetLabel.setText(destroyed ? s.name + "（已摧毁）" : confirmed ? s.name : s.name + "（疑似）");
           s.targetLabel.setColor(confirmed || destroyed ? "#ef4444" : "#fbbf24");
         }
       }
@@ -535,9 +535,9 @@ function make(variant) {
       var VIDEO_TITLES = { A: "17光电-攻击", B: "18光电-侦察", C: "14光电-攻击", D: "15光电-侦察" };
       var videoAiRules = [
         { key: "002-attack", group: "002", video: videoA, at: 41, text: "17光电开始攻击" },
-        { key: "002-destroy", group: "002", video: videoB, at: 83, text: "智能毁伤评估，002雷达目标已被摧毁" },
+        { key: "002-destroy", group: "002", video: videoB, at: 83, text: "智能毁伤评估，002火控雷达已被摧毁" },
         { key: "001-attack", group: "001", video: videoC, at: 41, text: "14光电开始攻击" },
-        { key: "001-destroy", group: "001", video: videoD, at: 83, text: "智能毁伤评估，001雷达目标已被摧毁" }
+        { key: "001-destroy", group: "001", video: videoD, at: 83, text: "智能毁伤评估，001预警雷达已被摧毁" }
       ];
       var videoAiFired = {};
       var photoResCol = root.querySelector(".s6-col");
@@ -928,13 +928,13 @@ function make(variant) {
         { t: T_ARRIVE, who: "ai", text: "机群抵达任务区，开始分区侦察。" },
         { t: FL.T_TRACKS || 0, who: "ai", text: "光电集群开始网格扫描，雷达开始 SAR/GMTI 探测，电子集群开始干扰压制。" },
         { t: T_SCAN, who: "ai", text: "在潜在目标部署区2扫描发现2个疑似雷达目标，已加入目标档案。" },
-        { t: T_SCAN, who: "ai", text: "建议采用方案：为001、002两个疑似雷达目标各派出两架光电无人机执行侦察和打击任务。" },
+        { t: T_SCAN, who: "ai", text: "建议采用方案：为001预警雷达、002火控雷达两个疑似目标各派出两架光电无人机执行侦察和打击任务。" },
         { t: T_SCAN + 2, who: "user", text: "方案确认。" },
-        { t: FL.T_REASSIGN || 0, who: "ai", text: "已分配14号、15号光电无人机进行001疑似目标察打任务。" },
-        { t: FL.T_REASSIGN || 0, who: "ai", text: "已分配17号、18号光电无人机进行002疑似目标察打任务。" },
+        { t: FL.T_REASSIGN || 0, who: "ai", text: "已分配14号、15号光电无人机进行001预警雷达察打任务。" },
+        { t: FL.T_REASSIGN || 0, who: "ai", text: "已分配17号、18号光电无人机进行002火控雷达察打任务。" },
         { t: FL.T_REPLAN || 0, who: "ai", text: "重新规划剩余的6架光电无人机侦察方式。" },
-        { t: T_CONFIRM_002, who: "ai", text: "智能评估对照，确认002雷达目标" },
-        { t: T_CONFIRM_001, who: "ai", text: "智能评估对照，确认001雷达目标" },
+        { t: T_CONFIRM_002, who: "ai", text: "智能评估对照，确认002火控雷达" },
+        { t: T_CONFIRM_001, who: "ai", text: "智能评估对照，确认001预警雷达" },
         { t: 4392.33, who: "ai", text: "重新规划“潜在目标部署区-2”剩余的8架光电无人机侦察方式。" },
       ].filter(function (ev) { return ev.t > 0; }).sort(function (a, b) { return a.t - b.t; });
       function renderAiLog(t) {
