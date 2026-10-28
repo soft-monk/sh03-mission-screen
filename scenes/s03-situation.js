@@ -180,7 +180,7 @@ function make(variant) {
                 '<div class="s6-tb-row"><span>类型</span><b>雷达目标</b></div>' +
                 '<div class="s6-tb-row"><span>判定</span><b class="sus s6-tb-judge">疑似（未经确认）</b></div>' +
                 '<div class="s6-tb-row"><span>来源</span><b>电子干扰机-01</b></div>' +
-                '<div class="s6-tb-row"><span>区域</span><b>潜在目标部署区2</b></div>' +
+                '<div class="s6-tb-row"><span>区域</span><b>潜在目标部署区-2</b></div>' +
                 '<div class="s6-tb-tags"><i>疑似雷达信号</i><i>待复核</i></div>' +
               '</div>' +
             '</div>' +
@@ -195,7 +195,7 @@ function make(variant) {
                 '<div class="s6-tb-row"><span>类型</span><b>雷达目标</b></div>' +
                 '<div class="s6-tb-row"><span>判定</span><b class="sus s6-tb-judge">疑似（未经确认）</b></div>' +
                 '<div class="s6-tb-row"><span>来源</span><b>电子干扰机-01</b></div>' +
-                '<div class="s6-tb-row"><span>区域</span><b>潜在目标部署区2</b></div>' +
+                '<div class="s6-tb-row"><span>区域</span><b>潜在目标部署区-2</b></div>' +
                 '<div class="s6-tb-tags"><i>疑似雷达信号</i><i>待复核</i></div>' +
               '</div>' +
             '</div>' +
@@ -927,12 +927,12 @@ function make(variant) {
         { t: T_JOIN, who: "ai", text: "无人机完成编队，开始沿规划航路飞行。" },
         { t: T_ARRIVE, who: "ai", text: "机群抵达任务区，开始分区侦察。" },
         { t: FL.T_TRACKS || 0, who: "ai", text: "光电集群开始网格扫描，雷达开始 SAR/GMTI 探测，电子集群开始干扰压制。" },
-        { t: T_SCAN, who: "ai", text: "在潜在目标部署区2扫描发现2个疑似雷达目标，已加入目标档案。" },
+        { t: T_SCAN, who: "ai", text: "在“潜在目标部署区-2”扫描发现2个疑似雷达目标，已加入目标档案。" },
         { t: T_SCAN, who: "ai", text: "建议采用方案：为001预警雷达、002火控雷达两个疑似目标各派出两架光电无人机执行侦察和打击任务。" },
         { t: T_SCAN + 2, who: "user", text: "方案确认。" },
         { t: FL.T_REASSIGN || 0, who: "ai", text: "已分配14号、15号光电无人机进行001预警雷达察打任务。" },
         { t: FL.T_REASSIGN || 0, who: "ai", text: "已分配17号、18号光电无人机进行002火控雷达察打任务。" },
-        { t: FL.T_REPLAN || 0, who: "ai", text: "重新规划剩余的6架光电无人机侦察方式。" },
+        { t: FL.T_REPLAN || 0, who: "ai", text: "重新规划“潜在目标部署区-2”剩余的6架光电无人机侦察方式。" },
         { t: T_CONFIRM_002, who: "ai", text: "智能评估对照，确认002火控雷达" },
         { t: T_CONFIRM_001, who: "ai", text: "智能评估对照，确认001预警雷达" },
         { t: 4392.33, who: "ai", text: "重新规划“潜在目标部署区-2”剩余的8架光电无人机侦察方式。" },
