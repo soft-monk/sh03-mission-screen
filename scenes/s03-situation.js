@@ -662,7 +662,6 @@ function make(variant) {
         });
         AI_EVENTS.push({ t: T003_ASSIGN, who: "ai", text: "已分配" + a + "号、" + r + "号光电无人机进行003运动目标察打任务。" });
         AI_EVENTS.push({ t: FL.T003_ORBIT_START + 6, who: "系统", t003: true, text: "打击完成，" + r + "号光电无人机转入盘旋确认。" });
-        AI_EVENTS.push({ t: T003_VIDEO, who: "系统", t003: true, text: "出现两个视频小窗口：" + VIDEO_TITLES.E + "、" + VIDEO_TITLES.F + "。" });
         AI_EVENTS.sort(function (x, y) { return x.t - y.t; });
         renderAiLog(t);
       }
