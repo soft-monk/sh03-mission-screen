@@ -469,6 +469,7 @@ function make(variant) {
           map.polygon(s.id, ring, { fill: "#f59e0b", fillOpacity: 0.22, line: "#f59e0b", width: 2.4 });
           map.polygon(s.confirmedId, ring, { fill: "#ef4444", fillOpacity: 0.3, line: "#ef4444", width: 3 });
           s.targetLabel = map.label(s.name + "（疑似）", s.label, "#fbbf24", 14, "target-label-" + s.no);
+          if (s.no !== "003" && map.targetIcon) s.targetIcon = map.targetIcon("target-icon-" + s.no, s.center, "assets/img/radar-target-yellow.png", "assets/img/radar-target-red.png", 36);
         });
       }
       function setTargetItemState(s, confirmed, destroyed) {
@@ -529,6 +530,7 @@ function make(variant) {
               map.setVis([s.id], false);
               map.setVis([s.confirmedId], false);
               if (s.targetLabel) s.targetLabel.set(0);
+              if (s.targetIcon) s.targetIcon.set(false);
               if (s.no === "003") map.setVis(["target003-circle"], false);
             });
           }
@@ -549,6 +551,7 @@ function make(variant) {
             map.setVis([s.id], false);
             map.setVis([s.confirmedId], false);
             if (s.targetLabel) s.targetLabel.set(0);
+            if (s.targetIcon) s.targetIcon.set(false);
             if (s.no === "003") map.setVis(["target003-circle"], false);
             confirmedState[s.no] = null; destroyedState[s.no] = null; renderedDestroyed[s.no] = null;
             return;
@@ -564,17 +567,13 @@ function make(variant) {
             map.setVis(["target003-circle"], true);
           }
           s.targetLabel.set(1);
+          if (s.targetIcon) s.targetIcon.set(true, (confirmed || destroyed) ? "red" : "yellow");
           if (confirmedState[s.no] === confirmed && renderedDestroyed[s.no] === destroyed) return;
           confirmedState[s.no] = confirmed;
           renderedDestroyed[s.no] = destroyed;
           setTargetItemState(s, confirmed, destroyed);
-          if (s.no === "003") {
-            map.setVis([s.id], false);
-            map.setVis([s.confirmedId], false);
-          } else {
-            map.setVis([s.id], !confirmed);
-            map.setVis([s.confirmedId], confirmed || destroyed);
-          }
+          map.setVis([s.id], false);
+          map.setVis([s.confirmedId], false);
         });
         if (targetCountEl) targetCountEl.textContent = String(visibleCount);
       }
@@ -1335,7 +1334,7 @@ function make(variant) {
           if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); }
           if (map.beam) map.beam("sbeam", []);
           if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); }
-          if (targetsCreated) { SUSPECTS.forEach(function (s) { map.setVis([s.id], false); map.setVis([s.confirmedId], false); s.targetLabel.set(0); }); }
+          if (targetsCreated) { SUSPECTS.forEach(function (s) { map.setVis([s.id], false); map.setVis([s.confirmedId], false); s.targetLabel.set(0); if (s.targetIcon) s.targetIcon.set(false); }); }
           pauseVideos();
           targetOn = false;
           confirmedState["001"] = null;

@@ -19,6 +19,7 @@ window.MapView = function (host) {
   var map = null, ready = false, pend = [], registry = {}, lastView = "", lastCam = null, tileErrs = [];
   var onResize = null, ro = null;      /* 本实例自己挂的全局监听，销毁时要摘掉 */
   var labelCache = {};   /* 标签按文字去重：后面几屏再调 label() 不会叠出重影 */
+  var iconCache = {};
   var FILE_MODE = location.protocol === "file:";
 
   function buildStyle() {
@@ -189,7 +190,7 @@ window.MapView = function (host) {
       onResize = null;
       try { if (ro) { ro.disconnect(); ro = null; } } catch (e) {}
       try { if (map) map.remove(); } catch (e) {}
-      map = null; ready = false; pend = []; labelCache = {}; registry = {};
+      map = null; ready = false; pend = []; labelCache = {}; iconCache = {}; registry = {};
     },
     mode: MODE,
     is3d: IS3D,
@@ -501,6 +502,27 @@ window.MapView = function (host) {
         setLngLat: function (v) { lngLat = v; if (marker) marker.setLngLat(v); }
       };
       return labelCache[cacheKey];
+    },
+    targetIcon: function (key, lngLat, yellowSrc, redSrc, size) {
+      var cacheKey = key || ("target-icon-" + yellowSrc);
+      if (iconCache[cacheKey]) return iconCache[cacheKey];
+      var el = document.createElement("img");
+      el.src = yellowSrc;
+      el.draggable = false;
+      el.alt = "";
+      el.style.cssText = "width:" + (size || 36) + "px;height:" + (size || 36) + "px;display:block;opacity:0;" +
+        "pointer-events:none;filter:drop-shadow(0 0 5px rgba(0,0,0,.8));";
+      var marker = null;
+      when(function () { marker = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(lngLat).addTo(map); });
+      iconCache[cacheKey] = {
+        set: function (visible, color) {
+          el.style.opacity = visible ? 1 : 0;
+          var src = color === "red" ? redSrc : yellowSrc;
+          if (src && el.getAttribute("src") !== src) el.setAttribute("src", src);
+        },
+        setLngLat: function (v) { lngLat = v; if (marker) marker.setLngLat(v); }
+      };
+      return iconCache[cacheKey];
     }
   };
 };
