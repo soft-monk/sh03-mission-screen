@@ -1269,6 +1269,7 @@ function make(variant) {
         '<section class="s6-lyr-panel">' +
           '<div class="s6-lyr-h"><b>图层</b><button data-all="1">全显</button><button data-all="0">全隐</button></div>' +
           '<label class="s6-lyr"><input type="checkbox" checked data-k="tracks"><span>规划航迹</span></label>' +
+          '<label class="s6-lyr"><input type="checkbox" checked data-k="trails"><span>无人机航迹</span></label>' +
           '<div class="s6-lyr-sec">扫描矩形 / 覆盖层</div>' +
           [["光电扫描覆盖小格", "cov-photo"], ["GMTI 覆盖小格", "cov-gmti"], ["SAR 覆盖小格", "cov-sar"], ["电子干扰覆盖小格", "cov-ewar"]].map(function (o) {
             return '<label class="s6-lyr"><input type="checkbox" checked data-k="' + o[1] + '"><span>' + o[0] + '</span></label>';
@@ -1281,11 +1282,12 @@ function make(variant) {
 
       var lyrPanel = root.querySelector(".s6-lyr-panel");
       var lyrBoxes = [].slice.call(lyrPanel.querySelectorAll("input[data-k]"));
-      var visState = { tracks: true, "cov-photo": true, "cov-gmti": true, "cov-sar": true, "cov-ewar": true, scan: true, rfan: true, jfan: true, sbeam: true };
+      var visState = { tracks: true, trails: true, "cov-photo": true, "cov-gmti": true, "cov-sar": true, "cov-ewar": true, scan: true, rfan: true, jfan: true, sbeam: true };
       var visDirty = true, lastCv = null;
       function applyVis() {
         if (!map.setVis) return;
         map.setVis(["tracks"], visState.tracks);
+        map.setVis(["trails"], visState.trails);
         map.setVis(["cov-photo"], visState["cov-photo"]);
         map.setVis(["cov-gmti"], visState["cov-gmti"]);
         map.setVis(["cov-sar"], visState["cov-sar"]);
