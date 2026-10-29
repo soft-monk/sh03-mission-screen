@@ -237,27 +237,27 @@ function make(variant) {
         '</div>' +
         '<section class="s6-video-smallbar">' +
           '<div class="s6-video-card s6-video-small-card" data-video="A">' +
-            '<div class="s6-video-title">17光电-攻击</div>' +
+            '<div class="s6-video-title">17光电-攻击｜002火控雷达</div>' +
             '<canvas class="s6-video-small-canvas" data-video="A"></canvas>' +
           '</div>' +
           '<div class="s6-video-card s6-video-small-card" data-video="B">' +
-            '<div class="s6-video-title">18光电-侦察</div>' +
+            '<div class="s6-video-title">18光电-侦察｜002火控雷达</div>' +
             '<canvas class="s6-video-small-canvas" data-video="B"></canvas>' +
           '</div>' +
           '<div class="s6-video-card s6-video-small-card s6-video-extra" data-video="C" style="display:none">' +
-            '<div class="s6-video-title">14光电-攻击</div>' +
+            '<div class="s6-video-title">14光电-攻击｜001预警雷达</div>' +
             '<canvas class="s6-video-small-canvas" data-video="C"></canvas>' +
           '</div>' +
           '<div class="s6-video-card s6-video-small-card s6-video-extra" data-video="D" style="display:none">' +
-            '<div class="s6-video-title">15光电-侦察</div>' +
+            '<div class="s6-video-title">15光电-侦察｜001预警雷达</div>' +
             '<canvas class="s6-video-small-canvas" data-video="D"></canvas>' +
           '</div>' +
           '<div class="s6-video-card s6-video-small-card s6-video-third" data-video="E" style="display:none">' +
-            '<div class="s6-video-title">09光电-攻击</div>' +
+            '<div class="s6-video-title">09光电-攻击｜003运动目标</div>' +
             '<canvas class="s6-video-small-canvas" data-video="E"></canvas>' +
           '</div>' +
           '<div class="s6-video-card s6-video-small-card s6-video-third" data-video="F" style="display:none">' +
-            '<div class="s6-video-title">10光电-侦察</div>' +
+            '<div class="s6-video-title">10光电-侦察｜003运动目标</div>' +
             '<canvas class="s6-video-small-canvas" data-video="F"></canvas>' +
           '</div>' +
         '</section>' +
@@ -606,7 +606,7 @@ function make(variant) {
       var thirdStarted = false;
       var assigned003 = null;
       var mirrorGen = 0;
-      var VIDEO_TITLES = { A: "17光电-攻击", B: "18光电-侦察", C: "14光电-攻击", D: "15光电-侦察", E: "09光电-攻击", F: "10光电-侦察" };
+      var VIDEO_TITLES = { A: "17光电-攻击｜002火控雷达", B: "18光电-侦察｜002火控雷达", C: "14光电-攻击｜001预警雷达", D: "15光电-侦察｜001预警雷达", E: "09光电-攻击｜003运动目标", F: "10光电-侦察｜003运动目标" };
       var videoAiRules = [
         { key: "002-attack", group: "002", video: videoA, at: 41, text: "17光电开始攻击" },
         { key: "002-destroy", group: "002", video: videoB, at: 83, text: "智能毁伤评估，002火控雷达已被摧毁" },
@@ -651,8 +651,8 @@ function make(variant) {
         FLIGHT06.assign003(atk, rec, T003_ASSIGN);
         var a = atk < 10 ? "0" + atk : String(atk);
         var r = rec < 10 ? "0" + rec : String(rec);
-        VIDEO_TITLES.E = a + "光电-攻击";
-        VIDEO_TITLES.F = r + "光电-侦察";
+        VIDEO_TITLES.E = a + "光电-攻击｜003运动目标";
+        VIDEO_TITLES.F = r + "光电-侦察｜003运动目标";
         thirdCards.forEach(function (card) {
           var k = card.getAttribute("data-video");
           var title = card.querySelector(".s6-video-title");
@@ -802,7 +802,7 @@ function make(variant) {
           var k = card.getAttribute("data-video");
           card.style.display = (k === "A" || k === "B") ? "" : "none";
         });
-        VIDEO_TITLES.E = "09光电-攻击"; VIDEO_TITLES.F = "10光电-侦察";
+        VIDEO_TITLES.E = "09光电-攻击｜003运动目标"; VIDEO_TITLES.F = "10光电-侦察｜003运动目标";
         videoAiRules.forEach(function (rule) { if (rule.key === "003-attack") rule.text = "09光电开始攻击"; });
         resetDestroyedState();
         if (window.FLIGHT06 && FLIGHT06.resetAttacks) FLIGHT06.resetAttacks();
