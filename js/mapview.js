@@ -369,12 +369,14 @@ window.MapView = function (host) {
       var fill = [], outl = [], rays = [], swee = [], boxes = [], boxout = [], links = [];
       items.forEach(function (s) {
         var k = s.k == null ? 1 : s.k, c = s.color || "#38bdf8";
-        fill.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "Polygon", coordinates: [s.quad] } });
-        outl.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: s.quad } });
-        (s.rays || []).forEach(function (r) {
-          rays.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: r } });
-        });
-        if (s.sweep) swee.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: s.sweep } });
+        if (s.quad) {
+          fill.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "Polygon", coordinates: [s.quad] } });
+          outl.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: s.quad } });
+          (s.rays || []).forEach(function (r) {
+            rays.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: r } });
+          });
+          if (s.sweep) swee.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: s.sweep } });
+        }
         if (s.box) { boxes.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "Polygon", coordinates: [s.box] } }); boxout.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: s.box } }); }
         (s.links || []).forEach(function (l) { links.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: l } }); });
       });

@@ -735,6 +735,7 @@ window.FLIGHT06 = (function () {
       var p = posOf(d, t);
       var aim = (d.orbit && t >= T_REASSIGN && !(d.replan2 && t >= T_REPLAN2)) ? d.orbit.center : (d.track3 && t >= T003_ASSIGN ? target003Pos(t) : null);
       var sc = scanOf(p, t, d.tStart, aim);
+      if (d.orbit && t >= T_REASSIGN && t < T_REPLAN2) { sc.quad = null; sc.rays = []; sc.sweep = null; }
       if (d.orbit && t >= T_REASSIGN && aim) {
         var dx = (p.lon - aim[0]) * M_LON, dy = (p.lat - aim[1]) * M_LAT;
         var ang = Math.atan2(dx, dy);
