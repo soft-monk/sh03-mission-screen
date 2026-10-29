@@ -103,7 +103,7 @@ function make(variant) {
   function build(root, sc) {
     var VOICE_HTML = IS_MISSION
       ? ('<section class="s4-voice">' +
-          '<div class="s4-left"><div class="s4-title">AI 语音助手</div>' +
+          '<div class="s4-left"><div class="s4-title">AI 决策助手</div>' +
             '<div class="s4-btn">' + ic("mic", 18, "", 1.5) + '<span>AI语音解读</span></div></div>' +
           '<div class="s4-chat">' + VOICE.map(function (v) {
               return '<div class="s4-bub ' + v.who + '">' + v.text + '</div>';
@@ -199,6 +199,23 @@ function make(variant) {
                 '<div class="s6-tb-tags"><i>疑似雷达信号</i><i>待复核</i></div>' +
               '</div>' +
             '</div>' +
+            '<div class="s6-tb s6-target-item open" data-target="003" style="display:none">' +
+              '<div class="s6-tb-head">' +
+                '<span class="s6-tb-no">003</span>' +
+                '<span class="s6-tb-name">003运动目标</span>' +
+                '<i class="s6-tb-sus">疑似</i>' +
+                '<i class="s6-tb-arrow"></i>' +
+              '</div>' +
+              '<div class="s6-tb-body">' +
+                '<div class="s6-tb-row"><span>类型</span><b>地面运动目标</b></div>' +
+                '<div class="s6-tb-row"><span>判定</span><b class="sus s6-tb-judge">疑似（未经确认）</b></div>' +
+                '<div class="s6-tb-row"><span>来源</span><b>GMTI雷达</b></div>' +
+                '<div class="s6-tb-row"><span>区域</span><b>潜在目标部署区-1</b></div>' +
+                '<div class="s6-tb-row"><span>速度</span><b>90 km/h</b></div>' +
+                '<div class="s6-tb-row"><span>方位</span><b>045° / 东北</b></div>' +
+                '<div class="s6-tb-tags"><i>运动目标</i><i>待复核</i></div>' +
+              '</div>' +
+            '</div>' +
           '</div>' +
           '<section class="s6-ai">' +
             '<div class="s6-ai-h">' + ic("mic", 16, "", 1.6) + '<span>AI决策助手</span></div>' +
@@ -215,6 +232,8 @@ function make(variant) {
           '<video class="s6-video-b" src="assets/video/goal001_B_ir.mp4" muted playsinline preload="auto"></video>' +
           '<video class="s6-video-c" src="assets/video/goal001_A_ir.mp4" muted playsinline preload="auto"></video>' +
           '<video class="s6-video-d" src="assets/video/goal001_B_ir.mp4" muted playsinline preload="auto"></video>' +
+          '<video class="s6-video-e" src="assets/video/goal001_A_ir.mp4" muted playsinline preload="auto"></video>' +
+          '<video class="s6-video-f" src="assets/video/goal001_B_ir.mp4" muted playsinline preload="auto"></video>' +
         '</div>' +
         '<section class="s6-video-smallbar">' +
           '<div class="s6-video-card s6-video-small-card" data-video="A">' +
@@ -232,6 +251,14 @@ function make(variant) {
           '<div class="s6-video-card s6-video-small-card s6-video-extra" data-video="D" style="display:none">' +
             '<div class="s6-video-title">15光电-侦察</div>' +
             '<canvas class="s6-video-small-canvas" data-video="D"></canvas>' +
+          '</div>' +
+          '<div class="s6-video-card s6-video-small-card s6-video-third" data-video="E" style="display:none">' +
+            '<div class="s6-video-title">09光电-攻击</div>' +
+            '<canvas class="s6-video-small-canvas" data-video="E"></canvas>' +
+          '</div>' +
+          '<div class="s6-video-card s6-video-small-card s6-video-third" data-video="F" style="display:none">' +
+            '<div class="s6-video-title">10光电-侦察</div>' +
+            '<canvas class="s6-video-small-canvas" data-video="F"></canvas>' +
           '</div>' +
         '</section>' +
         '<section class="s6-video-large"><div class="s6-video-grid"></div></section>')
@@ -408,15 +435,23 @@ function make(variant) {
       var T_CONFIRM_002 = 4212.81;
       var T_EXTRA_VIDEO = 4247.13;
       var T_CONFIRM_001 = 4247.14;
+      var T003_SCAN = 4500.00;
+      var T003_ASSIGN = 4505.00;
+      var T003_VIDEO = 4737.00;
+      var T003_CONFIRM = 4737.10;
+      var T003_DESTROY = 4820.00;
+      var MAP_M_LON = 111320 * Math.cos(39.85 * Math.PI / 180);
+      var MAP_M_LAT = 111030;
       var SUSPECTS = [
         { id: "s6-suspect-1", confirmedId: "s6-confirm-1", no: "001", name: "001预警雷达", center: [114.34, 40.02], label: [114.352, 40.024], confirmAt: T_CONFIRM_001 },
-        { id: "s6-suspect-2", confirmedId: "s6-confirm-2", no: "002", name: "002火控雷达", center: [114.28, 40.08], label: [114.292, 40.084], confirmAt: T_CONFIRM_002 }
+        { id: "s6-suspect-2", confirmedId: "s6-confirm-2", no: "002", name: "002火控雷达", center: [114.28, 40.08], label: [114.292, 40.084], confirmAt: T_CONFIRM_002 },
+          { id: "s6-suspect-3", confirmedId: "s6-confirm-3", no: "003", name: "003运动目标", center: [113.87, 39.69], label: [113.882, 39.704], confirmAt: T003_CONFIRM, unlockAt: T003_SCAN, move: { start: [113.87, 39.69], speed: 90, heading: 45 } }
       ];
       var SR = 0.009;
       var targetsCreated = false;
-      var confirmedState = { "001": null, "002": null };
-      var destroyedState = { "001": null, "002": null };
-      var renderedDestroyed = { "001": null, "002": null };
+      var confirmedState = { "001": null, "002": null, "003": null };
+      var destroyedState = { "001": null, "002": null, "003": null };
+      var renderedDestroyed = { "001": null, "002": null, "003": null };
       var itemByNo = {};
       targetItems.forEach(function (el) { itemByNo[el.getAttribute("data-target")] = el; });
       function ensureTargets() {
@@ -475,41 +510,73 @@ function make(variant) {
           s.targetLabel.setColor(confirmed || destroyed ? "#ef4444" : "#fbbf24");
         }
       }
+      function movingTargetPos(s, t) {
+        if (window.FLIGHT06 && FLIGHT06.target003Pos) return FLIGHT06.target003Pos(t);
+        var dt = Math.max(0, Math.min(t, T003_DESTROY) - T003_SCAN);
+        var dist = (s.move.speed / 3.6) * dt;
+        var a = s.move.heading * Math.PI / 180;
+        return [s.move.start[0] + (dist * Math.sin(a)) / MAP_M_LON,
+                s.move.start[1] + (dist * Math.cos(a)) / MAP_M_LAT];
+      }
       function renderTargetState(t) {
         var on = st.started && t >= T_SCAN;
-        if (on !== targetOn) {
-          targetOn = on;
-          targetItems.forEach(function (el) { el.style.display = on ? "" : "none"; });
-          if (targetCountEl) targetCountEl.textContent = on ? String(targetItems.length) : "0";
-          if (!on) {
-            if (targetsCreated) {
-              SUSPECTS.forEach(function (s) {
-                map.setVis([s.id], false);
-                map.setVis([s.confirmedId], false);
-                s.targetLabel.set(0);
-              });
-            }
-            confirmedState["001"] = null;
-            confirmedState["002"] = null;
-            destroyedState["001"] = null;
-            destroyedState["002"] = null;
-            renderedDestroyed["001"] = null;
-            renderedDestroyed["002"] = null;
+        if (!on) {
+          targetOn = false;
+          targetItems.forEach(function (el) { el.style.display = "none"; });
+          if (targetCountEl) targetCountEl.textContent = "0";
+          if (targetsCreated) {
+            SUSPECTS.forEach(function (s) {
+              map.setVis([s.id], false);
+              map.setVis([s.confirmedId], false);
+              if (s.targetLabel) s.targetLabel.set(0);
+              if (s.no === "003") map.setVis(["target003-circle"], false);
+            });
           }
+          ["001", "002", "003"].forEach(function (no) {
+            confirmedState[no] = null; destroyedState[no] = null; renderedDestroyed[no] = null;
+          });
+          return;
         }
-        if (!on) return;
+        targetOn = true;
         ensureTargets();
+        assign003IfNeeded(t);
+        var visibleCount = 0;
         SUSPECTS.forEach(function (s) {
+          var visible = t >= (s.unlockAt || T_SCAN);
+          var el = itemByNo[s.no];
+          if (el) el.style.display = visible ? "" : "none";
+          if (!visible) {
+            map.setVis([s.id], false);
+            map.setVis([s.confirmedId], false);
+            if (s.targetLabel) s.targetLabel.set(0);
+            if (s.no === "003") map.setVis(["target003-circle"], false);
+            confirmedState[s.no] = null; destroyedState[s.no] = null; renderedDestroyed[s.no] = null;
+            return;
+          }
+          visibleCount++;
           var confirmed = t >= s.confirmAt;
           var destroyed = !!destroyedState[s.no];
+          var col = (confirmed || destroyed) ? "#ef4444" : "#fbbf24";
+          if (s.move && s.targetLabel) {
+            var mp = movingTargetPos(s, t);
+            s.targetLabel.setLngLat(mp);
+            map.movingCircle("target003-circle", mp, 100, col);
+            map.setVis(["target003-circle"], true);
+          }
           s.targetLabel.set(1);
           if (confirmedState[s.no] === confirmed && renderedDestroyed[s.no] === destroyed) return;
           confirmedState[s.no] = confirmed;
           renderedDestroyed[s.no] = destroyed;
           setTargetItemState(s, confirmed, destroyed);
-          map.setVis([s.id], !confirmed);
-          map.setVis([s.confirmedId], confirmed || destroyed);
+          if (s.no === "003") {
+            map.setVis([s.id], false);
+            map.setVis([s.confirmedId], false);
+          } else {
+            map.setVis([s.id], !confirmed);
+            map.setVis([s.confirmedId], confirmed || destroyed);
+          }
         });
+        if (targetCountEl) targetCountEl.textContent = String(visibleCount);
       }
       var smallBar = root.querySelector(".s6-video-smallbar");
       var largeBox = root.querySelector(".s6-video-large");
@@ -518,26 +585,35 @@ function make(variant) {
       var videoB = root.querySelector(".s6-video-b");
       var videoC = root.querySelector(".s6-video-c");
       var videoD = root.querySelector(".s6-video-d");
+      var videoE = root.querySelector(".s6-video-e");
+      var videoF = root.querySelector(".s6-video-f");
       var smallCards = [].slice.call(root.querySelectorAll(".s6-video-small-card"));
       var extraCards = [].slice.call(root.querySelectorAll(".s6-video-extra"));
+      var thirdCards = [].slice.call(root.querySelectorAll(".s6-video-third"));
       var smallCanvases = {
         A: root.querySelector(".s6-video-small-canvas[data-video=\"A\"]"),
         B: root.querySelector(".s6-video-small-canvas[data-video=\"B\"]"),
         C: root.querySelector(".s6-video-small-canvas[data-video=\"C\"]"),
-        D: root.querySelector(".s6-video-small-canvas[data-video=\"D\"]")
+        D: root.querySelector(".s6-video-small-canvas[data-video=\"D\"]"),
+        E: root.querySelector(".s6-video-small-canvas[data-video=\"E\"]"),
+        F: root.querySelector(".s6-video-small-canvas[data-video=\"F\"]")
       };
       var expanded = [];
       var largeMap = {};
       var removedChannels = {};
       var videoStarted = false;
       var extraStarted = false;
+      var thirdStarted = false;
+      var assigned003 = null;
       var mirrorGen = 0;
-      var VIDEO_TITLES = { A: "17光电-攻击", B: "18光电-侦察", C: "14光电-攻击", D: "15光电-侦察" };
+      var VIDEO_TITLES = { A: "17光电-攻击", B: "18光电-侦察", C: "14光电-攻击", D: "15光电-侦察", E: "09光电-攻击", F: "10光电-侦察" };
       var videoAiRules = [
         { key: "002-attack", group: "002", video: videoA, at: 41, text: "17光电开始攻击" },
         { key: "002-destroy", group: "002", video: videoB, at: 83, text: "智能毁伤评估，002火控雷达已被摧毁" },
         { key: "001-attack", group: "001", video: videoC, at: 41, text: "14光电开始攻击" },
-        { key: "001-destroy", group: "001", video: videoD, at: 83, text: "智能毁伤评估，001预警雷达已被摧毁" }
+        { key: "001-destroy", group: "001", video: videoD, at: 83, text: "智能毁伤评估，001预警雷达已被摧毁" },
+        { key: "003-attack", group: "003", video: videoE, at: 41, text: "09光电开始攻击" },
+        { key: "003-destroy", group: "003", video: videoF, at: 83, text: "智能毁伤评估，003运动目标已被摧毁。" }
       ];
       var videoAiFired = {};
       var photoResCol = root.querySelector(".s6-col");
@@ -564,6 +640,33 @@ function make(variant) {
         if (any) { smallBar.classList.add("on"); smallBar.style.pointerEvents = ""; }
         else { smallBar.classList.remove("on"); smallBar.style.pointerEvents = "none"; }
       }
+      function assign003IfNeeded(t) {
+        if (assigned003 || !st.started || t < T003_ASSIGN) return;
+        if (!window.FLIGHT06 || !FLIGHT06.pickNearest003 || !FLIGHT06.assign003) return;
+        var c = movingTargetPos(SUSPECTS[2], T003_ASSIGN);
+        var picks = FLIGHT06.pickNearest003(c, T003_ASSIGN, 2);
+        if (!picks.length) return;
+        var atk = picks[0], rec = picks[1] || picks[0];
+        assigned003 = { attack: atk, recon: rec };
+        FLIGHT06.assign003(atk, rec, T003_ASSIGN);
+        var a = atk < 10 ? "0" + atk : String(atk);
+        var r = rec < 10 ? "0" + rec : String(rec);
+        VIDEO_TITLES.E = a + "光电-攻击";
+        VIDEO_TITLES.F = r + "光电-侦察";
+        thirdCards.forEach(function (card) {
+          var k = card.getAttribute("data-video");
+          var title = card.querySelector(".s6-video-title");
+          if (title) title.textContent = k === "E" ? VIDEO_TITLES.E : VIDEO_TITLES.F;
+        });
+        videoAiRules.forEach(function (rule) {
+          if (rule.key === "003-attack") rule.text = a + "光电开始攻击";
+        });
+        AI_EVENTS.push({ t: T003_ASSIGN, who: "ai", text: "已分配" + a + "号、" + r + "号光电无人机进行003运动目标察打任务。" });
+        AI_EVENTS.push({ t: FL.T003_ORBIT_START + 6, who: "系统", t003: true, text: "打击完成，" + r + "号光电无人机转入盘旋确认。" });
+        AI_EVENTS.push({ t: T003_VIDEO, who: "系统", t003: true, text: "出现两个视频小窗口：" + VIDEO_TITLES.E + "、" + VIDEO_TITLES.F + "。" });
+        AI_EVENTS.sort(function (x, y) { return x.t - y.t; });
+        renderAiLog(t);
+      }
       function closeVideoChannel(key) {
         removedChannels[key] = true;
         var v = channelOf(key);
@@ -577,7 +680,7 @@ function make(variant) {
       function applyDestroyed(no, key) {
         if (destroyedState[no]) return;
         destroyedState[no] = true;
-        opticalLost = Math.min(2, opticalLost + 1);
+        opticalLost = Math.min(3, opticalLost + 1);
         updateOpticalResources();
         closeVideoChannel(key);
         renderTargetState(st.t);
@@ -585,10 +688,11 @@ function make(variant) {
       function resetDestroyedState() {
         destroyedState["001"] = false;
         destroyedState["002"] = false;
+        destroyedState["003"] = false;
         opticalLost = 0;
         updateOpticalResources();
       }
-      function channelOf(key) { return key === "A" ? videoA : key === "B" ? videoB : key === "C" ? videoC : key === "D" ? videoD : null; }
+      function channelOf(key) { return key === "A" ? videoA : key === "B" ? videoB : key === "C" ? videoC : key === "D" ? videoD : key === "E" ? videoE : key === "F" ? videoF : null; }
       function makeFrameTracker(video) {
         var times = [], on = false;
         function tick(now, meta) {
@@ -615,16 +719,18 @@ function make(variant) {
       var trackerB = makeFrameTracker(videoB);
       var trackerC = makeFrameTracker(videoC);
       var trackerD = makeFrameTracker(videoD);
+      var trackerE = makeFrameTracker(videoE);
+      var trackerF = makeFrameTracker(videoF);
       function setVideoRate() {
         var rate = st.speed;
-        [videoA, videoB, videoC, videoD].forEach(function (v) {
+        [videoA, videoB, videoC, videoD, videoE, videoF].forEach(function (v) {
           if (!v) return;
           try { v.playbackRate = rate; }
           catch (e) { try { v.playbackRate = Math.min(16, rate); } catch (e2) {} }
         });
       }
       function pauseVideos() {
-        [videoA, videoB, videoC, videoD].forEach(function (v) { try { if (v) v.pause(); } catch (e) {} });
+        [videoA, videoB, videoC, videoD, videoE, videoF].forEach(function (v) { try { if (v) v.pause(); } catch (e) {} });
       }
       function freezeVideo(video, tracker, key) {
         if (!video || video.__frozen) return;
@@ -656,18 +762,39 @@ function make(variant) {
         reflowLarge();
         renderTargetState(st.t);
       }
+      function resetThirdVideos() {
+        thirdStarted = false;
+        delete videoAiFired["003-attack"];
+        delete videoAiFired["003-destroy"];
+        AI_EVENTS = AI_EVENTS.filter(function (ev) { return !(ev.videoAi && ev.group === "003"); });
+        if (destroyedState["003"]) { destroyedState["003"] = false; opticalLost = Math.max(0, opticalLost - 1); updateOpticalResources(); }
+        removedChannels.E = false;
+        removedChannels.F = false;
+        [videoE, videoF].forEach(function (v) { try { if (v) { v.pause(); v.__frozen = false; v.__dead = false; v.__black = false; v.currentTime = 0; } } catch (e) {} });
+        trackerE.stop(); trackerF.stop();
+        thirdCards.forEach(function (card) { card.style.display = "none"; });
+        expanded = expanded.filter(function (k) { return k !== "E" && k !== "F"; });
+        if (window.FLIGHT06 && FLIGHT06.resetAttack) FLIGHT06.resetAttack(assigned003 ? assigned003.attack : 9);
+        reflowLarge();
+        renderTargetState(st.t);
+      }
       function resetVideos() {
         videoStarted = false;
         extraStarted = false;
+        thirdStarted = false;
+        assigned003 = null;
+        if (window.FLIGHT06 && FLIGHT06.resetTracking) FLIGHT06.resetTracking();
         videoAiFired = {};
-        AI_EVENTS = AI_EVENTS.filter(function (ev) { return !ev.videoAi; });
+        AI_EVENTS = AI_EVENTS.filter(function (ev) { return !ev.videoAi && !ev.t003; });
         mirrorGen++;
         pauseVideos();
         trackerA.stop();
         trackerB.stop();
         trackerC.stop();
         trackerD.stop();
-        [videoA, videoB, videoC, videoD].forEach(function (v) {
+        trackerE.stop();
+        trackerF.stop();
+        [videoA, videoB, videoC, videoD, videoE, videoF].forEach(function (v) {
           try { if (v) { v.__frozen = false; v.__dead = false; v.__black = false; v.currentTime = 0; } } catch (e) {}
         });
         removedChannels = {};
@@ -675,6 +802,8 @@ function make(variant) {
           var k = card.getAttribute("data-video");
           card.style.display = (k === "A" || k === "B") ? "" : "none";
         });
+        VIDEO_TITLES.E = "09光电-攻击"; VIDEO_TITLES.F = "10光电-侦察";
+        videoAiRules.forEach(function (rule) { if (rule.key === "003-attack") rule.text = "09光电开始攻击"; });
         resetDestroyedState();
         if (window.FLIGHT06 && FLIGHT06.resetAttacks) FLIGHT06.resetAttacks();
         expanded = [];
@@ -692,6 +821,14 @@ function make(variant) {
       function playExtraVideos() {
         setVideoRate();
         [videoC, videoD].forEach(function (v) {
+          if (v && !v.__frozen && !v.__dead) {
+            try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+          }
+        });
+      }
+      function playThirdVideos() {
+        setVideoRate();
+        [videoE, videoF].forEach(function (v) {
           if (v && !v.__frozen && !v.__dead) {
             try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
           }
@@ -811,6 +948,8 @@ function make(variant) {
         startMirror("B", videoB, gen);
         startMirror("C", videoC, gen);
         startMirror("D", videoD, gen);
+        startMirror("E", videoE, gen);
+        startMirror("F", videoF, gen);
       }
       function toggleLarge(key) {
         if (removedChannels[key]) return;
@@ -824,18 +963,18 @@ function make(variant) {
           if (!st.run) push();
         });
       });
-      [["A", videoA], ["B", videoB], ["C", videoC], ["D", videoD]].forEach(function (pair) {
+      [["A", videoA], ["B", videoB], ["C", videoC], ["D", videoD], ["E", videoE], ["F", videoF]].forEach(function (pair) {
         var key = pair[0], v = pair[1];
         if (!v) return;
         v.addEventListener("loadeddata", function () { paintKey(key); });
         v.addEventListener("seeked", function () { paintKey(key); });
       });
-      [["B", videoB], ["D", videoD]].forEach(function (pair) {
+      [["B", videoB], ["D", videoD], ["F", videoF]].forEach(function (pair) {
         var key = pair[0], v = pair[1];
         if (!v) return;
         v.addEventListener("ended", function () { closeVideoChannel(key); });
       });
-      [["A", videoA], ["C", videoC]].forEach(function (pair) {
+      [["A", videoA], ["C", videoC], ["E", videoE]].forEach(function (pair) {
         var key = pair[0], v = pair[1];
         if (!v) return;
         v.addEventListener("ended", function () { blackenAttack(key); });
@@ -851,6 +990,8 @@ function make(variant) {
             if (rule.key === "001-attack" && window.FLIGHT06 && FLIGHT06.startAttack) FLIGHT06.startAttack(14, st.t);
             if (rule.key === "002-destroy") { applyDestroyed("002", "A"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(17, st.t); }
             if (rule.key === "001-destroy") { applyDestroyed("001", "C"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(14, st.t); }
+            if (rule.key === "003-attack" && window.FLIGHT06 && FLIGHT06.startAttack) FLIGHT06.startAttack(assigned003 ? assigned003.attack : 9, st.t, movingTargetPos(SUSPECTS[2], st.t + 27));
+            if (rule.key === "003-destroy") { applyDestroyed("003", "E"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(assigned003 ? assigned003.attack : 9, st.t); }
             changed = true;
           }
         });
@@ -863,6 +1004,7 @@ function make(variant) {
         if (!smallBar) return;
         var active = st.started && t >= T_VIDEO_002;
         var extraActive = st.started && t >= T_EXTRA_VIDEO;
+        var thirdActive = st.started && t >= T003_VIDEO;
         if (!active) {
           resetVideos();
           smallBar.classList.remove("on");
@@ -902,6 +1044,21 @@ function make(variant) {
         } else if (extraStarted) {
           resetExtraVideos();
         }
+        if (thirdActive) {
+          thirdCards.forEach(function (card) {
+            var k = card.getAttribute("data-video");
+            card.style.display = removedChannels[k] ? "none" : "";
+          });
+          if (!thirdStarted) {
+            thirdStarted = true;
+            [videoE, videoF].forEach(function (v) { try { if (v) { v.__frozen = false; v.currentTime = 0; } } catch (e) {} });
+            trackerE.start(); trackerF.start();
+            playThirdVideos();
+            paintKey("E"); paintKey("F");
+          }
+        } else if (thirdStarted) {
+          resetThirdVideos();
+        }
         updateSmallBarVisibility();
         checkVideoAi();
         if (videoA && videoA.ended && !removedChannels.A && !videoA.__black) blackenAttack("A");
@@ -910,12 +1067,18 @@ function make(variant) {
           if (videoC && videoC.ended && !removedChannels.C && !videoC.__black) blackenAttack("C");
           if (videoD && videoD.ended && !removedChannels.D) closeVideoChannel("D");
         }
+        if (thirdStarted) {
+          if (videoE && videoE.ended && !removedChannels.E && !videoE.__black) blackenAttack("E");
+          if (videoF && videoF.ended && !removedChannels.F) closeVideoChannel("F");
+        }
         if (!st.run) pauseVideos();
         else {
           if (!(videoA.__frozen && videoB.__frozen) &&
               ((!videoA.__frozen && videoA.paused) || (!videoB.__frozen && videoB.paused))) playVideos();
           if (extraStarted && !(videoC.__frozen && videoD.__frozen) &&
               ((!videoC.__frozen && videoC.paused) || (!videoD.__frozen && videoD.paused))) playExtraVideos();
+          if (thirdStarted && !(videoE.__frozen && videoF.__frozen) &&
+              ((!videoE.__frozen && videoE.paused) || (!videoF.__frozen && videoF.paused))) playThirdVideos();
         }
       }
       var aiChatEl = root.querySelector(".s6-chat-scroll");
@@ -936,6 +1099,10 @@ function make(variant) {
         { t: T_CONFIRM_002, who: "ai", text: "智能评估对照，确认002火控雷达" },
         { t: T_CONFIRM_001, who: "ai", text: "智能评估对照，确认001预警雷达" },
         { t: 4392.33, who: "ai", text: "重新规划“潜在目标部署区-2”剩余的8架光电无人机侦察方式。" },
+        { t: 4500.00, who: "ai", text: "在“潜在目标部署区-1”GMTI扫描发现1个运动目标，已加入目标档案。" },
+        { t: 4500.00, who: "ai", text: "建议采用方案：为003运动目标派出两架光电无人机执行侦察和打击任务。" },
+        { t: 4502.00, who: "user", text: "方案确认。" },
+        { t: T003_CONFIRM, who: "ai", text: "智能评估对照，确认003雷达目标" },
       ].filter(function (ev) { return ev.t > 0; }).sort(function (a, b) { return a.t - b.t; });
       function renderAiLog(t) {
         if (!aiLogEl) return;
@@ -1083,7 +1250,7 @@ function make(variant) {
         st6.textContent =
           ".s6-lyr-panel{position:absolute;left:116px;top:142px;width:200px;padding:10px 12px;border-radius:10px;" +
             "background:rgba(8,20,34,.94);border:1px solid rgba(56,189,248,.35);box-shadow:0 12px 32px rgba(0,0,0,.55);" +
-            "display:none;z-index:30;font-size:14px;color:#cfe3f7}" +
+            "display:none;z-index:30;font-size:14px;color:#cfe3f7;max-height:calc(100vh - 190px);overflow:auto}" +
           ".s6-lyr-panel.on{display:block}" +
           ".s6-lyr-h{display:flex;align-items:center;gap:8px;font-size:13px;color:#7dd3fc;letter-spacing:2px;" +
             "padding-bottom:8px;border-bottom:1px solid rgba(56,189,248,.18);margin-bottom:4px}" +
@@ -1093,28 +1260,40 @@ function make(variant) {
           ".s6-lyr-h button:hover{background:rgba(56,189,248,.24)}" +
           ".s6-lyr{display:flex;align-items:center;gap:9px;padding:7px 2px;cursor:pointer;user-select:none}" +
           ".s6-lyr:hover{color:#eaf6ff}" +
-          ".s6-lyr input{accent-color:#38bdf8;width:14px;height:14px;cursor:pointer}";
+          ".s6-lyr input{accent-color:#38bdf8;width:14px;height:14px;cursor:pointer}" +
+          ".s6-lyr-sec{margin:8px 0 2px;padding:5px 2px 4px;border-top:1px solid rgba(56,189,248,.16);color:#7dd3fc;font-size:12px;letter-spacing:1px}" +
+          ".s6-lyr-sec:first-of-type{border-top:0;margin-top:2px}";
         document.head.appendChild(st6);
       }
       root.insertAdjacentHTML("beforeend",
         '<section class="s6-lyr-panel">' +
           '<div class="s6-lyr-h"><b>图层</b><button data-all="1">全显</button><button data-all="0">全隐</button></div>' +
-          [["规划航迹", "tracks"], ["光电扫描", "scan"], ["雷达 SAR", "sbeam"], ["雷达 GMTI", "rfan"], ["电子覆盖", "jfan"]].map(function (o) {
+          '<label class="s6-lyr"><input type="checkbox" checked data-k="tracks"><span>规划航迹</span></label>' +
+          '<div class="s6-lyr-sec">扫描矩形 / 覆盖层</div>' +
+          [["光电扫描覆盖小格", "cov-photo"], ["GMTI 覆盖小格", "cov-gmti"], ["SAR 覆盖小格", "cov-sar"], ["电子干扰覆盖小格", "cov-ewar"]].map(function (o) {
+            return '<label class="s6-lyr"><input type="checkbox" checked data-k="' + o[1] + '"><span>' + o[0] + '</span></label>';
+          }).join("") +
+          '<div class="s6-lyr-sec">扇形 / 扇区层</div>' +
+          [["光电扫描扇形", "scan"], ["雷达 GMTI 扇区", "rfan"], ["电子干扰扇区", "jfan"], ["SAR 扫描条带", "sbeam"]].map(function (o) {
             return '<label class="s6-lyr"><input type="checkbox" checked data-k="' + o[1] + '"><span>' + o[0] + '</span></label>';
           }).join("") +
         '</section>');
 
       var lyrPanel = root.querySelector(".s6-lyr-panel");
       var lyrBoxes = [].slice.call(lyrPanel.querySelectorAll("input[data-k]"));
-      var visState = { tracks: true, scan: true, sbeam: true, rfan: true, jfan: true };
+      var visState = { tracks: true, "cov-photo": true, "cov-gmti": true, "cov-sar": true, "cov-ewar": true, scan: true, rfan: true, jfan: true, sbeam: true };
       var visDirty = true, lastCv = null;
       function applyVis() {
         if (!map.setVis) return;
         map.setVis(["tracks"], visState.tracks);
-        map.setVis(["scan", "cov-photo"], visState.scan);
-        map.setVis(["sbeam", "cov-sar"], visState.sbeam);
-        map.setVis(["rfan", "cov-gmti"], visState.rfan);
-        map.setVis(["jfan", "cov-ewar"], visState.jfan);
+        map.setVis(["cov-photo"], visState["cov-photo"]);
+        map.setVis(["cov-gmti"], visState["cov-gmti"]);
+        map.setVis(["cov-sar"], visState["cov-sar"]);
+        map.setVis(["cov-ewar"], visState["cov-ewar"]);
+        map.setVis(["scan"], visState.scan);
+        map.setVis(["rfan"], visState.rfan);
+        map.setVis(["jfan"], visState.jfan);
+        map.setVis(["sbeam"], visState.sbeam);
       }
       lyrBoxes.forEach(function (cb) {
         cb.addEventListener("change", function () {
@@ -1159,6 +1338,7 @@ function make(variant) {
           targetOn = false;
           confirmedState["001"] = null;
           confirmedState["002"] = null;
+          confirmedState["003"] = null;
         } catch (e) {}
       };
     }
@@ -1200,9 +1380,9 @@ function make(variant) {
     }
 
     if (!document.getElementById("css-s03")) {
-      var st = document.createElement("style");
-      st.id = "css-s03";
-      st.textContent = [
+      var sty = document.createElement("style");
+      sty.id = "css-s03";
+      sty.textContent = [
         ".s3-map{position:absolute;inset:0}",
         ".s3-menu{position:absolute;left:0;top:74px;bottom:36px;width:96px;display:flex;flex-direction:column;gap:6px;padding-top:12px;",
         "  background:linear-gradient(180deg,rgba(9,20,34,.97),rgba(5,12,22,.99));border-right:1px solid rgba(56,189,248,.16);z-index:14}",
@@ -1469,7 +1649,7 @@ function make(variant) {
         "  background:radial-gradient(circle at 50% 35%,#1e40af,#0b1e3a 72%);border:1px solid rgba(96,165,250,.5);",
         "  box-shadow:0 0 26px rgba(37,99,235,.5);z-index:12;opacity:0;cursor:default}"
       ].join("\n");
-      document.head.appendChild(st);
+      document.head.appendChild(sty);
     }
 
     return {
@@ -1594,7 +1774,7 @@ var zoom = is3d ? FX.lerp(10.95, 11.25, cp) : CAM03.zoom;
     /* 等待点：提示淡入 + 呼吸
        呼吸只用 transform 缩放（走合成层，不重绘）；阴影是 CSS 里写死的静态值。
        之前每帧改 box-shadow 会让三张卡片 + 提示条每帧重绘一大片，等待时自然发卡。 */
-    /* SH-04：底部 AI 语音助手
+    /* SH-04：底部 AI 决策助手
        对话气泡常显（不按时间淡入）——这样从别的屏返回 SH-04 时对话还在，
        也不会出现"停在 t=0 时整块面板透明看不见"的情况。 */
     if (e.voicePanel && e.micBig) {

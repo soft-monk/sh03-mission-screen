@@ -419,18 +419,33 @@ window.FLIGHT06 = (function () {
     for (var i = 0; i < D.length; i++) if (D[i].type === "blue" && D[i].k === no - 1) return D[i];
     return null;
   }
-  function startAttack(no, t) {
+  function startAttack(no, t, centerOverride) {
     var d = attackDrone(no);
-    if (!d || !d.orbit) return;
-    var o = d.orbit;
+    if (!d || (!d.orbit && !d.track3)) return;
+    var o = d.orbit || null;
     var t0 = Math.max(T_REASSIGN, t);
-    var a = orbitAngleAt(o, t0);
-    var ux = Math.cos(a), uy = Math.sin(a);
-    var tx = -Math.sin(a), ty = Math.cos(a);
-    var P0 = [ORBIT_R * ux, ORBIT_R * uy];
-    var P1 = [P0[0] + tx * 1400, P0[1] + ty * 1400];
-    var P2 = [ux * 600, uy * 600];
-    d.attack = { t0: t0, tHit: t0 + 27, tGone: Infinity, center: o.center, P0: P0, P1: P1, P2: P2, P3: [0, 0] };
+    var c = centerOverride || (o ? o.center : target003Pos(t0));
+    var p0 = posOf(d, t0);
+    var a = o ? orbitAngleAt(o, t0) : 0;
+    var tan0 = d.track3 ? target003Tangent(t0) : null;
+    var tx = tan0 ? tan0[0] : -Math.sin(a), ty = tan0 ? tan0[1] : Math.cos(a);
+    var P0 = [p0.lon, p0.lat], P1, P2;
+    if (d.track3) {
+      var dxc = (c[0] - p0.lon) * M_LON, dyc = (c[1] - p0.lat) * M_LAT;
+      var len = Math.max(1, Math.hypot(dxc, dyc));
+      var h0 = (p0.r || 0) * Math.PI / 180;
+      var sx = Math.sin(h0), sy = Math.cos(h0);
+      var te = target003Tangent(t0 + 27);
+      P1 = [p0.lon + (sx * len * 0.32) / M_LON, p0.lat + (sy * len * 0.32) / M_LAT];
+      P2 = [c[0] - (te[0] * len * 0.32) / M_LON, c[1] - (te[1] * len * 0.32) / M_LAT];
+    } else {
+      P1 = [P0[0] + (tx * 1400) / M_LON, P0[1] + (ty * 1400) / M_LAT];
+      var vx = (p0.lon - c[0]) * M_LON, vy = (p0.lat - c[1]) * M_LAT;
+      var vd = Math.max(1, Math.hypot(vx, vy));
+      P2 = [c[0] + (vx / vd * 600) / M_LON, c[1] + (vy / vd * 600) / M_LAT];
+    }
+    var outAngle = Math.atan2((c[0]-P2[0])*M_LON, (c[1]-P2[1])*M_LAT);
+    d.attack = { t0: t0, tHit: t0 + 27, tGone: Infinity, center: c, P0: P0, P1: P1, P2: P2, P3: [c[0], c[1]], outAngle: outAngle };
   }
   function endAttack(no, t) {
     var d = attackDrone(no);
@@ -490,20 +505,107 @@ window.FLIGHT06 = (function () {
     var dist = Math.hypot(dx, dy);
     d.replan2 = { path: P, start: sp, tTrans: dist / V, tOn: T_REPLAN2 + dist / V };
   });
+  var T003_ASSIGN = 4505.00;
+  var T003_TRACK_ARRIVE = 4600.00;
+  var T003_ORBIT_START = 4806.00;
+  var T003_TRACK_DIST = 2000;
+  var T003_ORBIT_R = 2000;
+  var T003_MOVE_START = 4500.00;
+  var T003_HIT = 4805.00;
+  var T003_MOVE_STOP = 4805.00;
+  var T003_SPEED = 90 / 3.6;
+  var T003_PATH = [[113.87000,39.69000],[113.88400,39.70200],[113.90000,39.71600],[113.91800,39.73400],[113.93800,39.74600]];
+  var T003_SEG = [], T003_LEN = 0;
+  for (var ti = 1; ti < T003_PATH.length; ti++) {
+    var pdx = (T003_PATH[ti][0] - T003_PATH[ti-1][0]) * M_LON;
+    var pdy = (T003_PATH[ti][1] - T003_PATH[ti-1][1]) * M_LAT;
+    var plen = Math.hypot(pdx, pdy);
+    T003_SEG.push({ i: ti-1, len: plen, acc: T003_LEN });
+    T003_LEN += plen;
+  }
+  function crv(a,b,c,d,u){var u2=u*u,u3=u2*u;return 0.5*((2*b)+(-a+c)*u+(2*a-5*b+4*c-d)*u2+(-a+3*b-3*c+d)*u3);}
+  function target003Pos(t) {
+    var dt = Math.max(0, Math.min(t, T003_MOVE_STOP) - T003_MOVE_START);
+    var dist = Math.min(T003_SPEED * dt, T003_LEN);
+    var seg = T003_SEG[T003_SEG.length-1];
+    for (var i = 0; i < T003_SEG.length; i++) { if (dist <= T003_SEG[i].acc + T003_SEG[i].len) { seg = T003_SEG[i]; break; } }
+    var u = Math.max(0, Math.min(1, (dist - seg.acc) / Math.max(1e-6, seg.len)));
+    var i0 = Math.max(0, seg.i-1), i1 = seg.i, i2 = Math.min(T003_PATH.length-1, seg.i+1), i3 = Math.min(T003_PATH.length-1, seg.i+2);
+    var p0=T003_PATH[i0],p1=T003_PATH[i1],p2=T003_PATH[i2],p3=T003_PATH[i3];
+    return [crv(p0[0],p1[0],p2[0],p3[0],u), crv(p0[1],p1[1],p2[1],p3[1],u)];
+  }
+  function target003Tangent(t) {
+    var p1 = target003Pos(Math.max(0,t-0.5)), p2 = target003Pos(Math.min(T003_MOVE_STOP,t+0.5));
+    var dx=(p2[0]-p1[0])*M_LON, dy=(p2[1]-p1[1])*M_LAT, d=Math.hypot(dx,dy)||1;
+    return [dx/d, dy/d];
+  }
+  function pickNearest003(center, t, count) {
+    var list = [];
+    for (var i = 0; i < D.length; i++) {
+      var d = D[i];
+      if (d.type !== "blue" || d.k >= 10) continue;
+      var p = posOf(d, t);
+      var dx = (p.lon - center[0]) * M_LON, dy = (p.lat - center[1]) * M_LAT;
+      list.push({ no: d.k + 1, dist: Math.hypot(dx, dy) });
+    }
+    list.sort(function (a, b) { return a.dist - b.dist; });
+    return list.slice(0, count).map(function (x) { return x.no; });
+  }
+  function resetTracking() { for (var i = 0; i < D.length; i++) D[i].track3 = null; }
+  function assignTracking(no, t, side) {
+    var d = attackDrone(no);
+    if (!d) return;
+    var tanp = target003Tangent(T003_ORBIT_START);
+    var basePhase = Math.atan2(tanp[0], -tanp[1]);
+    d.track3 = { side: side, start: basePosOf(d, t), tTrans: Math.max(1e-6, T003_TRACK_ARRIVE - t), orbitPhase: basePhase + (side > 0 ? 0 : Math.PI) };
+  }
+  function assign003(attackNo, reconNo, t) {
+    resetTracking();
+    assignTracking(attackNo, t, 1);
+    assignTracking(reconNo, t, -1);
+  }
+  function track3Point(d, t) {
+    var tr = d.track3, aim = target003Pos(t), tan = target003Tangent(t);
+    var nx = -tan[1], ny = tan[0];
+    var standX = (tr.side * nx * T003_TRACK_DIST) / M_LON;
+    var standY = (tr.side * ny * T003_TRACK_DIST) / M_LAT;
+    var ex = aim[0] + standX, ey = aim[1] + standY;
+    if (t < T003_TRACK_ARRIVE) {
+      var u = Math.max(0, Math.min(1, (t - T003_ASSIGN) / Math.max(1e-6, tr.tTrans)));
+      u = u * u * (3 - 2 * u);
+      return [tr.start.lon + (ex - tr.start.lon) * u, tr.start.lat + (ey - tr.start.lat) * u];
+    }
+    if (t < T003_ORBIT_START) return [ex, ey];
+    if (tr.orbitPhase == null) {
+      var tanp = target003Tangent(T003_ORBIT_START);
+      tr.orbitPhase = Math.atan2(tr.side * tanp[0], tr.side * (-tanp[1]));
+    }
+    var a = tr.orbitPhase + (t - T003_ORBIT_START) * ORBIT_W;
+    return [aim[0] + (T003_ORBIT_R * Math.cos(a)) / M_LON,
+            aim[1] + (T003_ORBIT_R * Math.sin(a)) / M_LAT];
+  }
+  function track3Heading(d, t) {
+    var p1 = track3Point(d, Math.max(T003_ASSIGN, t - 0.5));
+    var p2 = track3Point(d, t + 0.5);
+    return Math.atan2((p2[0] - p1[0]) * M_LON, (p2[1] - p1[1]) * M_LAT) * 180 / Math.PI;
+  }
   function posOf(d, t) {
     if (d.attack && t >= d.attack.t0) {
       var atk = d.attack;
+      if (d.track3 && t >= atk.tHit) {
+        return { lon: atk.P3[0], lat: atk.P3[1], r: atk.outAngle * 180 / Math.PI };
+      }
       var u = Math.max(0, Math.min(1, (t - atk.t0) / 27));
       var v = 1 - u;
-      var x = v*v*v*atk.P0[0] + 3*v*v*u*atk.P1[0] + 3*v*u*u*atk.P2[0] + u*u*u*atk.P3[0];
-      var y = v*v*v*atk.P0[1] + 3*v*v*u*atk.P1[1] + 3*v*u*u*atk.P2[1] + u*u*u*atk.P3[1];
+      var lon = v*v*v*atk.P0[0] + 3*v*v*u*atk.P1[0] + 3*v*u*u*atk.P2[0] + u*u*u*atk.P3[0];
+      var lat = v*v*v*atk.P0[1] + 3*v*v*u*atk.P1[1] + 3*v*u*u*atk.P2[1] + u*u*u*atk.P3[1];
       var dx = 3*v*v*(atk.P1[0]-atk.P0[0]) + 6*v*u*(atk.P2[0]-atk.P1[0]) + 3*u*u*(atk.P3[0]-atk.P2[0]);
       var dy = 3*v*v*(atk.P1[1]-atk.P0[1]) + 6*v*u*(atk.P2[1]-atk.P1[1]) + 3*u*u*(atk.P3[1]-atk.P2[1]);
-      return {
-        lon: atk.center[0] + x / M_LON,
-        lat: atk.center[1] + y / M_LAT,
-        r: Math.atan2(dx, dy) * 180 / Math.PI
-      };
+      return { lon: lon, lat: lat, r: Math.atan2(dx, dy) * 180 / Math.PI };
+    }
+    if (d.track3 && t >= T003_ASSIGN) {
+      var p3t = track3Point(d, t);
+      return { lon: p3t[0], lat: p3t[1], r: track3Heading(d, t) };
     }
     if (d.replan2 && t >= T_REPLAN2) {
       var rp2 = d.replan2;
@@ -631,7 +733,7 @@ window.FLIGHT06 = (function () {
       if (d.type !== "blue" || !d.path || t < (d.tStart || 0)) continue;
       if (d.attack && d.attack.tGone !== Infinity && t >= d.attack.tGone) continue;
       var p = posOf(d, t);
-      var aim = d.orbit && t >= T_REASSIGN && !(d.replan2 && t >= T_REPLAN2) ? d.orbit.center : null;
+      var aim = (d.orbit && t >= T_REASSIGN && !(d.replan2 && t >= T_REPLAN2)) ? d.orbit.center : (d.track3 && t >= T003_ASSIGN ? target003Pos(t) : null);
       out.push(scanOf(p, t, d.tStart, aim));
     }
     return out;
@@ -755,7 +857,7 @@ window.FLIGHT06 = (function () {
           if (tt < (d.tStart || 0)) return;
           if (d.attack && d.attack.tGone !== Infinity && tt >= d.attack.tGone) return;
           var p = posOf(d, tt);
-          var hd = (d.orbit && tt >= T_REASSIGN && !(d.replan2 && tt >= T_REPLAN2)) ? Math.atan2((d.orbit.center[1] - p.lat) * M_LAT, (d.orbit.center[0] - p.lon) * M_LON) : (p.r || 0) * Math.PI / 180;
+          var hd = (d.orbit && tt >= T_REASSIGN && !(d.replan2 && tt >= T_REPLAN2)) ? Math.atan2((d.orbit.center[1] - p.lat) * M_LAT, (d.orbit.center[0] - p.lon) * M_LON) : (d.track3 && tt >= T003_ASSIGN) ? Math.atan2((target003Pos(tt)[1] - p.lat) * M_LAT, (target003Pos(tt)[0] - p.lon) * M_LON) : (p.r || 0) * Math.PI / 180;
           var fx = Math.sin(hd), fy = Math.cos(hd);
           var px = p.lon * M_LON, py = p.lat * M_LAT;
           var arr = first[k];
@@ -785,7 +887,7 @@ window.FLIGHT06 = (function () {
         if (at < (d.tStart || 0)) return;
         if (d.attack && d.attack.tGone !== Infinity && at >= d.attack.tGone) return;
         var p = posOf(d, at);
-        var hd = (d.orbit && at >= T_REASSIGN && !(d.replan2 && at >= T_REPLAN2)) ? Math.atan2((d.orbit.center[1] - p.lat) * M_LAT, (d.orbit.center[0] - p.lon) * M_LON) : (p.r || 0) * Math.PI / 180;
+        var hd = (d.orbit && at >= T_REASSIGN && !(d.replan2 && at >= T_REPLAN2)) ? Math.atan2((d.orbit.center[1] - p.lat) * M_LAT, (d.orbit.center[0] - p.lon) * M_LON) : (d.track3 && at >= T003_ASSIGN) ? Math.atan2((target003Pos(at)[1] - p.lat) * M_LAT, (target003Pos(at)[0] - p.lon) * M_LON) : (p.r || 0) * Math.PI / 180;
         var fx = Math.sin(hd), fy = Math.cos(hd);
         var px = p.lon * M_LON, py = p.lat * M_LAT;
         for (var ci = 0; ci < cells.length; ci++) {
@@ -808,7 +910,7 @@ window.FLIGHT06 = (function () {
         if (at2 < (d.tStart || 0)) return;
         if (d.attack && d.attack.tGone !== Infinity && at2 >= d.attack.tGone) return;
         var p = posOf(d, at2);
-        var hd = (d.orbit && at2 >= T_REASSIGN && !(d.replan2 && at2 >= T_REPLAN2)) ? Math.atan2((d.orbit.center[1] - p.lat) * M_LAT, (d.orbit.center[0] - p.lon) * M_LON) : (p.r || 0) * Math.PI / 180;
+        var hd = (d.orbit && at2 >= T_REASSIGN && !(d.replan2 && at2 >= T_REPLAN2)) ? Math.atan2((d.orbit.center[1] - p.lat) * M_LAT, (d.orbit.center[0] - p.lon) * M_LON) : (d.track3 && at2 >= T003_ASSIGN) ? Math.atan2((target003Pos(at2)[1] - p.lat) * M_LAT, (target003Pos(at2)[0] - p.lon) * M_LON) : (p.r || 0) * Math.PI / 180;
         var fx = Math.sin(hd), fy = Math.cos(hd);
         var px = p.lon * M_LON, py = p.lat * M_LAT;
         for (var ci = 0; ci < cells.length; ci++) {
@@ -853,6 +955,10 @@ window.FLIGHT06 = (function () {
     for (var i = 0; i < D.length; i++) {
       var d = D[i];
       if (d.attack && d.attack.tGone !== Infinity && t >= d.attack.tGone) continue;
+      if (d.track3 && t >= T003_ORBIT_START) {
+        o.push({ type: d.type, pts: circleTrack(target003Pos(t), 0).map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
+        continue;
+      }
       if (d.replan2 && t >= T_REPLAN2) {
         o.push({ type: d.type, pts: d.replan2.path.pts.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
         continue;
@@ -873,5 +979,5 @@ window.FLIGHT06 = (function () {
     if (t < mn) return "编队飞行";
     return "侦察";
   }
-  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, T_REASSIGN: T_REASSIGN, T_REPLAN: T_REPLAN, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks, scans: scans, fans: fans, sarScans: sarScans, coverage: coverage, T_TRACKS: T_TRACKS, startAttack: startAttack, endAttack: endAttack, resetAttack: resetAttack, resetAttacks: resetAttacks };
+  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, T_REASSIGN: T_REASSIGN, T_REPLAN: T_REPLAN, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks, scans: scans, fans: fans, sarScans: sarScans, coverage: coverage, T_TRACKS: T_TRACKS, T003_ASSIGN: T003_ASSIGN, T003_TRACK_ARRIVE: T003_TRACK_ARRIVE, T003_ORBIT_START: T003_ORBIT_START, target003Pos: target003Pos, target003Tangent: target003Tangent, pickNearest003: pickNearest003, assign003: assign003, resetTracking: resetTracking, startAttack: startAttack, endAttack: endAttack, resetAttack: resetAttack, resetAttacks: resetAttacks };
 })();

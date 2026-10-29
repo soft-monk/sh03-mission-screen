@@ -427,6 +427,22 @@ window.MapView = function (host) {
         if (below) { try { map.moveLayer(id + "-f-l", below); map.moveLayer(id + "-l-l", below); } catch (e) {} }
       });
     },
+    /* 动态圆形目标：圆心移动、半径按米计算 */
+    movingCircle: function (id, lngLat, radius, color) {
+      var c = color || "#ef4444";
+      var ring = [], n = 48;
+      var mlon = 111320 * Math.cos(lngLat[1] * Math.PI / 180), mlat = 111030;
+      for (var i = 0; i <= n; i++) {
+        var a = (i / n) * Math.PI * 2;
+        ring.push([lngLat[0] + (radius * Math.cos(a)) / mlon, lngLat[1] + (radius * Math.sin(a)) / mlat]);
+      }
+      var poly = { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } };
+      var line = { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: ring } };
+      when(function () {
+        setGeom(id + "-f", "fill", [poly], { "fill-color": c, "fill-opacity": 0.28 });
+        setGeom(id + "-l", "line", [line], { "line-color": c, "line-width": 2, "line-opacity": 0.95 });
+      });
+    },
     /* 按图层 id 前缀批量显隐：prefixes 形如 ["tracks","scan"] */
     setVis: function (prefixes, visible) {
       when(function () {
@@ -476,11 +492,13 @@ window.MapView = function (host) {
       el.textContent = text;
       el.style.cssText = "color:" + color + ";font:600 " + size + "px/1.1 var(--font);letter-spacing:1px;" +
         "text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 8px rgba(0,0,0,.8);white-space:nowrap;opacity:0;pointer-events:none";
-      when(function () { new maplibregl.Marker({ element: el, anchor: "top-left" }).setLngLat(lngLat).addTo(map); });
+      var marker = null;
+      when(function () { marker = new maplibregl.Marker({ element: el, anchor: "top-left" }).setLngLat(lngLat).addTo(map); });
       labelCache[cacheKey] = {
         set: function (v) { el.style.opacity = v; },
         setText: function (v) { el.textContent = v; },
-        setColor: function (v) { el.style.color = v; }
+        setColor: function (v) { el.style.color = v; },
+        setLngLat: function (v) { lngLat = v; if (marker) marker.setLngLat(v); }
       };
       return labelCache[cacheKey];
     }
