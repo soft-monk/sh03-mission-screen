@@ -201,6 +201,10 @@ window.MapView = function (host) {
       if (!map) return;
       try { map.resize(); map.triggerRepaint(); } catch (e) {}
     },
+    refreshMarkers: function () {
+      Object.keys(labelCache).forEach(function (k) { if (labelCache[k].refresh) labelCache[k].refresh(); });
+      Object.keys(iconCache).forEach(function (k) { if (iconCache[k].refresh) iconCache[k].refresh(); });
+    },
     setView: function (c) {
       lastCam = c;
       var key = c.center[0].toFixed(5) + "," + c.center[1].toFixed(5) + "," + c.zoom.toFixed(4) + "," + (c.pitch || 0).toFixed(2) + "," + (c.bearing || 0).toFixed(2);
@@ -362,7 +366,7 @@ window.MapView = function (host) {
        items: [{ quad:[[lon,lat]x5], rays:[[p,q],...], sweep:[[p,q]], color, k }] */
     scan: function (id, items) {
       items = items || [];
-      var fill = [], outl = [], rays = [], swee = [];
+      var fill = [], outl = [], rays = [], swee = [], boxes = [], boxout = [], links = [];
       items.forEach(function (s) {
         var k = s.k == null ? 1 : s.k, c = s.color || "#38bdf8";
         fill.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "Polygon", coordinates: [s.quad] } });
@@ -371,12 +375,17 @@ window.MapView = function (host) {
           rays.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: r } });
         });
         if (s.sweep) swee.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: s.sweep } });
+        if (s.box) { boxes.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "Polygon", coordinates: [s.box] } }); boxout.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: s.box } }); }
+        (s.links || []).forEach(function (l) { links.push({ type: "Feature", properties: { c: c, k: k }, geometry: { type: "LineString", coordinates: l } }); });
       });
       when(function () {
         setGeom(id + "-f", "fill", fill, { "fill-color": ["get", "c"], "fill-opacity": ["*", 0.12, ["get", "k"]] });
         setGeom(id + "-r", "line", rays, { "line-color": ["get", "c"], "line-width": 1, "line-opacity": ["*", 0.45, ["get", "k"]], "line-dasharray": [2, 2] });
         setGeom(id + "-o", "line", outl, { "line-color": ["get", "c"], "line-width": 1.5, "line-opacity": ["*", 0.85, ["get", "k"]] });
         setGeom(id + "-s", "line", swee, { "line-color": "#eaf6ff", "line-width": 2, "line-opacity": ["*", 0.9, ["get", "k"]] });
+        setGeom(id + "-bf", "fill", boxes, { "fill-color": ["get", "c"], "fill-opacity": ["*", 0.08, ["get", "k"]] });
+        setGeom(id + "-bo", "line", boxout, { "line-color": ["get", "c"], "line-width": 2, "line-opacity": ["*", 0.95, ["get", "k"]] });
+        setGeom(id + "-bl", "line", links, { "line-color": ["get", "c"], "line-width": 1.4, "line-opacity": ["*", 0.85, ["get", "k"]] });
       });
     },
     /* 雷达覆盖扇区：淡填充 + 实线边框，items: [{ quad, color, k }] */
@@ -493,13 +502,23 @@ window.MapView = function (host) {
       el.textContent = text;
       el.style.cssText = "color:" + color + ";font:600 " + size + "px/1.1 var(--font);letter-spacing:1px;" +
         "text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 8px rgba(0,0,0,.8);white-space:nowrap;opacity:0;pointer-events:none";
-      var marker = null;
-      when(function () { marker = new maplibregl.Marker({ element: el, anchor: "top-left" }).setLngLat(lngLat).addTo(map); });
+      var marker = null, wantVisible = false;
+      function apply() {
+        if (marker) marker.setOpacity(wantVisible ? 1 : 0);
+        else el.style.opacity = wantVisible ? "1" : "0";
+        if (marker) { try { map.triggerRepaint(); } catch (e) {} }
+      }
+      when(function () {
+        marker = new maplibregl.Marker({ element: el, anchor: "top-left" }).setLngLat(lngLat).addTo(map);
+        apply();
+        try { map.triggerRepaint(); } catch (e) {}
+      });
       labelCache[cacheKey] = {
-        set: function (v) { el.style.opacity = v; },
+        set: function (v) { wantVisible = !!v; apply(); },
         setText: function (v) { el.textContent = v; },
         setColor: function (v) { el.style.color = v; },
-        setLngLat: function (v) { lngLat = v; if (marker) marker.setLngLat(v); }
+        setLngLat: function (v) { lngLat = v; if (marker) marker.setLngLat(v); apply(); },
+        refresh: function () { if (marker) marker.setLngLat(lngLat); apply(); }
       };
       return labelCache[cacheKey];
     },
@@ -512,15 +531,51 @@ window.MapView = function (host) {
       el.alt = "";
       el.style.cssText = "width:" + (size || 36) + "px;height:" + (size || 36) + "px;display:block;opacity:0;" +
         "pointer-events:none;filter:drop-shadow(0 0 5px rgba(0,0,0,.8));";
-      var marker = null;
-      when(function () { marker = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(lngLat).addTo(map); });
+      var marker = null, wantVisible = false, wantColor = "yellow";
+      var yellowReady = false, redReady = false;
+      function setOpacity(v) {
+        if (marker) marker.setOpacity(v);
+        else el.style.opacity = v ? "1" : "0";
+      }
+      function apply() {
+        var src = wantColor === "red" ? redSrc : yellowSrc;
+        var ready = wantColor === "red" ? redReady : yellowReady;
+        if (!wantVisible) { setOpacity(0); return; }
+        if (!ready) {
+          if (wantColor === "red" && yellowReady) {
+            if (el.getAttribute("src") !== yellowSrc) el.setAttribute("src", yellowSrc);
+            setOpacity(1);
+          } else {
+            setOpacity(0);
+          }
+          return;
+        }
+        if (el.getAttribute("src") !== src) el.setAttribute("src", src);
+        setOpacity(1);
+        try { if (marker) map.triggerRepaint(); } catch (e) {}
+      }
+      function preload(src, red) {
+        var im = new Image();
+        im.onload = function () { if (red) redReady = true; else yellowReady = true; apply(); };
+        im.onerror = function () { apply(); };
+        im.src = src;
+      }
+      el.onload = function () {
+        if (el.getAttribute("src") === redSrc) redReady = true;
+        if (el.getAttribute("src") === yellowSrc) yellowReady = true;
+        apply();
+      };
+      preload(yellowSrc, false);
+      preload(redSrc, true);
+      when(function () {
+        marker = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(lngLat).addTo(map);
+        apply();
+        try { map.triggerRepaint(); } catch (e) {}
+      });
       iconCache[cacheKey] = {
-        set: function (visible, color) {
-          el.style.opacity = visible ? 1 : 0;
-          var src = color === "red" ? redSrc : yellowSrc;
-          if (src && el.getAttribute("src") !== src) el.setAttribute("src", src);
-        },
-        setLngLat: function (v) { lngLat = v; if (marker) marker.setLngLat(v); }
+        set: function (visible, color) { wantVisible = !!visible; wantColor = color === "red" ? "red" : "yellow"; apply(); },
+        setLngLat: function (v) { lngLat = v; if (marker) marker.setLngLat(v); apply(); },
+        refresh: function () { if (marker) marker.setLngLat(lngLat); apply(); }
       };
       return iconCache[cacheKey];
     }
@@ -545,6 +600,8 @@ window.MapView = function (host) {
       if (!curVisible) {
         host.appendChild(SHARED.el);   /* 同一个 canvas 元素，WebGL 上下文不会丢 */
         SHARED.repaint();              /* 新容器尺寸可能刚变，校准一次 */
+        SHARED.refreshMarkers();
+        requestAnimationFrame(function () { SHARED.refreshMarkers(); });
       }
     }
     return SHARED;

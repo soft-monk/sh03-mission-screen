@@ -734,7 +734,16 @@ window.FLIGHT06 = (function () {
       if (d.attack && d.attack.tGone !== Infinity && t >= d.attack.tGone) continue;
       var p = posOf(d, t);
       var aim = (d.orbit && t >= T_REASSIGN && !(d.replan2 && t >= T_REPLAN2)) ? d.orbit.center : (d.track3 && t >= T003_ASSIGN ? target003Pos(t) : null);
-      out.push(scanOf(p, t, d.tStart, aim));
+      var sc = scanOf(p, t, d.tStart, aim);
+      if (d.orbit && t >= T_REASSIGN && aim) {
+        var dx = (p.lon - aim[0]) * M_LON, dy = (p.lat - aim[1]) * M_LAT;
+        var ang = Math.atan2(dx, dy);
+        var fx = Math.sin(ang), fy = Math.cos(ang), sx = Math.cos(ang), sy = -Math.sin(ang), half = 250;
+        function fp(a, b) { return [aim[0] + (fx*a + sx*b) / M_LON, aim[1] + (fy*a + sy*b) / M_LAT]; }
+        sc.box = [fp(half,-half), fp(half,half), fp(-half,half), fp(-half,-half), fp(half,-half)];
+        sc.links = [[[p.lon,p.lat], fp(0,-half)], [[p.lon,p.lat], fp(0,half)]];
+      }
+      out.push(sc);
     }
     return out;
   }
