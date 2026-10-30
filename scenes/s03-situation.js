@@ -663,7 +663,7 @@ function make(variant) {
           if (rule.key === "003-attack") rule.text = a + "光电开始攻击";
         });
         AI_EVENTS.push({ t: T003_ASSIGN, who: "ai", text: "已分配" + a + "号、" + r + "号光电无人机进行003运动目标察打任务。" });
-        AI_EVENTS.push({ t: FL.T003_TRACK_ARRIVE, who: "系统", t003: true, text: a + "号、" + r + "号光电无人机到达目标左右后方，开始跟踪。" });
+        AI_EVENTS.push({ t: FL.T003_TRACK_ARRIVE, who: "系统", t003: true, text: a + "号、" + r + "号光电无人机到达目标后方，开始跟踪。" });
         AI_EVENTS.push({ t: FL.T003_ORBIT_START + 6, who: "系统", t003: true, text: "打击完成，" + r + "号光电无人机转入盘旋确认。" });
         AI_EVENTS.sort(function (x, y) { return x.t - y.t; });
         renderAiLog(t);
