@@ -447,7 +447,7 @@ function make(variant) {
       var SUSPECTS = [
         { id: "s6-suspect-1", confirmedId: "s6-confirm-1", no: "001", name: "001预警雷达", center: [114.34, 40.02], label: [114.352, 40.024], confirmAt: T_CONFIRM_001 },
         { id: "s6-suspect-2", confirmedId: "s6-confirm-2", no: "002", name: "002火控雷达", center: [114.28, 40.08], label: [114.292, 40.084], confirmAt: T_CONFIRM_002 },
-          { id: "s6-suspect-3", confirmedId: "s6-confirm-3", no: "003", name: "003运动目标", center: [113.87, 39.69], label: [113.882, 39.704], confirmAt: T003_CONFIRM, unlockAt: T003_SCAN, move: { start: [113.87, 39.69], speed: 90, heading: 45 } }
+          { id: "s6-suspect-3", confirmedId: "s6-confirm-3", no: "003", name: "003运动目标", center: [113.86273, 39.70515], label: [113.875, 39.719], confirmAt: T003_CONFIRM, unlockAt: T003_SCAN, move: { start: [113.86273, 39.70515], speed: 90, heading: 45 } }
       ];
       var SR = 0.009;
       var targetsCreated = false;
@@ -663,6 +663,7 @@ function make(variant) {
           if (rule.key === "003-attack") rule.text = a + "光电开始攻击";
         });
         AI_EVENTS.push({ t: T003_ASSIGN, who: "ai", text: "已分配" + a + "号、" + r + "号光电无人机进行003运动目标察打任务。" });
+        AI_EVENTS.push({ t: FL.T003_TRACK_ARRIVE, who: "系统", t003: true, text: a + "号、" + r + "号光电无人机到达目标左右后方，开始跟踪。" });
         AI_EVENTS.push({ t: FL.T003_ORBIT_START + 6, who: "系统", t003: true, text: "打击完成，" + r + "号光电无人机转入盘旋确认。" });
         AI_EVENTS.sort(function (x, y) { return x.t - y.t; });
         renderAiLog(t);

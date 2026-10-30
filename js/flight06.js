@@ -506,15 +506,17 @@ window.FLIGHT06 = (function () {
     d.replan2 = { path: P, start: sp, tTrans: dist / V, tOn: T_REPLAN2 + dist / V };
   });
   var T003_ASSIGN = 4505.00;
-  var T003_TRACK_ARRIVE = 4600.00;
+  var T003_TRACK_ARRIVE = 4638.00;
   var T003_ORBIT_START = 4806.00;
-  var T003_TRACK_DIST = 2000;
+  var T003_BACK = 2200;
+  var T003_SIDE = 800;
   var T003_ORBIT_R = 2000;
   var T003_MOVE_START = 4500.00;
   var T003_HIT = 4805.00;
+  var T003_DESTROY = 4820.00;
   var T003_MOVE_STOP = 4805.00;
   var T003_SPEED = 90 / 3.6;
-  var T003_PATH = [[113.87000,39.69000],[113.88400,39.70200],[113.90000,39.71600],[113.91800,39.73400],[113.93800,39.74600]];
+  var T003_PATH = [[113.86273,39.70515],[113.86813,39.70252],[113.86981,39.70099],[113.87390,39.69688],[113.87840,39.68976],[113.89276,39.68516],[113.89930,39.67424],[113.91743,39.67276],[113.93667,39.66084]];
   var T003_SEG = [], T003_LEN = 0;
   for (var ti = 1; ti < T003_PATH.length; ti++) {
     var pdx = (T003_PATH[ti][0] - T003_PATH[ti-1][0]) * M_LON;
@@ -535,7 +537,8 @@ window.FLIGHT06 = (function () {
     return [crv(p0[0],p1[0],p2[0],p3[0],u), crv(p0[1],p1[1],p2[1],p3[1],u)];
   }
   function target003Tangent(t) {
-    var p1 = target003Pos(Math.max(0,t-0.5)), p2 = target003Pos(Math.min(T003_MOVE_STOP,t+0.5));
+    var tt = Math.min(t, T003_MOVE_STOP - 0.001);
+    var p1 = target003Pos(Math.max(0,tt-0.5)), p2 = target003Pos(tt);
     var dx=(p2[0]-p1[0])*M_LON, dy=(p2[1]-p1[1])*M_LAT, d=Math.hypot(dx,dy)||1;
     return [dx/d, dy/d];
   }
@@ -556,8 +559,11 @@ window.FLIGHT06 = (function () {
     var d = attackDrone(no);
     if (!d) return;
     var tanp = target003Tangent(T003_ORBIT_START);
-    var basePhase = Math.atan2(tanp[0], -tanp[1]);
-    d.track3 = { side: side, start: basePosOf(d, t), tTrans: Math.max(1e-6, T003_TRACK_ARRIVE - t), orbitPhase: basePhase + (side > 0 ? 0 : Math.PI) };
+    var nx = -tanp[1], ny = tanp[0];
+    var ox = -tanp[0] * T003_BACK + side * nx * T003_SIDE;
+    var oy = -tanp[1] * T003_BACK + side * ny * T003_SIDE;
+    var basePhase = Math.atan2(oy, ox);
+    d.track3 = { side: side, start: basePosOf(d, t), tTrans: Math.max(1e-6, T003_TRACK_ARRIVE - t), orbitPhase: basePhase };
   }
   function assign003(attackNo, reconNo, t) {
     resetTracking();
@@ -567,9 +573,11 @@ window.FLIGHT06 = (function () {
   function track3Point(d, t) {
     var tr = d.track3, aim = target003Pos(t), tan = target003Tangent(t);
     var nx = -tan[1], ny = tan[0];
-    var standX = (tr.side * nx * T003_TRACK_DIST) / M_LON;
-    var standY = (tr.side * ny * T003_TRACK_DIST) / M_LAT;
-    var ex = aim[0] + standX, ey = aim[1] + standY;
+    var backX = (-tan[0] * T003_BACK) / M_LON;
+    var backY = (-tan[1] * T003_BACK) / M_LAT;
+    var sideX = (tr.side * nx * T003_SIDE) / M_LON;
+    var sideY = (tr.side * ny * T003_SIDE) / M_LAT;
+    var ex = aim[0] + backX + sideX, ey = aim[1] + backY + sideY;
     if (t < T003_TRACK_ARRIVE) {
       var u = Math.max(0, Math.min(1, (t - T003_ASSIGN) / Math.max(1e-6, tr.tTrans)));
       u = u * u * (3 - 2 * u);
@@ -734,13 +742,16 @@ window.FLIGHT06 = (function () {
       if (d.attack && d.attack.tGone !== Infinity && t >= d.attack.tGone) continue;
       var p = posOf(d, t);
       var aim = (d.orbit && t >= T_REASSIGN && !(d.replan2 && t >= T_REPLAN2)) ? d.orbit.center : (d.track3 && t >= T003_ASSIGN ? target003Pos(t) : null);
+      var frameAim = (d.orbit && t >= T_REASSIGN && !(d.replan2 && t >= T_REPLAN2)) ? d.orbit.center : (d.track3 && t >= T003_ASSIGN && t < T003_DESTROY ? target003Pos(t) : null);
       var sc = scanOf(p, t, d.tStart, aim);
-      if (d.orbit && t >= T_REASSIGN && t < T_REPLAN2) { sc.quad = null; sc.rays = []; sc.sweep = null; }
-      if (d.orbit && t >= T_REASSIGN && aim) {
-        var dx = (p.lon - aim[0]) * M_LON, dy = (p.lat - aim[1]) * M_LAT;
+      var hideOrbitFan = d.orbit && t >= T_REASSIGN && t < T_REPLAN2;
+      var hideTrack3Fan = d.track3 && t >= T003_ASSIGN;
+      if (hideOrbitFan || hideTrack3Fan) { sc.quad = null; sc.rays = []; sc.sweep = null; }
+      if (frameAim) {
+        var dx = (p.lon - frameAim[0]) * M_LON, dy = (p.lat - frameAim[1]) * M_LAT;
         var ang = Math.atan2(dx, dy);
         var fx = Math.sin(ang), fy = Math.cos(ang), sx = Math.cos(ang), sy = -Math.sin(ang), half = 250;
-        function fp(a, b) { return [aim[0] + (fx*a + sx*b) / M_LON, aim[1] + (fy*a + sy*b) / M_LAT]; }
+        function fp(a, b) { return [frameAim[0] + (fx*a + sx*b) / M_LON, frameAim[1] + (fy*a + sy*b) / M_LAT]; }
         sc.box = [fp(half,-half), fp(half,half), fp(-half,half), fp(-half,-half), fp(half,-half)];
         sc.links = [[[p.lon,p.lat], fp(0,-half)], [[p.lon,p.lat], fp(0,half)]];
       }
