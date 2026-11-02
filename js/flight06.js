@@ -766,15 +766,26 @@ window.FLIGHT06 = (function () {
   }
   function scans(t) {
     var out = [];
+    ORBIT_DRONES.forEach(function (d) {
+      if (d.orbit.boxOnT !== undefined) return;
+      var o = d.orbit, first = null;
+      for (var tt = T_REASSIGN; tt < T_REPLAN2; tt += 0.5) {
+        var pp = posOf(d, tt);
+        var dd = Math.hypot((pp.lon - o.center[0]) * M_LON, (pp.lat - o.center[1]) * M_LAT);
+        if (dd <= 2000.5) { first = tt; break; }
+      }
+      o.boxOnT = first;
+    });
     for (var i = 0; i < D.length; i++) {
       var d = D[i];
       if (d.type !== "blue" || !d.path || t < (d.tStart || 0)) continue;
       if (d.attack && d.attack.tGone !== Infinity && t >= d.attack.tGone) continue;
       var p = posOf(d, t);
       var aim = (d.orbit && t >= T_REASSIGN && !(d.replan2 && t >= T_REPLAN2)) ? d.orbit.center : (d.track3 && t >= T003_ASSIGN ? target003Pos(t) : null);
-      var frameAim = (d.orbit && t >= T_REASSIGN && !(d.replan2 && t >= T_REPLAN2)) ? d.orbit.center : (d.track3 && t >= T003_ASSIGN && t < T003_DESTROY ? target003Pos(t) : null);
+      var orbitBoxOn = d.orbit && t >= T_REASSIGN && t < T_REPLAN2 && d.orbit.boxOnT != null && t >= d.orbit.boxOnT;
+      var frameAim = (orbitBoxOn && !(d.replan2 && t >= T_REPLAN2)) ? d.orbit.center : (d.track3 && t >= T003_ASSIGN && t < T003_DESTROY ? target003Pos(t) : null);
       var sc = scanOf(p, t, d.tStart, aim);
-      var hideOrbitFan = d.orbit && t >= T_REASSIGN && t < T_REPLAN2;
+      var hideOrbitFan = orbitBoxOn;
       var hideTrack3Fan = d.track3 && t >= T003_ASSIGN;
       if (hideOrbitFan || hideTrack3Fan) { sc.quad = null; sc.rays = []; sc.sweep = null; }
       if (frameAim) {
