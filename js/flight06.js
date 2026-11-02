@@ -506,6 +506,7 @@ window.FLIGHT06 = (function () {
     d.replan2 = { path: P, start: sp, tTrans: dist / V, tOn: T_REPLAN2 + dist / V };
   });
   var T003_REPLAN1 = 4508.00;
+  var T003_RETURN = 4825.20;
   /* 003任务分配3秒后：区域1剩余8架光电无人机重规划为4×2 */
   var PHOTO1B = [];
   (function () {
@@ -529,6 +530,21 @@ window.FLIGHT06 = (function () {
     var dist = Math.hypot(dx, dy);
     d.replan1 = { path: P, start: sp, tTrans: dist / V, tOn: T003_REPLAN1 + dist / V };
   });
+  /* 003目标确认摧毁并等待3秒后：02号返回区域1，9架无人机按3×3重新规划 */
+  var PHOTO1C = [];
+  (function () {
+    var cellW = 20000 / 3, cellH = 20000 / 3;
+    for (var row = 0; row < 3; row++) {
+      for (var col = 0; col < 3; col++) {
+        var cx = POT1[0] + ((col - 1) * cellW) / M_LON;
+        var cy = POT1[1] + ((row - 1) * cellH) / M_LAT;
+        var x1 = cx - 1600 / M_LON, x2 = cx + 1600 / M_LON;
+        var y0 = cy - (cellH / 2) / M_LAT, y1 = cy + (cellH / 2) / M_LAT;
+        PHOTO1C.push(poly([[x1, y0], [x1, y1], [x2, y1], [x2, y0], [x1, y0]]));
+      }
+    }
+  })();
+  var PHOTO1C_DRONES = D.filter(function (d) { return d.type === "blue" && d.k >= 1 && d.k <= 9; });
   var T003_ASSIGN = 4505.00;
   var T003_TRACK_ARRIVE = 4638.00;
   var T003_ORBIT_START = 4806.00;
@@ -618,10 +634,35 @@ window.FLIGHT06 = (function () {
     var P3 = [joinX, joinY];
     d.track3 = { side: side, start: sp, tTrans: duration, orbitPhase: basePhase, P0: P0, P1: P1, P2: P2, P3: P3 };
   }
+  function initReturnReplan() {
+    var active = PHOTO1C_DRONES.filter(function (d) { return !d.replan3; });
+    if (!active.length) return;
+    var drones = active.map(function (d) { return { d: d, start: posOf(d, T003_RETURN), pathIdx: -1 }; });
+    var used = {}, pairs = [];
+    drones.forEach(function (row, di) {
+      PHOTO1C.forEach(function (P, pi) {
+        var p0 = at(P, 0);
+        var dx = (p0.lon - row.start.lon) * M_LON, dy = (p0.lat - row.start.lat) * M_LAT;
+        pairs.push({ di: di, pi: pi, dist: Math.hypot(dx, dy) });
+      });
+    });
+    pairs.sort(function (a, b) { return a.dist - b.dist; });
+    pairs.forEach(function (pair) {
+      if (drones[pair.di].pathIdx >= 0 || used[pair.pi]) return;
+      drones[pair.di].pathIdx = pair.pi; used[pair.pi] = true;
+    });
+    drones.forEach(function (row) {
+      var P = PHOTO1C[Math.max(0, row.pathIdx)];
+      var dx = (at(P, 0).lon - row.start.lon) * M_LON, dy = (at(P, 0).lat - row.start.lat) * M_LAT;
+      var dist = Math.hypot(dx, dy);
+      row.d.replan3 = { path: P, start: row.start, tTrans: dist / V, tOn: T003_RETURN + dist / V };
+    });
+  }
   function assign003(attackNo, reconNo, t) {
     resetTracking();
     assignTracking(attackNo, t, 1);
     assignTracking(reconNo, t, -1);
+    initReturnReplan();
   }
   function track3Point(d, t) {
     var tr = d.track3, aim = target003Pos(t);
@@ -664,6 +705,19 @@ window.FLIGHT06 = (function () {
       var dx = 3*v*v*(atk.P1[0]-atk.P0[0]) + 6*v*u*(atk.P2[0]-atk.P1[0]) + 3*u*u*(atk.P3[0]-atk.P2[0]);
       var dy = 3*v*v*(atk.P1[1]-atk.P0[1]) + 6*v*u*(atk.P2[1]-atk.P1[1]) + 3*u*u*(atk.P3[1]-atk.P2[1]);
       return { lon: lon, lat: lat, r: Math.atan2(dx, dy) * 180 / Math.PI };
+    }
+    if (d.replan3 && t >= T003_RETURN) {
+      var rp3 = d.replan3;
+      if (t < rp3.tOn && rp3.start) {
+        var f3r = (t - T003_RETURN) / Math.max(1e-6, rp3.tTrans);
+        var q03 = at(rp3.path, 0);
+        var dx3r = (q03.lon - rp3.start.lon) * M_LON, dy3r = (q03.lat - rp3.start.lat) * M_LAT;
+        return { lon: rp3.start.lon + (q03.lon - rp3.start.lon) * f3r,
+                 lat: rp3.start.lat + (q03.lat - rp3.start.lat) * f3r,
+                 r: Math.atan2(dx3r, dy3r) * 180 / Math.PI };
+      }
+      var q13 = at(rp3.path, (t - rp3.tOn) * V);
+      return { lon: q13.lon, lat: q13.lat, r: rotOf(q13) };
     }
     if (d.track3 && t >= T003_ASSIGN) {
       var p3t = track3Point(d, t);
@@ -769,6 +823,7 @@ window.FLIGHT06 = (function () {
         if (tt < 0) continue;
         if (d.replan && t >= T_REPLAN && tt < T_REPLAN) continue;
         if (d.replan1 && t >= T003_REPLAN1 && tt < T003_REPLAN1) continue;
+        if (d.replan3 && t >= T003_RETURN && tt < T003_RETURN) continue;
         if (d.replan2 && t >= T_REPLAN2 && tt < T_REPLAN2) continue;
         var q = posOf(d, tt);
         trail.push([+q.lon.toFixed(5), +q.lat.toFixed(5)]);
@@ -819,12 +874,13 @@ window.FLIGHT06 = (function () {
       if (d.type !== "blue" || !d.path || t < (d.tStart || 0)) continue;
       if (d.attack && d.attack.tGone !== Infinity && t >= d.attack.tGone) continue;
       var p = posOf(d, t);
-      var aim = (d.orbit && t >= T_REASSIGN && !(d.replan2 && t >= T_REPLAN2)) ? d.orbit.center : (d.track3 && t >= T003_ASSIGN ? target003Pos(t) : null);
+      var track3Active = d.track3 && t >= T003_ASSIGN && !(d.replan3 && t >= T003_RETURN);
+      var aim = (d.orbit && t >= T_REASSIGN && !(d.replan2 && t >= T_REPLAN2)) ? d.orbit.center : (track3Active ? target003Pos(t) : null);
       var orbitBoxOn = d.orbit && t >= T_REASSIGN && t < T_REPLAN2 && d.orbit.boxOnT != null && t >= d.orbit.boxOnT;
-      var frameAim = (orbitBoxOn && !(d.replan2 && t >= T_REPLAN2)) ? d.orbit.center : (d.track3 && t >= T003_ASSIGN && t < T003_DESTROY ? target003Pos(t) : null);
+      var frameAim = (orbitBoxOn && !(d.replan2 && t >= T_REPLAN2)) ? d.orbit.center : (track3Active && t < T003_DESTROY ? target003Pos(t) : null);
       var sc = scanOf(p, t, d.tStart, aim);
       var hideOrbitFan = orbitBoxOn;
-      var hideTrack3Fan = d.track3 && t >= T003_ASSIGN;
+      var hideTrack3Fan = track3Active;
       if (hideOrbitFan || hideTrack3Fan) { sc.quad = null; sc.rays = []; sc.sweep = null; }
       if (frameAim) {
         var dx = (p.lon - frameAim[0]) * M_LON, dy = (p.lat - frameAim[1]) * M_LAT;
@@ -1047,9 +1103,35 @@ window.FLIGHT06 = (function () {
       });
     }
     COV.afterPhoto1 = afterPhoto1;
+    COV.buildAfterPhoto3 = function () {
+      if (COV.afterPhoto3) return;
+      var a3 = new Array(cells.length);
+      for (var z3 = 0; z3 < cells.length; z3++) a3[z3] = Infinity;
+      var ppr3 = par.photo, pr0d = Math.max(0, ppr3.r0 - 700), pr1d = ppr3.r1 + 700;
+      for (var at3 = T003_RETURN; at3 <= TOTAL; at3 += COV.step) {
+        kinds.photo.forEach(function (d) {
+          if (!d.replan3) return;
+          var p3 = posOf(d, at3);
+          var hd3 = (p3.r || 0) * Math.PI / 180;
+          var fx3 = Math.sin(hd3), fy3 = Math.cos(hd3);
+          var px3 = p3.lon * M_LON, py3 = p3.lat * M_LAT;
+          for (var ci3 = 0; ci3 < COV.zoneSize; ci3++) {
+            if (a3[ci3] <= at3) continue;
+            var dx3 = cells[ci3].mx - px3, dy3 = cells[ci3].my - py3;
+            if (dx3 > pr1d || dx3 < -pr1d || dy3 > pr1d || dy3 < -pr1d) continue;
+            var dist3 = Math.sqrt(dx3 * dx3 + dy3 * dy3);
+            if (dist3 < pr0d || dist3 > pr1d) continue;
+            if ((dx3 * fx3 + dy3 * fy3) / dist3 < ppr3.cos) continue;
+            a3[ci3] = at3;
+          }
+        });
+      }
+      COV.afterPhoto3 = a3;
+    };
   })();
   function coverage(t) {
-    var b = (t < T_REPLAN ? 0 : t < T_REPLAN2 ? 100000 : t < T003_REPLAN1 ? 200000 : 300000) + Math.floor(t / COV.step);
+    if (t >= T003_RETURN && !COV.afterPhoto3 && COV.buildAfterPhoto3) COV.buildAfterPhoto3();
+    var b = (t < T_REPLAN ? 0 : t < T_REPLAN2 ? 100000 : t < T003_REPLAN1 ? 200000 : t < T003_RETURN ? 300000 : 400000) + Math.floor(t / COV.step);
     if (COV.cache && COV.cacheT === b) return COV.cache;
     var out = {};
     Object.keys(COV.first).forEach(function (k) {
@@ -1060,7 +1142,7 @@ window.FLIGHT06 = (function () {
       for (var i = iStart; i < iEnd; i++) {
         var cell = COV.cells[i];
         if (k === "photo" && cell.zone === 0) {
-          var src0 = t < T003_REPLAN1 ? f : COV.afterPhoto1;
+          var src0 = t < T003_REPLAN1 ? f : t < T003_RETURN ? COV.afterPhoto1 : COV.afterPhoto3;
           if (src0[i] <= t) arr.push(cell);
         } else if (k === "photo" && cell.zone === 1) {
           var src1 = t < T_REPLAN ? f : t < T_REPLAN2 ? af : af2;
@@ -1080,6 +1162,10 @@ window.FLIGHT06 = (function () {
     for (var i = 0; i < D.length; i++) {
       var d = D[i];
       if (d.attack && d.attack.tGone !== Infinity && t >= d.attack.tGone) continue;
+      if (d.replan3 && t >= T003_RETURN) {
+        o.push({ type: d.type, pts: d.replan3.path.pts.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
+        continue;
+      }
       if (d.track3 && t >= T003_ASSIGN) {
         var tpts = [];
         if (t < T003_TRACK_ARRIVE) {
@@ -1129,5 +1215,5 @@ window.FLIGHT06 = (function () {
     if (t < mn) return "编队飞行";
     return "侦察";
   }
-  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, T_REASSIGN: T_REASSIGN, T_REPLAN: T_REPLAN, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks, scans: scans, fans: fans, sarScans: sarScans, coverage: coverage, T_TRACKS: T_TRACKS, T003_ASSIGN: T003_ASSIGN, T003_REPLAN1: T003_REPLAN1, T003_TRACK_ARRIVE: T003_TRACK_ARRIVE, T003_ORBIT_START: T003_ORBIT_START, target003Pos: target003Pos, target003Tangent: target003Tangent, pickNearest003: pickNearest003, assign003: assign003, resetTracking: resetTracking, startAttack: startAttack, endAttack: endAttack, resetAttack: resetAttack, resetAttacks: resetAttacks };
+  return { TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_ARR: TARR, T_REASSIGN: T_REASSIGN, T_REPLAN: T_REPLAN, HIST: HIST_DT * HIST_N, phase: phase, simulate: simulate, tracks: tracks, scans: scans, fans: fans, sarScans: sarScans, coverage: coverage, T_TRACKS: T_TRACKS, T003_ASSIGN: T003_ASSIGN, T003_REPLAN1: T003_REPLAN1, T003_RETURN: T003_RETURN, T003_TRACK_ARRIVE: T003_TRACK_ARRIVE, T003_ORBIT_START: T003_ORBIT_START, target003Pos: target003Pos, target003Tangent: target003Tangent, pickNearest003: pickNearest003, assign003: assign003, resetTracking: resetTracking, startAttack: startAttack, endAttack: endAttack, resetAttack: resetAttack, resetAttacks: resetAttacks };
 })();
