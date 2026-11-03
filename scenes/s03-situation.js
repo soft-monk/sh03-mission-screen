@@ -209,10 +209,10 @@ function make(variant) {
               '<div class="s6-tb-body">' +
                 '<div class="s6-tb-row"><span>类型</span><b>地面运动目标</b></div>' +
                 '<div class="s6-tb-row"><span>判定</span><b class="sus s6-tb-judge">疑似（未经确认）</b></div>' +
-                '<div class="s6-tb-row"><span>来源</span><b>GMTI雷达</b></div>' +
+                '<div class="s6-tb-row"><span>来源</span><b>GMTI雷达-01</b></div>' +
                 '<div class="s6-tb-row"><span>区域</span><b>潜在目标部署区-1</b></div>' +
-                '<div class="s6-tb-row"><span>速度</span><b>90 km/h</b></div>' +
-                '<div class="s6-tb-row"><span>方位</span><b>045° / 东北</b></div>' +
+                '<div class="s6-tb-row"><span>速度</span><b class="s6-tb-speed">90 km/h</b></div>' +
+                '<div class="s6-tb-row"><span>经纬度</span><b class="s6-tb-ll">113.862730, 39.705150</b></div>' +
                 '<div class="s6-tb-tags"><i>运动目标</i><i>待复核</i></div>' +
               '</div>' +
             '</div>' +
@@ -456,6 +456,9 @@ function make(variant) {
       var renderedDestroyed = { "001": null, "002": null, "003": null };
       var itemByNo = {};
       targetItems.forEach(function (el) { itemByNo[el.getAttribute("data-target")] = el; });
+      var ll003El = root.querySelector(".s6-tb-ll");
+      var speed003El = root.querySelector(".s6-tb-speed");
+      var last003LlmSec = null;
       function ensureTargets() {
         if (targetsCreated) return;
         targetsCreated = true;
@@ -562,11 +565,20 @@ function make(variant) {
           var confirmed = t >= s.confirmAt;
           var destroyed = !!destroyedState[s.no];
           var col = (confirmed || destroyed) ? "#ef4444" : "#fbbf24";
+          var mp = null;
           if (s.move && s.targetLabel) {
-            var mp = movingTargetPos(s, t);
+            mp = movingTargetPos(s, t);
             s.targetLabel.setLngLat(mp);
             map.movingCircle("target003-circle", mp, 100, col);
             map.setVis(["target003-circle"], true);
+          }
+          if (s.no === "003" && mp && ll003El) {
+            var sec003 = Math.floor(t);
+            if (sec003 !== last003LlmSec) {
+              last003LlmSec = sec003;
+              ll003El.textContent = mp[0].toFixed(6) + ", " + mp[1].toFixed(6);
+              if (speed003El) speed003El.textContent = (85 + Math.abs((sec003 * 7 + 3) % 11)) + " km/h";
+            }
           }
           s.targetLabel.set(1);
           if (s.targetIcon) s.targetIcon.set(true, (confirmed || destroyed) ? "red" : "yellow");
