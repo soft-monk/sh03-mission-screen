@@ -72,6 +72,61 @@ function make(variant) {
   ];
   var ACTIVE_VOICE = VOICE, ACTIVE_UAVS = UAVS, ACTIVE_GROUPS = GROUPS;
   var ACTIVE_REASONS = REASONS, ACTIVE_METRICS = METRICS, ACTIVE_RES = RES;
+  function sharedAiMessages() {
+    window.APP_STATE = window.APP_STATE || {};
+    if (!window.APP_STATE.aiMessages) window.APP_STATE.aiMessages = [];
+    return window.APP_STATE.aiMessages;
+  }
+  function pushSharedAi(key, who, text) {
+    var arr = sharedAiMessages();
+    for (var i = 0; i < arr.length; i++) if (arr[i].key === key) return;
+    arr.push({ key: key, who: who || "ai", text: text });
+  }
+  function renderSharedAi(el) {
+    if (!el) return;
+    var arr = sharedAiMessages(), html = "";
+    for (var i = 0; i < arr.length; i++) {
+      var who = arr[i].who || "ai";
+      html += '<div class="s6-msg ' + who + '"><div class="s6-avatar">' + (who === "user" ? "用户" : "AI") + '</div><div class="s6-bubble">' + arr[i].text + '</div></div>';
+    }
+    el.innerHTML = html;
+    var sc = el.closest(".s6-chat-scroll");
+    if (sc) {
+      var n = arr.length;
+      if (el.__lastAiLen !== n) {
+        el.__lastAiLen = n;
+        sc.scrollTop = n <= 1 ? 0 : sc.scrollHeight;
+      }
+    }
+  }
+  function resetScenarioAudio() {
+    window.APP_STATE = window.APP_STATE || {};
+    var a = window.APP_STATE.aiAudio;
+    if (a) {
+      (a.timers || []).forEach(function (id) { clearTimeout(id); });
+      (a.audios || []).forEach(function (au) { try { au.pause(); au.currentTime = 0; } catch (err) {} });
+    }
+    window.APP_STATE.aiAudio = { started: false, audios: [], timers: [] };
+  }
+  window.resetScenarioAudio = resetScenarioAudio;
+  function startScenarioDialog() {
+    var cfg = window.getSelectedScenario ? window.getSelectedScenario() : null;
+    if (!cfg || !cfg.dialog || !cfg.dialog.length) return;
+    window.APP_STATE = window.APP_STATE || {};
+    var st = window.APP_STATE.aiAudio || (window.APP_STATE.aiAudio = { started: false, audios: [], timers: [] });
+    if (st.started) return;
+    st.started = true;
+    cfg.dialog.forEach(function (it) {
+      var delay = Math.max(0, (it.at || 0) * 1000);
+      st.timers.push(setTimeout(function () { pushSharedAi(it.key, it.who, it.text); }, delay));
+    });
+    (cfg.audio || []).forEach(function (au) {
+      var audio = new Audio(au.src);
+      st.audios.push(audio);
+      var delay = Math.max(0, (au.at || 0) * 1000);
+      st.timers.push(setTimeout(function () { var pr = audio.play(); if (pr && pr.catch) pr.catch(function () {}); }, delay));
+    });
+  }
   /* 区域（真实经纬度）—— 只服务平面版
      任务区：80 x 80 km（用户给定四角），中心 114.098 / 39.883
      集结区：4 x 4 km，中心 116.38 / 39.87（东侧城区）
@@ -281,7 +336,7 @@ function make(variant) {
       '<section class="s3-side"></section>' +
       '<div class="s3-scale"><b></b><span>2 km</span></div>' +
       '<div class="s3-coord">116.53850, 39.76102</div>' +
-      (IS_SELECT ? '<div class="s3-cards"></div><div class="s3-prompt">请选择任务场景</div>' : (IS_MISSION ? VOICE_HTML : FRAME_HTML)) +
+      (IS_SELECT ? '<div class="s3-cards"></div><div class="s3-prompt">请选择任务场景</div>' : (IS_MISSION ? '<div class="s3-go"><i>&raquo;</i><span>进入任务执行</span><i>&raquo;</i></div>' : FRAME_HTML)) +
       SH06_RIGHT_HTML +
       SH06_VIDEO_HTML +
       '<button class="s3-mic">' + ic("mic", 26, "", 1.7) + '</button>' +
@@ -370,16 +425,9 @@ function make(variant) {
     });
 
     root.querySelector(".s3-side").innerHTML =
-      (IS_SELECT ? '' : '<div class="s3-panel">' +
-      '<div class="s3-sh">AI 任务分析</div>' +
-      '<div class="s3-rows">' +
-        row("当前区域威胁等级", "中", "#fbbf24") +
-        row("敌方防御强度", "强", "#f87171") +
-        row("通信干扰强度", "中", "#fbbf24") +
-      '</div>' +
-      '<div class="s3-desc-h">态势简述</div>' +
-      '<div class="s3-desc">敌方呈分散防御结构，通信节点暴露度较高，建议优先构建前沿局部任务体系，先侦察后打击。</div>' +
-      '</div>') +
+      (sc && (sc.id === "SH-04" || sc.id === "SH-05")
+        ? '<section class="s6-ai s3-ai-shared"><div class="s6-ai-h">' + ic("mic", 16, "", 1.6) + '<span>AI决策助手</span></div><div class="s6-chat s6-chat-scroll"><div class="s6-ai-log common-ai-log"></div></div></section>'
+        : '') +
       (IS_MISSION
         ? '<div class="s3-panel">' +
             '<div class="s3-tih">任务信息</div>' +
@@ -388,8 +436,7 @@ function make(variant) {
             '<div class="s3-tir"><span>任务区域</span><b>' + ((SCFG && SCFG.region) || '西南方向山区') + '</b></div>' +
             '<div class="s3-tir"><span>任务时间</span><b>2024-06-28 15:14</b></div>' +
             '<div class="s3-tir"><span>任务状态</span><b class="warn">任务准备中</b></div>' +
-          '</div>' +
-          '<div class="s3-go"><i>&raquo;</i><span>进入任务执行</span><i>&raquo;</i></div>'
+          '</div>'
         : '<div class="s3-panel s3-res">' +
             '<div class="s3-res-h">' + ic("nodes", 18, "", 1.6) + '<span>资源概况</span></div>' +
             '<div class="s3-grid">' +
@@ -401,7 +448,7 @@ function make(variant) {
             '</div>' +
           '</div>');
 
-    if (IS_BARE) {
+    if (IS_BARE && !IS_PLAN) {
       var sideEl0 = root.querySelector(".s3-side");
       sideEl0.innerHTML = "";
       sideEl0.style.display = "none";
@@ -1139,15 +1186,12 @@ function make(variant) {
         if (!aiLogEl) return;
         var n = 0;
         for (var i = 0; i < AI_EVENTS.length; i++) if (t + 1e-6 >= AI_EVENTS[i].t) n++;
-        if (aiLogEl.getAttribute("data-n") === String(n)) return;
-        aiLogEl.setAttribute("data-n", String(n));
-        var html = "";
-        for (var j = 0; j < n; j++) {
-          var who = AI_EVENTS[j].who || "ai";
-          html += '<div class="s6-msg ' + who + '"><div class="s6-avatar">' + (who === "user" ? "用户" : "AI") + '</div><div class="s6-bubble">' + AI_EVENTS[j].text + '</div></div>';
-        }
-        aiLogEl.innerHTML = html;
-        if (aiChatEl) aiChatEl.scrollTop = aiChatEl.scrollHeight;
+        var sharedN = sharedAiMessages().length;
+        var sig = String(n) + ":" + String(sharedN);
+        if (aiLogEl.getAttribute("data-n") === sig) return;
+        aiLogEl.setAttribute("data-n", sig);
+        for (var j = 0; j < n; j++) pushSharedAi("s6-" + j, AI_EVENTS[j].who, AI_EVENTS[j].text);
+        renderSharedAi(aiLogEl);
       }
 
       function fmt(s) { var m = Math.floor(s / 60), ss = Math.floor(s % 60); var mm = m < 10 ? "0" + m : String(m); return mm + ":" + ("0" + ss).slice(-2); }
@@ -1397,6 +1441,8 @@ function make(variant) {
         if (!P) return;
         window.APP_STATE = window.APP_STATE || {};
         window.APP_STATE.scenarioId = card.id;
+        if (window.resetScenarioAudio) window.resetScenarioAudio();
+        window.APP_STATE.aiMessages = [];
         var cfg = window.getScenarioConfig ? window.getScenarioConfig(card.id) : null;
         window.APP_STATE.flow = (cfg && cfg.flow) ? cfg.flow.slice() : ["SH-04", "SH-05", "SH-06"];
         el.classList.add("picked");
@@ -1487,8 +1533,8 @@ function make(variant) {
         ".s3-tir span{color:#8fa8c4;flex:none;width:74px}",
         ".s3-tir b{color:#dbeafe;font-weight:600;letter-spacing:.5px}",
         ".s3-tir b.warn{color:#fbbf24}",
-        ".s3-go{height:58px;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:16px;cursor:pointer;",
-        "  font-size:19px;letter-spacing:3px;color:#eaf6ff;background:linear-gradient(180deg,#1d4ed8,#0b2a63);",
+        ".s3-go{position:absolute;right:32px;bottom:158px;width:344px;height:56px;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:12px;cursor:pointer;z-index:13;",
+        "  font-size:18px;letter-spacing:3px;color:#eaf6ff;background:linear-gradient(180deg,#1d4ed8,#0b2a63);",
         "  border:1px solid rgba(56,189,248,.55);box-shadow:0 0 26px rgba(37,99,235,.45),0 0 0 1px rgba(56,189,248,.2) inset}",
         ".s3-go i{font-style:normal;color:#7dd3fc;letter-spacing:-3px;font-size:20px}",
         ".s3-back{height:52px;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;",
@@ -1534,7 +1580,7 @@ function make(variant) {
         ".s5-gk img{width:34px;height:auto}",
         ".s5-gv{font-family:var(--num);font-size:20px;color:#7dd3fc}",
         ".s5-gv em{font-style:normal;font-size:12px;color:#8fa8c4;margin-left:3px}",
-        ".s5-why{position:absolute;left:auto;right:32px;top:88px;width:344px;border-radius:12px;background:linear-gradient(180deg,rgba(6,18,32,.94),rgba(4,12,22,.96));",
+        ".s5-why{position:absolute;left:auto;right:400px;top:88px;width:340px;border-radius:12px;background:linear-gradient(180deg,rgba(6,18,32,.94),rgba(4,12,22,.96));",
         "  border:1px solid rgba(56,189,248,.22);padding:14px 16px;z-index:12}",
         ".s5-wh{font-size:16px;letter-spacing:1px;color:#7dd3fc;padding:4px 0 10px}",
         ".s5-ul{list-style:none;margin:0;padding:0}",
@@ -1708,6 +1754,7 @@ function make(variant) {
       variant: variant,
       scid: sc && sc.id,
       voicePanel: root.querySelector(".s4-voice"),
+      commonAiLog: root.querySelector(".common-ai-log"),
       bubbles: [].slice.call(root.querySelectorAll(".s4-bub")),
       shown: [], shownAt: [],
       micBig: root.querySelector(".s4-mic"),
@@ -1814,6 +1861,14 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
     /* 等待点：提示淡入 + 呼吸
        呼吸只用 transform 缩放（走合成层，不重绘）；阴影是 CSS 里写死的静态值。
        之前每帧改 box-shadow 会让三张卡片 + 提示条每帧重绘一大片，等待时自然发卡。 */
+    if (e.variant === "mission") {
+      ACTIVE_VOICE.forEach(function (v, i) {
+        if (t >= v.t) pushSharedAi("s4-" + i, v.who, v.text);
+      });
+      renderSharedAi(e.commonAiLog);
+    } else if (e.variant === "plan") {
+      renderSharedAi(e.commonAiLog);
+    }
     /* SH-04：底部 AI 决策助手
        对话气泡常显（不按时间淡入）——这样从别的屏返回 SH-04 时对话还在，
        也不会出现"停在 t=0 时整块面板透明看不见"的情况。 */
@@ -1866,6 +1921,7 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
   function onShow(e) {
     if (e && e.scid === "SH-03" && window.APP_STATE) { window.APP_STATE.scenarioId = null; window.APP_STATE.flow = []; }
     if (e && e.scid === "SH-03") clearAreaGraphics(e);
+    if (e && e.scid === "SH-04") startScenarioDialog();
     else if (e && window.APP_STATE && window.APP_STATE.scenarioId) setAreaGraphics(e, true);
     /* 切到前台：先把共享画布挂到自己容器上（若它还在别的屏里），再校准一次 */
     if (e && e.scid === "SH-06" && window.PLAYER) window.PLAYER.pause();   /* 这一屏交给飞行演示的独立时钟 */

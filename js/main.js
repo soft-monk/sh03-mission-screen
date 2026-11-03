@@ -191,7 +191,7 @@
     prev: () => { const i = idxAt(T); seek(TL.screens[Math.max(0, i - 1)].t); },
     next: () => { const i = idxAt(T); seek(TL.screens[Math.min(TL.screens.length - 1, i + 1)].t); },
     replay: () => {
-      try { if (window.APP_STATE) { window.APP_STATE.scenarioId = null; window.APP_STATE.flow = []; } } catch (e) {}
+      try { if (window.resetScenarioAudio) window.resetScenarioAudio(); if (window.APP_STATE) { window.APP_STATE.scenarioId = null; window.APP_STATE.flow = []; window.APP_STATE.aiMessages = []; } } catch (e) {}
       endcard.classList.remove("on");
       backLock = false;
       for (const k in cache) {
