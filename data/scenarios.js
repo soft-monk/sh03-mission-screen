@@ -1,12 +1,12 @@
 /* 场景配置：地图区域、资源、AI语音、编组和后续流程。
-   场景一保持现有内容；场景二、三为独立配置分支，当前先提供可运行占位数据。 */
+   当前已实现的完整业务内容归属场景二；场景一、场景三为待设计占位分支。 */
 (function () {
   var BASE = {
-    id: "scene-1",
-    name: "敏捷拒止布控",
-    short: "场景一",
+    id: "scene-2",
+    name: "区域封控",
+    short: "场景二",
     enabled: true,
-    region: "西南方向山区",
+    region: "东部区域封控区",
     camera: { center: [114.100, 39.880], zoom: 9.13, pitch: 38, bearing: -20 },
     area: {
       mission: [[113.62960, 39.51435], [114.56639, 39.51435], [114.56639, 40.25096], [113.62960, 40.25096]],
@@ -61,15 +61,15 @@
     Object.keys(over || {}).forEach(function (k) { cfg[k] = over[k]; });
     return cfg;
   }
-  var S2 = variant("scene-2", "区域封控", "场景二", {
-    region: "东部区域封控区",
+  var S2 = variant("scene-1", "敏捷拒止布控", "场景一", {
+    region: "场景一待设计区域",
     camera: { center: [114.100, 39.880], zoom: 9.25, pitch: 38, bearing: -20 },
     area: {
       mission: [[114.72, 39.62], [115.52, 39.62], [115.52, 40.18], [114.72, 40.18]],
-      targets: [{ name: "封控目标区-1", label: [115.02, 39.92], pts: [[114.92, 39.82], [115.12, 39.82], [115.12, 40.02], [114.92, 40.02]] }],
+      targets: [{ name: "场景一目标区（待设计）", label: [115.02, 39.92], pts: [[114.92, 39.82], [115.12, 39.82], [115.12, 40.02], [114.92, 40.02]] }],
       reserve: [[115.62, 39.70], [115.70, 39.70], [115.70, 39.78], [115.62, 39.78]]
     },
-    noFly: [{ n: "禁飞区-封控", lp: [115.28, 39.96], pts: [[115.16, 39.90], [115.38, 39.90], [115.38, 40.04], [115.16, 40.04]] }],
+    noFly: [{ n: "禁飞区-场景一", lp: [115.28, 39.96], pts: [[115.16, 39.90], [115.38, 39.90], [115.38, 40.04], [115.16, 40.04]] }],
     res: [{ k: "光电", img: "uav-blue.png", v: "32", c: "56,189,248" }, { k: "雷达", img: "uav-yellow.png", v: "36", c: "250,204,21" }, { k: "电子", img: "uav-red.png", v: "20", c: "248,113,113" }, { k: "通信", img: "uav-green.png", v: "16", c: "74,222,128" }],
     uavs: [
       { k: "光电无人机", img: "uav-blue.png", c: "56,189,248", total: 32, avail: 32, caps: ["侦察", "识别", "跟踪"], used: 16, rest: 16 },
@@ -84,10 +84,10 @@
     ],
     metrics: [{ k: "封控覆盖率", v: 91 }, { k: "边界完整度", v: 95 }, { k: "目标发现效率", v: 88 }, { k: "电子压制能力", v: 92 }, { k: "任务成功率", v: 89 }, { k: "资源利用率", v: 84 }],
     voice: [
-      { t: 1.5, who: "ai", text: "区域封控场景已加载，正在构建封控边界和目标区域。" },
-      { t: 5.0, who: "ai", text: "建议优先部署雷达与电子集群，建立区域封控屏障。" },
-      { t: 7.5, who: "user", text: "给出封控方案。" },
-      { t: 9.5, who: "ai", text: "采用分区封控、重点压制和通信中继保障的协同方案。" }
+      { t: 1.5, who: "ai", text: "场景一尚未完成设计，当前仅加载场景框架。" },
+      { t: 5.0, who: "ai", text: "场景一任务区域、目标和兵力配置待补充。" },
+      { t: 7.5, who: "user", text: "查看场景一配置。" },
+      { t: 9.5, who: "ai", text: "场景一后续流程将在设计完成后接入。" }
     ]
   });
   var S3 = variant("scene-3", "要点防护", "场景三", {
@@ -120,10 +120,10 @@
       { t: 9.5, who: "ai", text: "采用外围预警、要区防护和机动支援的分层防护方案。" }
     ]
   });
-  var configs = { "scene-1": BASE, "scene-2": S2, "scene-3": S3 };
+  var configs = { "scene-1": S2, "scene-2": BASE, "scene-3": S3 };
   window.SCENARIO_CONFIG = configs;
   window.SCENARIO_ORDER = ["scene-1", "scene-2", "scene-3"];
   window.APP_STATE = window.APP_STATE || { scenarioId: null, flow: [] };
   window.getScenarioConfig = function (id) { return configs[id] || null; };
-  window.getSelectedScenario = function () { return configs[window.APP_STATE.scenarioId] || BASE; };
+  window.getSelectedScenario = function () { return configs[window.APP_STATE.scenarioId] || null; };
 })();
