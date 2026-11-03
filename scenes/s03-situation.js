@@ -354,7 +354,7 @@ function make(variant) {
     });
 
     root.querySelector(".s3-side").innerHTML =
-      '<div class="s3-panel">' +
+      (IS_SELECT ? '' : '<div class="s3-panel">' +
       '<div class="s3-sh">AI 任务分析</div>' +
       '<div class="s3-rows">' +
         row("当前区域威胁等级", "中", "#fbbf24") +
@@ -363,7 +363,7 @@ function make(variant) {
       '</div>' +
       '<div class="s3-desc-h">态势简述</div>' +
       '<div class="s3-desc">敌方呈分散防御结构，通信节点暴露度较高，建议优先构建前沿局部任务体系，先侦察后打击。</div>' +
-      '</div>' +
+      '</div>') +
       (IS_MISSION
         ? '<div class="s3-panel">' +
             '<div class="s3-tih">任务信息</div>' +
@@ -1745,7 +1745,7 @@ var zoom = is3d ? FX.lerp(10.95, 11.25, cp) : CAM03.zoom;
 
     if (t < 3.4 || !e._settled) {
       /* SH-04 不重播进场动画：时间直接当已播完，界面一次性给到完成态 */
-      var ti = e.variant === "select" ? t : 99;
+      var ti = 99;
       if (t >= 3.4) e._settled = true;
     /* 左侧菜单逐项浮入 */
     e.menu.forEach(function (n, i) {
@@ -1783,9 +1783,9 @@ var zoom = is3d ? FX.lerp(10.95, 11.25, cp) : CAM03.zoom;
     /* 三张场景卡 */
     e.cards.forEach(function (n, i) {
       /* 顺序：先出「请选择任务场景」，再依次浮出三张场景卡 */
-      var q = FX.easeOut(FX.at(t, 8.60 + i * 0.34, 9.30 + i * 0.34));
+      var q = IS_SELECT ? 1 : FX.easeOut(FX.at(t, 8.60 + i * 0.34, 9.30 + i * 0.34));
       n.style.opacity = q;
-      n.style.transform = "translateY(" + ((1 - q) * 26).toFixed(1) + "px)";
+      n.style.transform = IS_SELECT ? "translateY(0px)" : "translateY(" + ((1 - q) * 26).toFixed(1) + "px)";
     });
 
     /* 等待点：提示淡入 + 呼吸
@@ -1814,10 +1814,10 @@ var zoom = is3d ? FX.lerp(10.95, 11.25, cp) : CAM03.zoom;
     }
 
     if (e.prompt) {
-      var hp = FX.easeOut(FX.at(t, 7.60, 8.15));
+      var hp = IS_SELECT ? 1 : FX.easeOut(FX.at(t, 7.60, 8.15));
       var breath = 0.5 + 0.5 * Math.abs(Math.sin(t * 2.1));
       e.prompt.style.opacity = hp;
-      e.prompt.style.transform = "translateX(-50%) translateY(" + ((1 - hp) * 14).toFixed(1) + "px) scale(" + (1 + breath * 0.012).toFixed(4) + ")";
+      e.prompt.style.transform = IS_SELECT ? "translateX(-50%)" : "translateX(-50%) translateY(" + ((1 - hp) * 14).toFixed(1) + "px) scale(" + (1 + breath * 0.012).toFixed(4) + ")";
       if (t >= 11.5) {
         e.cards.forEach(function (n) {
           if (n.classList.contains("picked") || n.classList.contains("fade")) return;
