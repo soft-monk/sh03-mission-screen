@@ -54,9 +54,11 @@
     curIdx = i;
     if (scrBadge) scrBadge.textContent = TL.screens[i].id;
     const cur = ensure(i);
+    const earlyOnShow = cur.sc.id === "SH-03";
+    if (earlyOnShow && cur.mod.onShow) { try { cur.mod.onShow(cur.ctx); } catch (e) {} }
     cur.root.classList.remove("pre");
     cur.root.classList.add("on");
-    if (cur.mod.onShow) { try { cur.mod.onShow(cur.ctx); } catch (e) {} }
+    if (!earlyOnShow && cur.mod.onShow) { try { cur.mod.onShow(cur.ctx); } catch (e) {} }
     dirty = true;
   }
   /* ---------- 预热：SH-01/02 播放期间先把 SH-03 的 3D 地图建起来 ----------
@@ -189,6 +191,7 @@
     prev: () => { const i = idxAt(T); seek(TL.screens[Math.max(0, i - 1)].t); },
     next: () => { const i = idxAt(T); seek(TL.screens[Math.min(TL.screens.length - 1, i + 1)].t); },
     replay: () => {
+      try { if (window.APP_STATE) { window.APP_STATE.scenarioId = null; window.APP_STATE.flow = []; } } catch (e) {}
       endcard.classList.remove("on");
       backLock = false;
       for (const k in cache) {

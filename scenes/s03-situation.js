@@ -6,7 +6,7 @@ window.SCENES = window.SCENES || {};
 (function () {
 function make(variant) {
   /* SH-03 进入 / 复位的固定机位：一次到位，不做动画 */
-  var CAM03 = { center: [115.345, 39.809], zoom: 9.13, pitch: 38 };
+  var CAM03 = { center: [115.345, 39.809], zoom: 10.15, pitch: 30 };
   var IS_MISSION = variant === "mission";
   /* "frame" = 主框架（只有外壳，可复用）；"bare" 是旧名字，保留兼容 */
   var IS_BARE = (variant === "frame" || variant === "plan" || variant === "bare");   /* 都是"基于外壳" */
@@ -30,11 +30,10 @@ function make(variant) {
     { icon: "chip", k: "AI决策引擎", v: "就绪", on: true },
     { icon: "shield", k: "安全状态", v: "安全", on: true }
   ];
-  var CARDS = [
-    { n: "场景一", t: "敏捷拒止布控", on: true },
-    { n: "场景二", t: "区域封控（待设计）", on: false },
-    { n: "场景三", t: "要点防护（待设计）", on: false }
-  ];
+  var CARDS = (window.SCENARIO_ORDER || ["scene-1", "scene-2", "scene-3"]).map(function (id, i) {
+    var c = window.getScenarioConfig && window.getScenarioConfig(id);
+    return { id: id, n: (c && c.short) || ("场景" + (i + 1)), t: (c && c.name) || "", enabled: !c || c.enabled !== false };
+  });
   /* SH-04 的语音播报：时间点是"场景内秒"，与时间轴 27.5/31.0/33.5/35.5 对应（26 秒起播） */
   var VOICE = [
     { t: 1.5, who: "ai", text: "已完成战场态势建模，当前区域存在三类任务模式匹配结果。" },
@@ -71,6 +70,8 @@ function make(variant) {
     { k: "电子", img: "uav-red.png", v: "24", c: "248,113,113" },
     { k: "通信", img: "uav-green.png", v: "24", c: "74,222,128" }
   ];
+  var ACTIVE_VOICE = VOICE, ACTIVE_UAVS = UAVS, ACTIVE_GROUPS = GROUPS;
+  var ACTIVE_REASONS = REASONS, ACTIVE_METRICS = METRICS, ACTIVE_RES = RES;
   /* 区域（真实经纬度）—— 只服务平面版
      任务区：80 x 80 km（用户给定四角），中心 114.098 / 39.883
      集结区：4 x 4 km，中心 116.38 / 39.87（东侧城区）
@@ -101,11 +102,20 @@ function make(variant) {
   }
 
   function build(root, sc) {
+    var SCFG = (window.getSelectedScenario && window.getSelectedScenario()) || null;
+    if (SCFG) {
+      ACTIVE_VOICE = SCFG.voice || VOICE;
+      ACTIVE_UAVS = SCFG.uavs || UAVS;
+      ACTIVE_GROUPS = SCFG.groups || GROUPS;
+      ACTIVE_REASONS = SCFG.reasons || REASONS;
+      ACTIVE_METRICS = SCFG.metrics || METRICS;
+      ACTIVE_RES = SCFG.res || RES;
+    }
     var VOICE_HTML = IS_MISSION
       ? ('<section class="s4-voice">' +
           '<div class="s4-left"><div class="s4-title">AI 决策助手</div>' +
             '<div class="s4-btn">' + ic("mic", 18, "", 1.5) + '<span>AI语音解读</span></div></div>' +
-          '<div class="s4-chat">' + VOICE.map(function (v) {
+          '<div class="s4-chat">' + ACTIVE_VOICE.map(function (v) {
               return '<div class="s4-bub ' + v.who + '">' + v.text + '</div>';
             }).join("") + '</div>' +
           '<div class="s4-mic">' + ic("mic", 36, "", 1.6) + '</div>' +
@@ -115,7 +125,7 @@ function make(variant) {
     var FRAME_HTML = IS_PLAN
       ? ('<aside class="s5-uav">' +
           '<div class="s5-h"><span>无人机类型列表</span><i>i</i></div>' +
-          UAVS.map(function (u) {
+          ACTIVE_UAVS.map(function (u) {
             return '<div class="s5-uc" style="--c:' + u.c + '">' +
               '<div class="s5-top"><img src="assets/img/' + u.img + '" alt="">' +
                 '<div class="s5-info"><b>' + u.k + '</b>' +
@@ -129,7 +139,7 @@ function make(variant) {
         '</aside>' +
         '<section class="s5-plan">' +
           '<div class="s5-ph"><b>推荐方案</b><i>AI推荐</i></div>' +
-          GROUPS.map(function (g) {
+          ACTIVE_GROUPS.map(function (g) {
             return '<div class="s5-g">' +
               '<div class="s5-gn">' + g.n + '</div>' +
               '<div class="s5-gk"><img src="assets/img/' + g.img + '" alt="">' + g.k.replace("无人机", "") + '</div>' +
@@ -139,9 +149,9 @@ function make(variant) {
         '</section>' +
         '<section class="s5-why">' +
           '<div class="s5-wh">推荐理由</div>' +
-          '<ul class="s5-ul">' + REASONS.map(function (r) { return '<li>' + r + '</li>'; }).join("") + '</ul>' +
+          '<ul class="s5-ul">' + ACTIVE_REASONS.map(function (r) { return '<li>' + r + '</li>'; }).join("") + '</ul>' +
           '<div class="s5-wh">预期效果</div>' +
-          '<div class="s5-metrics">' + METRICS.map(function (m) {
+          '<div class="s5-metrics">' + ACTIVE_METRICS.map(function (m) {
             return '<div class="s5-m"><span>' + m.k + '</span><b>' + m.v + '<i>%</i></b></div>';
           }).join("") + '</div>' +
         '</section>' +
@@ -152,7 +162,7 @@ function make(variant) {
     var RES6_HTML = (sc && sc.id === "SH-06")
       ? ('<section class="s6-res">' +
           '<div class="s6-grid">' +
-            UAVS.map(function (u) {
+            ACTIVE_UAVS.map(function (u) {
               return '<div class="s6-col" data-uav="' + u.k + '" data-used="' + u.used + '" data-rest="' + u.rest + '" style="--c:' + u.c + '">' +
                 '<img src="assets/img/' + u.img + '" alt="">' +
                 '<div class="lb">' + u.k.replace("无人机", "") + '</div>' +
@@ -290,14 +300,18 @@ function make(variant) {
     if (map.onMoveEnd) map.onMoveEnd(root);
     var areaEls = [];
     var labelEls = [];
+    var SHOW_AREAS = !IS_SELECT || !!(window.APP_STATE && window.APP_STATE.scenarioId);
+    var BUILD_AREAS = !IS_SELECT || !!(window.APP_STATE && window.APP_STATE.scenarioId);
+    var ACTIVE_AREA = (SCFG && SCFG.area) ? SCFG.area : AREA;
 
+    if (BUILD_AREAS) {
     /* 任务区：80x80km 橙黄色实线 */
-    map.polygon("area-mission", AREA.mission, { fill: "#f59e0b", fillOpacity: 0, line: "#f59e0b", width: 5.5 });
+    map.polygon("area-mission", ACTIVE_AREA.mission, { fill: "#f59e0b", fillOpacity: 0, line: "#f59e0b", width: 5.5 });
     areaEls.push({ id: "area-mission", delay: 1.6 });
     labelEls.push({ h: map.label("任务区", [113.7900, 39.9400], "#fbbf24", 17), delay: 1.6 });
 
     /* 潜在目标部署区：2 个红色实线矩形（20x20km），无填充 */
-    AREA.targets.forEach(function (tg, ti) {
+    ACTIVE_AREA.targets.forEach(function (tg, ti) {
       var tid = "area-target-" + ti;
       map.polygon(tid, tg.pts, { fill: "#ef4444", fillOpacity: 0, line: "#ef4444", width: 4.5 });
       areaEls.push({ id: tid, delay: 2.05 + ti * 0.22 });
@@ -318,6 +332,7 @@ function make(variant) {
       { n: "禁飞区8", lp: [115.42508,40.02673], pts: [[115.40213,40.02273],[115.39217,39.99702],[115.39916,39.98456],[115.41164,39.98825],[115.41508,40.01422]] },
       { n: "禁飞区9", lp: [115.79253,39.79417], pts: [[115.76302,39.79017],[115.76302,39.77525],[115.75437,39.76415],[115.77416,39.75983],[115.776,39.77624],[115.78253,39.78558]] }
     ];
+    NOFLY = (SCFG && SCFG.noFly) ? SCFG.noFly : NOFLY;
     NOFLY.forEach(function (z, i) {
       map.polygon("area-nf" + (i + 1), z.pts, { fill: "#ef4444", fillOpacity: 0, line: "#ef4444", width: 4.5 });
       areaEls.push({ id: "area-nf" + (i + 1), delay: 2.45 });
@@ -325,13 +340,14 @@ function make(variant) {
     });
 
     /* 我方集结区：绿色虚线 4x4km */
-    map.polygon("area-reserve", AREA.reserve, { fill: "#22c55e", fillOpacity: 0.16, line: "#22c55e", width: 5, dash: [2.4, 1.6] });
+    map.polygon("area-reserve", ACTIVE_AREA.reserve, { fill: "#22c55e", fillOpacity: 0.16, line: "#22c55e", width: 5, dash: [2.4, 1.6] });
     areaEls.push({ id: "area-reserve", delay: 2.75 });
     labelEls.push({ h: map.label("我方集结区", [115.9320, 39.7660], "#4ade80", 16), delay: 2.75 });
 
     /* 区域与标签不做淡入：建图即 100% 显示（预热期间就已经是最终画面） */
-    areaEls.forEach(function (o) { map.setArea(o.id, 1); });
-    labelEls.forEach(function (o) { o.h.set(1); });
+    areaEls.forEach(function (o) { map.setArea(o.id, SHOW_AREAS ? 1 : 0); });
+    labelEls.forEach(function (o) { o.h.set(SHOW_AREAS ? 1 : 0); });
+    }
 
     root.querySelector(".s3-menu").innerHTML = MENU.map(function (m) {
       return '<div class="s3-mi' + (m.on ? " on" : "") + '">' + ic(m.icon, 26, "", 1.55) + '<span>' + m.k + '</span></div>';
@@ -367,9 +383,9 @@ function make(variant) {
       (IS_MISSION
         ? '<div class="s3-panel">' +
             '<div class="s3-tih">任务信息</div>' +
-            '<div class="s3-tir"><span>任务名称</span><b>敏捷拒止布控（演示）</b></div>' +
+            '<div class="s3-tir"><span>任务名称</span><b>' + ((SCFG && SCFG.name) || '敏捷拒止布控') + '（演示）</b></div>' +
             '<div class="s3-tir"><span>任务类型</span><b>侦察 / 打击</b></div>' +
-            '<div class="s3-tir"><span>任务区域</span><b>西南方向山区</b></div>' +
+            '<div class="s3-tir"><span>任务区域</span><b>' + ((SCFG && SCFG.region) || '西南方向山区') + '</b></div>' +
             '<div class="s3-tir"><span>任务时间</span><b>2024-06-28 15:14</b></div>' +
             '<div class="s3-tir"><span>任务状态</span><b class="warn">任务准备中</b></div>' +
           '</div>' +
@@ -377,7 +393,7 @@ function make(variant) {
         : '<div class="s3-panel s3-res">' +
             '<div class="s3-res-h">' + ic("nodes", 18, "", 1.6) + '<span>资源概况</span></div>' +
             '<div class="s3-grid">' +
-              RES.map(function (r) {
+              ACTIVE_RES.map(function (r) {
                 return '<div class="s3-col" style="--glow:rgba(' + r.c + ',.55)"><div class="lb">' + r.k + '</div>' +
                   '<img src="assets/img/' + r.img + '" alt="">' +
                   '<div class="num">' + r.v + '</div></div>';
@@ -1363,7 +1379,7 @@ function make(variant) {
     var cardsHost = root.querySelector(".s3-cards");
     if (cardsHost) {
       cardsHost.innerHTML = CARDS.map(function (c) {
-        return '<div class="s3-card' + (c.on ? " on" : "") + '"><div class="n">' + c.n + '</div><div class="t">' + c.t + '</div>' + (c.on ? '<div class="tag">当前</div>' : "") + '</div>';
+        return '<div class="s3-card"><div class="n">' + c.n + '</div><div class="t">' + c.t + '</div></div>';
       }).join("");
     }
 
@@ -1375,9 +1391,14 @@ function make(variant) {
     var cardEls = cardsEl ? [].slice.call(cardsEl.children) : [];
     cardEls.forEach(function (el, i) {
       el.addEventListener("click", function () {
-        if (i !== 0) return;
+        var card = CARDS[i];
+        if (!card || card.enabled === false) return;
         var P = window.PLAYER;
-        if (!P || Math.abs(P.time - 25.5) > 0.12) return;
+        if (!P) return;
+        window.APP_STATE = window.APP_STATE || {};
+        window.APP_STATE.scenarioId = card.id;
+        var cfg = window.getScenarioConfig ? window.getScenarioConfig(card.id) : null;
+        window.APP_STATE.flow = (cfg && cfg.flow) ? cfg.flow.slice() : ["SH-04", "SH-05", "SH-06"];
         el.classList.add("picked");
         if (window.PLAYER && window.PLAYER.lockBack) window.PLAYER.lockBack();
         cardEls.forEach(function (o, j) { if (j) o.classList.add("fade"); });
@@ -1703,12 +1724,14 @@ function make(variant) {
     var cp = FX.easeInOut(FX.at(t, 0.2, 11.0));
     var is3d = !!(e.map && e.map.is3d);
     /* 平面版：斜着看的平整卫星图（pitch 只是相机倾斜，没有地形起伏） */
-var zoom = is3d ? FX.lerp(10.95, 11.25, cp) : CAM03.zoom;
-    var pitch = is3d ? FX.lerp(62, 70, cp) : CAM03.pitch;
-    var bearing = is3d ? FX.lerp(-30, -18, cp) : -20;
-    var center = is3d ? [116.218, 39.920] : CAM03.center.slice();
+var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
+    var CAM = e.scid === "SH-03" ? CAM03 : ((SELCFG && SELCFG.camera) ? SELCFG.camera : CAM03);
+    var zoom = is3d ? FX.lerp(10.95, 11.25, cp) : CAM.zoom;
+    var pitch = is3d ? FX.lerp(62, 70, cp) : CAM.pitch;
+    var bearing = is3d ? FX.lerp(-30, -18, cp) : (CAM.bearing == null ? -20 : CAM.bearing);
+    var center = is3d ? [116.218, 39.920] : CAM.center.slice();
     /* 新任务区 80x80km：所有地图屏统一对着它 */
-    if (e.scid === "SH-06") { center = [114.100, 39.880]; }
+    if (e.scid === "SH-06") { center = (CAM.center || [114.100, 39.880]).slice(); }
     /* 镜头跟随：平面版没有地形网格要重建，必须每帧跟着 t 动 ——
        原来 0.12 秒才跳一次 = 8fps 的镜头，肉眼看就是一格一格地卡。
        3D 版每次 jumpTo 都要重建地形网格，仍然保留 0.12 秒节流。 */
@@ -1799,7 +1822,7 @@ var zoom = is3d ? FX.lerp(10.95, 11.25, cp) : CAM03.zoom;
          已经出现过的气泡"说过就留下"——回退进度条或从别的屏返回都不会消失；
          重播时场景会重建，shown 归零，从头再来。 */
       e.bubbles.forEach(function (b, i) {
-        var bt = VOICE[i] ? VOICE[i].t : 99;
+        var bt = ACTIVE_VOICE[i] ? ACTIVE_VOICE[i].t : 99;
         if (t >= bt) e.shown[i] = true;
         var q = 0;
         if (e.shown[i]) {
@@ -1832,7 +1855,18 @@ var zoom = is3d ? FX.lerp(10.95, 11.25, cp) : CAM03.zoom;
   }
 
   /* 从预热状态切到前台时强制重绘一次，避免首次显示空白 */
+  function setAreaGraphics(e, visible) {
+    if (!e || !e.map) return;
+    try {
+      (e.areaEls || []).forEach(function (o) { e.map.setArea(o.id, visible ? 1 : 0); });
+      (e.labelEls || []).forEach(function (o) { if (o && o.h) o.h.set(visible ? 1 : 0); });
+    } catch (err) {}
+  }
+  function clearAreaGraphics(e) { setAreaGraphics(e, false); }
   function onShow(e) {
+    if (e && e.scid === "SH-03" && window.APP_STATE) { window.APP_STATE.scenarioId = null; window.APP_STATE.flow = []; }
+    if (e && e.scid === "SH-03") clearAreaGraphics(e);
+    else if (e && window.APP_STATE && window.APP_STATE.scenarioId) setAreaGraphics(e, true);
     /* 切到前台：先把共享画布挂到自己容器上（若它还在别的屏里），再校准一次 */
     if (e && e.scid === "SH-06" && window.PLAYER) window.PLAYER.pause();   /* 这一屏交给飞行演示的独立时钟 */
     if (e && e.host && window.MapViewShared) window.MapViewShared(e.host);
@@ -1845,7 +1879,7 @@ var zoom = is3d ? FX.lerp(10.95, 11.25, cp) : CAM03.zoom;
 
   return {
     build: build, render: render, onShow: onShow, usesMap: true, ownSubs: IS_MISSION,
-    onHide: function () { if (hideHook) { try { hideHook(); } catch (e) {} } }
+    onHide: function (e) { if (hideHook) { try { hideHook(); } catch (err) {} } clearAreaGraphics(e); }
   };
 }
 
