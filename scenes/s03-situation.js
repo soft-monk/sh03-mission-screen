@@ -50,10 +50,11 @@ function make(variant) {
   ];
   /* 每个编组只用一种机型，不同编组可以用同一种 */
   var GROUPS = [
-    { n: "编组1", k: "光电无人机", img: "uav-blue.png",   v: 20 },
-    { n: "编组2", k: "通信无人机", img: "uav-green.png",  v: 4 },
-    { n: "编组3", k: "电子无人机", img: "uav-red.png",    v: 6 },
-    { n: "编组4", k: "雷达无人机", img: "uav-yellow.png", v: 3 }
+    { n: "编组1", k: "光电无人机", img: "uav-blue.png",   v: 10, target: "潜在目标部署区-1" },
+    { n: "编组2", k: "光电无人机", img: "uav-blue.png",   v: 10, target: "潜在目标部署区-2" },
+    { n: "编组3", k: "电子无人机", img: "uav-red.png",    v: 6,  target: "潜在目标部署区-2" },
+    { n: "编组4", k: "雷达无人机", img: "uav-yellow.png", v: 3,  target: "潜在目标部署区-1" },
+    { n: "编组5", k: "中继",       img: "uav-green.png",  v: 4,  target: "" }
   ];
   var REASONS = [
     "大范围区域覆盖，提高整体态势感知能力",
@@ -194,21 +195,17 @@ function make(variant) {
         '</aside>' +
         '<section class="s5-plan">' +
           '<div class="s5-ph"><b>推荐方案</b><i>AI推荐</i></div>' +
+          '<div class="s5-g s5-gh">' +
+            '<div class="s5-gn">编组</div><div class="s5-gk">类型</div><div class="s5-gv">数量</div><div class="s5-gt">目标区域</div>' +
+          '</div>' +
           ACTIVE_GROUPS.map(function (g) {
             return '<div class="s5-g">' +
               '<div class="s5-gn">' + g.n + '</div>' +
-              '<div class="s5-gk"><img src="assets/img/' + g.img + '" alt="">' + g.k.replace("无人机", "") + '</div>' +
+              '<div class="s5-gk"><img src="assets/img/' + g.img + '" alt=""><b>' + g.k.replace("无人机", "") + '</b></div>' +
               '<div class="s5-gv">' + g.v + '<em>架</em></div>' +
+              '<div class="s5-gt">' + (g.target || "—") + '</div>' +
             '</div>';
           }).join("") +
-        '</section>' +
-        '<section class="s5-why">' +
-          '<div class="s5-wh">推荐理由</div>' +
-          '<ul class="s5-ul">' + ACTIVE_REASONS.map(function (r) { return '<li>' + r + '</li>'; }).join("") + '</ul>' +
-          '<div class="s5-wh">预期效果</div>' +
-          '<div class="s5-metrics">' + ACTIVE_METRICS.map(function (m) {
-            return '<div class="s5-m"><span>' + m.k + '</span><b>' + m.v + '<i>%</i></b></div>';
-          }).join("") + '</div>' +
         '</section>' +
         '<div class="s5-confirm"><i>&raquo;</i><span>确认推荐方案</span><i>&raquo;</i></div>')
       : "";
@@ -1571,16 +1568,20 @@ function make(variant) {
         ".s5-al b{font-weight:600;padding:1px 7px;border-radius:3px;font-size:12px}",
         ".s5-al b.ok{color:#4ade80;background:rgba(34,197,94,.16);border:1px solid rgba(74,222,128,.35)}",
         ".s5-al b.wn{color:#fbbf24;background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.35)}",
-        ".s5-plan{position:absolute;left:50%;transform:translateX(-50%);top:150px;width:352px;min-height:452px;display:flex;flex-direction:column;border-radius:12px;background:linear-gradient(180deg,rgba(6,20,36,.95),rgba(4,12,22,.96));",
+        ".s5-plan{position:absolute;left:50%;transform:translateX(-50%);top:150px;width:560px;min-height:452px;display:flex;flex-direction:column;border-radius:12px;background:linear-gradient(180deg,rgba(6,20,36,.95),rgba(4,12,22,.96));",
         "  border:1px solid rgba(56,189,248,.5);box-shadow:0 0 26px rgba(37,99,235,.28);padding:14px;z-index:12}",
         ".s5-ph{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 12px;border-bottom:1px solid rgba(56,189,248,.18)}",
         ".s5-ph b{font-size:17px;letter-spacing:2px;color:#eaf6ff}",
         ".s5-ph i{font-style:normal;font-size:12px;padding:3px 10px;border-radius:4px;color:#4ade80;background:rgba(34,197,94,.16);border:1px solid rgba(74,222,128,.45)}",
-        ".s5-g{display:flex;align-items:center;gap:14px;padding:16px 14px;margin-top:14px;border-radius:9px;background:rgba(9,26,46,.9);border:1px solid rgba(56,189,248,.16)}",
-        ".s5-gn{width:56px;flex:none;font-size:14px;color:#9fc4e6;letter-spacing:1px}",
-        ".s5-gk{flex:1;display:flex;align-items:center;gap:9px;font-size:14px;color:#dbeafe}",
+        ".s5-g{display:grid;grid-template-columns:72px 150px 92px 1fr;align-items:center;gap:12px;padding:14px 16px;margin-top:12px;border-radius:9px;background:rgba(9,26,46,.9);border:1px solid rgba(56,189,248,.16)}",
+        ".s5-gh{margin-top:8px;padding:10px 16px;background:rgba(14,40,66,.9);border-color:rgba(56,189,248,.3);font-size:12.5px;color:#7dd3fc;letter-spacing:1px}",
+        ".s5-gh>div{text-align:center}",
+        ".s5-gn{font-size:14px;color:#9fc4e6;letter-spacing:1px;text-align:center}",
+        ".s5-gk{display:flex;align-items:center;justify-content:center;gap:9px;font-size:14px;color:#dbeafe;text-align:center}",
         ".s5-gk img{width:34px;height:auto}",
-        ".s5-gv{font-family:var(--num);font-size:20px;color:#7dd3fc}",
+        ".s5-gk b{font-weight:500;white-space:nowrap}",
+        ".s5-gv{font-family:var(--num);font-size:20px;color:#7dd3fc;text-align:center;white-space:nowrap}",
+        ".s5-gt{font-size:13px;color:#9fc4e6;text-align:center;white-space:nowrap}",
         ".s5-gv em{font-style:normal;font-size:12px;color:#8fa8c4;margin-left:3px}",
         ".s5-why{position:absolute;left:auto;right:400px;top:88px;width:340px;border-radius:12px;background:linear-gradient(180deg,rgba(6,18,32,.94),rgba(4,12,22,.96));",
         "  border:1px solid rgba(56,189,248,.22);padding:14px 16px;z-index:12}",
