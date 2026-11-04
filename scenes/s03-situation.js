@@ -105,7 +105,7 @@ function make(variant) {
     var all = window.APP_STATE.aiAudio || {};
     Object.keys(all).forEach(function (k) {
       var a = all[k];
-      (a.timers || []).forEach(function (id) { clearTimeout(id); });
+      (a.tasks || []).forEach(function (t) { if (t.id) clearTimeout(t.id); });
       (a.audios || []).forEach(function (au) { try { au.pause(); au.currentTime = 0; } catch (err) {} });
     });
     window.APP_STATE.aiAudio = {};
@@ -113,6 +113,43 @@ function make(variant) {
     window.APP_STATE.s6DialogStarted = false;
   }
   window.resetScenarioAudio = resetScenarioAudio;
+  function scheduleStTask(st, delay, fn) {
+    var task = { remaining: Math.max(0, delay), started: 0, id: null, done: false };
+    task.arm = function () {
+      if (st.paused) return;
+      task.started = performance.now();
+      task.id = setTimeout(function () { task.id = null; task.done = true; fn(); }, task.remaining);
+    };
+    st.tasks.push(task);
+    task.arm();
+    return task;
+  }
+  window.setS6DialogPaused = function (paused) {
+    var st = window.APP_STATE && window.APP_STATE.aiAudio && window.APP_STATE.aiAudio.s6;
+    if (!st) return;
+    if (paused === !!st.paused) return;
+    st.paused = !!paused;
+    if (paused) {
+      var now = performance.now();
+      st.tasks.forEach(function (task) {
+        if (task.done || !task.id) return;
+        clearTimeout(task.id); task.id = null;
+        task.remaining = Math.max(0, task.remaining - (now - task.started));
+      });
+      st.audios.forEach(function (audio) {
+        audio.__wasPlaying = !audio.paused && !audio.ended;
+        if (audio.__wasPlaying) audio.pause();
+      });
+    } else {
+      st.tasks.forEach(function (task) { if (!task.done && !task.id) task.arm(); });
+      st.audios.forEach(function (audio) {
+        if (audio.__wasPlaying && !audio.ended) {
+          var pr = audio.play(); if (pr && pr.catch) pr.catch(function () {});
+          audio.__wasPlaying = false;
+        }
+      });
+    }
+  };
   function startScenarioDialog(phase) {
     var cfg = window.getSelectedScenario ? window.getSelectedScenario() : null;
     if (!cfg) return;
@@ -123,17 +160,37 @@ function make(variant) {
     window.APP_STATE.aiAudio = window.APP_STATE.aiAudio || {};
     var st = window.APP_STATE.aiAudio[phase];
     if (st && st.started) return;
-    st = window.APP_STATE.aiAudio[phase] = { started: true, audios: [], timers: [] };
+    st = window.APP_STATE.aiAudio[phase] = { started: true, audios: [], tasks: [], paused: false };
     dialogs.forEach(function (it) {
-      var delay = Math.max(0, (it.at || 0) * 1000);
-      st.timers.push(setTimeout(function () { pushSharedAi(it.key, it.who, it.text); }, delay));
+      scheduleStTask(st, Math.max(0, (it.at || 0) * 1000), function () { pushSharedAi(it.key, it.who, it.text); });
     });
-    audios.forEach(function (au) {
-      var audio = new Audio(au.src);
-      st.audios.push(audio);
-      var delay = Math.max(0, (au.at || 0) * 1000);
-      st.timers.push(setTimeout(function () { var pr = audio.play(); if (pr && pr.catch) pr.catch(function () {}); }, delay));
-    });
+    if (phase === "s6" && audios.length) {
+      var pre = window.APP_STATE.s6AudioPreload;
+      var preList = pre && pre.id === cfg.id ? pre.list : [];
+      var playNext = function (i) {
+        if (i >= audios.length) return;
+        var audio = preList[i] || new Audio(audios[i].src);
+        st.audios.push(audio);
+        audio.onended = function () { playNext(i + 1); };
+        var pr = audio.play(); if (pr && pr.catch) pr.catch(function () {});
+      };
+      scheduleStTask(st, Math.max(0, (audios[0].at || 0) * 1000), function () { playNext(0); });
+    } else {
+      audios.forEach(function (au) {
+        var audio = new Audio(au.src);
+        st.audios.push(audio);
+        scheduleStTask(st, Math.max(0, (au.at || 0) * 1000), function () {
+          audio.__started = true;
+          var pr = audio.play(); if (pr && pr.catch) pr.catch(function () {});
+        });
+      });
+    }
+    if (phase === "s6" && cfg.s6BlockUntil) {
+      scheduleStTask(st, cfg.s6BlockUntil * 1000, function () {
+        window.APP_STATE.s6AiBlock = false;
+        if (window.__s6FlushAi) window.__s6FlushAi();
+      });
+    }
   }
   /* 区域（真实经纬度）—— 只服务平面版
      任务区：80 x 80 km（用户给定四角），中心 114.098 / 39.883
@@ -173,6 +230,11 @@ function make(variant) {
       ACTIVE_REASONS = SCFG.reasons || REASONS;
       ACTIVE_METRICS = SCFG.metrics || METRICS;
       ACTIVE_RES = SCFG.res || RES;
+    }
+    if (sc && sc.id === "SH-06" && SCFG && SCFG.s6Audio) {
+      window.APP_STATE.s6AudioPreload = { id: SCFG.id, list: SCFG.s6Audio.map(function (au) {
+        var a = new Audio(au.src); a.preload = "auto"; a.load(); return a;
+      }) };
     }
     var VOICE_HTML = IS_MISSION
       ? ('<section class="s4-voice">' +
@@ -475,7 +537,7 @@ function make(variant) {
       var FL = window.FLIGHT06;
       var ctlHTML = '<section class="s6-ctl">' +
         '<div class="s6-line">' +
-          '<button class="s6-go" aria-label="播放"><img src="assets/img/play.png" alt=""></button>' +
+          '<button class="s6-go" aria-label="播放"><img class="s6-ic-play" src="assets/img/play.png" alt=""><img class="s6-ic-pause" src="assets/img/pause.png" alt=""></button>' +
           '<div class="s6-spds">' + [1, 2, 4].map(function (v) {
             return '<b data-s="' + v + '"' + (v === 1 ? ' class="on"' : '') + '>' + v + '×</b>';
           }).join("") + '</div>' +
@@ -1296,17 +1358,14 @@ function make(variant) {
         if (st.run && !window.APP_STATE.s6DialogStarted) {
           window.APP_STATE.s6DialogStarted = true;
           window.APP_STATE.s6AiBlock = true;
-          startScenarioDialog("s6");
-          var scfg = window.getSelectedScenario ? window.getSelectedScenario() : null;
-          var blockMs = ((scfg && scfg.s6BlockUntil) || 37) * 1000;
-          setTimeout(function () {
-            window.APP_STATE.s6AiBlock = false;
+          window.__s6FlushAi = function () {
             if (aiLogEl) aiLogEl.removeAttribute("data-n");
             renderAiLog(st.t);
-          }, blockMs);
+          };
+          startScenarioDialog("s6");
         }
-        var iconEl = goBtn.querySelector("img");
-        if (iconEl) iconEl.src = st.run ? "assets/img/pause.png" : "assets/img/play.png";
+        if (window.setS6DialogPaused) window.setS6DialogPaused(!st.run);
+        goBtn.classList.toggle("playing", !!st.run);
         goBtn.setAttribute("aria-label", st.run ? "暂停" : "播放");
         st.last = 0; push();
       });
@@ -1332,7 +1391,7 @@ function make(variant) {
         st.t = Math.min(FL.TOTAL, st.t + dt * st.speed);
         st.acc += dt;
         if (st.acc >= 0.08) { st.acc = 0; push(); }
-        if (st.t >= FL.TOTAL) { st.run = false; goBtn.textContent = "重播"; }
+        if (st.t >= FL.TOTAL) { st.run = false; if (window.setS6DialogPaused) window.setS6DialogPaused(true); goBtn.classList.remove("playing"); goBtn.setAttribute("aria-label", "播放"); }
       }
       root.__onSpace = function () { goBtn.click(); };   /* 空格 = 开始/暂停本演示 */
       root.__s6Refresh = function () { push(); };
@@ -1724,6 +1783,9 @@ function make(variant) {
         ".s6-line{display:flex;align-items:center;gap:14px}",
         ".s6-go{width:42px;height:42px;padding:0;border-radius:0;cursor:pointer;display:grid;place-items:center;background:transparent;border:0;box-shadow:none}",
         ".s6-go img{width:38px;height:38px;display:block}",
+        ".s6-go .s6-ic-pause{display:none}",
+        ".s6-go.playing .s6-ic-play{display:none}",
+        ".s6-go.playing .s6-ic-pause{display:block}",
         ".s6-go:hover{filter:brightness(1.12)}",
         ".s6-spds{display:flex;gap:6px}",
         ".s6-spds b{height:30px;min-width:46px;display:flex;align-items:center;justify-content:center;border-radius:6px;cursor:pointer;",
