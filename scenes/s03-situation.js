@@ -212,7 +212,9 @@ function make(variant) {
             '</div>';
           }).join("") +
         '</section>' +
-        '<div class="s5-confirm"><i>&raquo;</i><span>确认推荐方案</span><i>&raquo;</i></div>')
+        '<div class="s5-confirm"><i>&raquo;</i><span>确认推荐方案</span><i>&raquo;</i></div>' +
+        '<div class="s3-auto-cursor"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M5 2.5 19 13l-6.2 1.1L16 21l-3 1.2-3.2-6.9L5 19.5Z" fill="#fff" stroke="#0b1220" stroke-width="1.4" stroke-linejoin="round"/></svg></div>' +
+        '<div class="s3-auto-ripple"></div>')
       : "";
 
     /* SH-06 顶部工具条右侧：资源概况（在用/损毁/待用 合并为 20/0/28） */
@@ -1755,6 +1757,7 @@ function make(variant) {
       side: root.querySelector(".s3-side"),
       res: root.querySelector(".s3-res"),
       goBtn: root.querySelector(".s3-go"),
+      confirmBtn: root.querySelector(".s5-confirm"),
       autoCursor: root.querySelector(".s3-auto-cursor"),
       autoRipple: root.querySelector(".s3-auto-ripple"),
       scale: root.querySelector(".s3-scale"),
@@ -1902,22 +1905,30 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
       e.micBig.style.transform = "scale(" + (1 + bs * 0.05).toFixed(3) + ")";
     }
 
-    if (e.variant === "mission" && e.goBtn && e.autoCursor && e.autoRipple) {
+    var autoBtn = e.variant === "mission" ? e.goBtn : (e.variant === "plan" ? e.confirmBtn : null);
+    if (autoBtn && e.autoCursor && e.autoRipple) {
+      var isPlan = e.variant === "plan";
+      var tMove0 = isPlan ? 24.0 : 36.0;
+      var tMove1 = isPlan ? 27.0 : 39.0;
+      var tClick0 = isPlan ? 27.0 : 39.0;
+      var tClick1 = isPlan ? 27.3 : 39.3;
+      var tFade0 = isPlan ? 27.75 : 39.75;
+      var tFade1 = isPlan ? 28.0 : 40.0;
       var stageEl = document.getElementById("stage");
       var sr = stageEl ? stageEl.getBoundingClientRect() : { left: 0, top: 0, width: 1920 };
       var scl = sr.width / 1920 || 1;
-      var gr = e.goBtn.getBoundingClientRect();
+      var gr = autoBtn.getBoundingClientRect();
       var gx = (gr.left - sr.left) / scl + gr.width / scl / 2;
       var gy = (gr.top - sr.top) / scl + gr.height / scl / 2;
-      var moveP = FX.easeInOut(FX.at(t, 36.0, 39.0));
+      var moveP = FX.easeInOut(FX.at(t, tMove0, tMove1));
       var cx = FX.lerp(gx + 330, gx + 12, moveP);
       var cy = FX.lerp(gy + 220, gy + 8, moveP);
-      var op = FX.at(t, 36.0, 36.25) * (1 - FX.at(t, 39.75, 40.0));
+      var op = FX.at(t, tMove0, tMove0 + 0.25) * (1 - FX.at(t, tFade0, tFade1));
       e.autoCursor.style.opacity = op;
       e.autoCursor.style.transform = "translate(" + cx.toFixed(1) + "px," + cy.toFixed(1) + "px)";
-      var press = Math.sin(FX.at(t, 39.0, 39.3) * Math.PI);
-      e.goBtn.style.transform = "scale(" + (1 - press * 0.035).toFixed(4) + ")";
-      var rk = FX.at(t, 39.02, 39.34);
+      var press = Math.sin(FX.at(t, tClick0, tClick1) * Math.PI);
+      autoBtn.style.transform = "scale(" + (1 - press * 0.035).toFixed(4) + ")";
+      var rk = FX.at(t, tClick0 + 0.02, tClick1 + 0.04);
       e.autoRipple.style.left = gx + "px";
       e.autoRipple.style.top = gy + "px";
       e.autoRipple.style.opacity = rk > 0 && rk < 1 ? (1 - rk) * 0.9 : 0;
