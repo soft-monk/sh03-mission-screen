@@ -476,8 +476,8 @@ function make(variant) {
       var ctlHTML = '<section class="s6-ctl">' +
         '<div class="s6-line">' +
           '<button class="s6-go">开始执行</button>' +
-          '<div class="s6-spds">' + [1, 2, 4, 8, 16, 32].map(function (v) {
-            return '<b data-s="' + v + '"' + (v === 8 ? ' class="on"' : '') + '>' + v + '×</b>';
+          '<div class="s6-spds">' + [1, 2, 4].map(function (v) {
+            return '<b data-s="' + v + '"' + (v === 1 ? ' class="on"' : '') + '>' + v + '×</b>';
           }).join("") + '</div>' +
           '<div class="s6-tm"><b>00:00</b> / <span class="s6-tot">30:00</span></div>' +
         '</div>' +
@@ -493,7 +493,7 @@ function make(variant) {
       var phLbl = ctl.querySelector(".s6-ph");
       var totLbl = ctl.querySelector(".s6-tot");
       var spds = [].slice.call(ctl.querySelectorAll(".s6-spds b"));
-      var st = { t: 0, speed: 8, run: false, started: false, last: 0, acc: 0 };
+      var st = { t: 0, speed: 1, run: false, started: false, last: 0, acc: 0 };
       var COLORS = { blue: "#38bdf8", yellow: "#facc15", red: "#f87171", green: "#4ade80" };
 
       var targetItems = [].slice.call(root.querySelectorAll(".s6-target-item"));
@@ -1168,10 +1168,7 @@ function make(variant) {
       var T_JOIN = FL.T_LIFT + 90; /* matches TOFF in flight06.js */
       var T_ARRIVE = Math.min.apply(null, FL.T_ARR || [T_JOIN]);
       var AI_EVENTS = [
-        { t: FL.T_LIFT, who: "ai", text: "无人机起飞。" },
-        { t: T_JOIN, who: "ai", text: "无人机完成编队，开始沿规划航路飞行。" },
         { t: T_ARRIVE, who: "ai", text: "机群抵达任务区，开始分区侦察。" },
-        { t: FL.T_TRACKS || 0, who: "ai", text: "光电集群开始网格扫描，雷达开始 SAR/GMTI 探测，电子集群开始干扰压制。" },
         { t: T_SCAN, who: "ai", text: "在“潜在目标部署区-2”扫描发现2个疑似雷达目标，已加入目标档案。" },
         { t: T_SCAN, who: "ai", text: "建议采用方案：为001预警雷达、002火控雷达两个疑似目标各派出两架光电无人机执行侦察和打击任务。" },
         { t: T_SCAN + 2, who: "user", text: "方案确认。" },
@@ -1242,7 +1239,7 @@ function make(variant) {
       })();
 
       function push() {
-        if (!st.started) { renderAiLog(-1); renderTargetState(-1); renderVideos(-1); map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); if (map.scan) map.scan("scan", []); if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); } if (map.beam) map.beam("sbeam", []); if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); } paint(); return; }
+        if (!st.started) { renderAiLog(-1); renderTargetState(-1); renderVideos(-1); map.fleet("fleet", []); map.trails("trails", []); if (map.tracks && FL.tracks) map.tracks("tracks", FL.tracks(FL.T_TRACKS).map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.pts }; })); if (map.scan) map.scan("scan", []); if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); } if (map.beam) map.beam("sbeam", []); if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); } paint(); return; }
         renderAiLog(st.t);
         renderTargetState(st.t);
         renderVideos(st.t);
@@ -1278,7 +1275,10 @@ function make(variant) {
         map.trails("trails", fleet.filter(function (d) { return d.trail && d.trail.length > 1; })
           .map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.trail }; }));
         /* 规划航迹放在尾迹之后创建 => 图层压在尾迹上面，不被粗尾迹盖住 */
-        if (map.tracks && FL.tracks) map.tracks("tracks", FL.tracks(st.t).map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.pts }; }));
+        if (map.tracks && FL.tracks) {
+          var trackTime = st.t < FL.T_TRACKS ? FL.T_TRACKS : st.t;
+          map.tracks("tracks", FL.tracks(trackTime).map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.pts }; }));
+        }
         paint();
       }
 
