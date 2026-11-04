@@ -475,7 +475,7 @@ function make(variant) {
       var FL = window.FLIGHT06;
       var ctlHTML = '<section class="s6-ctl">' +
         '<div class="s6-line">' +
-          '<button class="s6-go">开始执行</button>' +
+          '<button class="s6-go" aria-label="播放"><img src="assets/img/play.png" alt=""></button>' +
           '<div class="s6-spds">' + [1, 2, 4].map(function (v) {
             return '<b data-s="' + v + '"' + (v === 1 ? ' class="on"' : '') + '>' + v + '×</b>';
           }).join("") + '</div>' +
@@ -1305,7 +1305,9 @@ function make(variant) {
             renderAiLog(st.t);
           }, blockMs);
         }
-        goBtn.textContent = st.run ? "暂停" : (st.t >= FL.TOTAL ? "重播" : "继续");
+        var iconEl = goBtn.querySelector("img");
+        if (iconEl) iconEl.src = st.run ? "assets/img/pause.png" : "assets/img/play.png";
+        goBtn.setAttribute("aria-label", st.run ? "暂停" : "播放");
         st.last = 0; push();
       });
       function seekFromEvent(ev) {
@@ -1720,8 +1722,8 @@ function make(variant) {
         ".s6-ctl{position:absolute;left:116px;right:376px;bottom:62px;z-index:14;border-radius:12px;padding:12px 16px 10px;",
         "  background:linear-gradient(180deg,rgba(6,18,32,.95),rgba(4,12,22,.97));border:1px solid rgba(56,189,248,.24)}",
         ".s6-line{display:flex;align-items:center;gap:14px}",
-        ".s6-go{height:42px;padding:0 22px;border-radius:8px;cursor:pointer;font-size:15px;letter-spacing:2px;color:#eaf6ff;",
-        "  background:linear-gradient(180deg,#1d4ed8,#0b2a63);border:1px solid rgba(56,189,248,.5);box-shadow:0 0 18px rgba(37,99,235,.4)}",
+        ".s6-go{width:42px;height:42px;padding:0;border-radius:0;cursor:pointer;display:grid;place-items:center;background:transparent;border:0;box-shadow:none}",
+        ".s6-go img{width:38px;height:38px;display:block}",
         ".s6-go:hover{filter:brightness(1.12)}",
         ".s6-spds{display:flex;gap:6px}",
         ".s6-spds b{height:30px;min-width:46px;display:flex;align-items:center;justify-content:center;border-radius:6px;cursor:pointer;",
