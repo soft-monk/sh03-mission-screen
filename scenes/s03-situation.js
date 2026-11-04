@@ -1769,6 +1769,8 @@ function make(variant) {
       scid: sc && sc.id,
       voicePanel: root.querySelector(".s4-voice"),
       commonAiLog: root.querySelector(".common-ai-log"),
+      aiLog: root.querySelector(".s6-ai-log"),
+      aiChat: root.querySelector(".s6-chat-scroll"),
       bubbles: [].slice.call(root.querySelectorAll(".s4-bub")),
       shown: [], shownAt: [],
       micBig: root.querySelector(".s4-mic"),
@@ -1973,6 +1975,11 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
     if (e && e.scid === "SH-06" && e.host && e.host.closest) {
       var scr = e.host.closest(".scr");
       if (scr && scr.__s6Refresh) scr.__s6Refresh();
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          if (e.aiChat) e.aiChat.scrollTop = e.aiChat.scrollHeight;
+        });
+      });
     }
     if (e && e.map && e.map.repaint) e.map.repaint();
   }
