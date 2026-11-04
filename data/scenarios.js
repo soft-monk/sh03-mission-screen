@@ -44,20 +44,32 @@
       { n: "编组2", k: "光电无人机", img: "uav-blue.png", v: 10, target: "潜在目标部署区-2" },
       { n: "编组3", k: "电子无人机", img: "uav-red.png", v: 6, target: "潜在目标部署区-2" },
       { n: "编组4", k: "雷达无人机", img: "uav-yellow.png", v: 3, target: "潜在目标部署区-1" },
-      { n: "编组5", k: "中继", img: "uav-green.png", v: 4, target: "" }
+      { n: "编组5", k: "中继", img: "uav-green.png", v: 3, target: "" }
     ],
     reasons: ["大范围区域覆盖，提高整体态势感知能力", "通信中继保障稳定，支撑多域协同作战", "多方向侦察协同，增强目标发现效率", "电子压制能力强，压制敌方关键节点"],
     metrics: [{ k: "区域覆盖率", v: 93 }, { k: "链路稳定度", v: 96 }, { k: "目标发现效率", v: 91 }, { k: "电子压制能力", v: 94 }, { k: "任务成功率", v: 90 }, { k: "资源利用率", v: 86 }],
     voice: [],
-    dialog: [
+    s4Dialog: [
       { key: "s4-task-header", who: "ai", at: 0.5, text: "任务分析：" },
       { key: "s4-area-1", who: "ai", at: 1.5, text: "潜在目标部署区1<br>中心点坐标：经度113.95度，纬度39.75度<br>区域形状：边长20km矩形<br>情报显示：存在敌方海玛斯机动目标。" },
       { key: "s4-area-2", who: "ai", at: 16.0, text: "潜在目标部署区2<br>中心点坐标：经度114.3度，纬度40.05度<br>区域形状：边长20km矩形<br>情报显示：存在敌方雷达目标。" },
       { key: "s4-mission-requirement", who: "ai", at: 30.0, text: "上级任务要求对两区域执行封控打击，持续40分钟时间。" }
     ],
-    audio: [
+    s4Audio: [
       { src: "assets/audio/001.wav", at: 0, duration: 30 },
       { src: "assets/audio/002.wav", at: 30, duration: 6 }
+    ],
+    s5Dialog: [
+      { key: "s5-plan-header", who: "ai", at: 0.5, text: "推荐编组方案：" },
+      { key: "s5-eo-1", who: "ai", at: 2.5, text: "光电察打机10架，部署到潜在目标区1。" },
+      { key: "s5-eo-2", who: "ai", at: 6.5, text: "光电察打机10架，部署到潜在目标区2。" },
+      { key: "s5-ew", who: "ai", at: 10.5, text: "电子侦察机6架，部署到潜在目标区2。" },
+      { key: "s5-gmti", who: "ai", at: 14.0, text: "雷达GMTI 2架，部署到潜在目标区1。" },
+      { key: "s5-sar", who: "ai", at: 17.5, text: "雷达SAR 1架，部署到潜在目标区域1。" },
+      { key: "s5-relay", who: "ai", at: 20.5, text: "中继通信机3架，部署保障通信。" }
+    ],
+    s5Audio: [
+      { src: "assets/audio/003.wav", at: 0, duration: 24 }
     ],
     flow: ["SH-04", "SH-05", "SH-06"]
   };
@@ -88,6 +100,7 @@
       { n: "编组2", k: "电子无人机", img: "uav-red.png", v: 8 },
       { n: "编组3", k: "通信无人机", img: "uav-green.png", v: 4 }
     ],
+    s5Dialog: [], s5Audio: [],
     metrics: [{ k: "封控覆盖率", v: 91 }, { k: "边界完整度", v: 95 }, { k: "目标发现效率", v: 88 }, { k: "电子压制能力", v: 92 }, { k: "任务成功率", v: 89 }, { k: "资源利用率", v: 84 }],
     voice: [
       { t: 1.5, who: "ai", text: "场景一尚未完成设计，当前仅加载场景框架。" },
@@ -118,6 +131,7 @@
       { n: "编组3", k: "光电无人机", img: "uav-blue.png", v: 12 },
       { n: "编组4", k: "电子无人机", img: "uav-red.png", v: 4 }
     ],
+    s5Dialog: [], s5Audio: [],
     metrics: [{ k: "要点防护率", v: 94 }, { k: "预警覆盖度", v: 96 }, { k: "通信稳定度", v: 95 }, { k: "目标识别效率", v: 90 }, { k: "任务成功率", v: 92 }, { k: "资源利用率", v: 88 }],
     voice: [
       { t: 1.5, who: "ai", text: "要点防护场景已加载，正在识别重点防护目标。" },

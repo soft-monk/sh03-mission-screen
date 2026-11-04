@@ -102,26 +102,31 @@ function make(variant) {
   }
   function resetScenarioAudio() {
     window.APP_STATE = window.APP_STATE || {};
-    var a = window.APP_STATE.aiAudio;
-    if (a) {
+    var all = window.APP_STATE.aiAudio || {};
+    Object.keys(all).forEach(function (k) {
+      var a = all[k];
       (a.timers || []).forEach(function (id) { clearTimeout(id); });
       (a.audios || []).forEach(function (au) { try { au.pause(); au.currentTime = 0; } catch (err) {} });
-    }
-    window.APP_STATE.aiAudio = { started: false, audios: [], timers: [] };
+    });
+    window.APP_STATE.aiAudio = {};
   }
   window.resetScenarioAudio = resetScenarioAudio;
-  function startScenarioDialog() {
+  function startScenarioDialog(phase) {
     var cfg = window.getSelectedScenario ? window.getSelectedScenario() : null;
-    if (!cfg || !cfg.dialog || !cfg.dialog.length) return;
+    if (!cfg) return;
+    var dialogs = cfg[phase + "Dialog"] || [];
+    var audios = cfg[phase + "Audio"] || [];
+    if (!dialogs.length && !audios.length) return;
     window.APP_STATE = window.APP_STATE || {};
-    var st = window.APP_STATE.aiAudio || (window.APP_STATE.aiAudio = { started: false, audios: [], timers: [] });
-    if (st.started) return;
-    st.started = true;
-    cfg.dialog.forEach(function (it) {
+    window.APP_STATE.aiAudio = window.APP_STATE.aiAudio || {};
+    var st = window.APP_STATE.aiAudio[phase];
+    if (st && st.started) return;
+    st = window.APP_STATE.aiAudio[phase] = { started: true, audios: [], timers: [] };
+    dialogs.forEach(function (it) {
       var delay = Math.max(0, (it.at || 0) * 1000);
       st.timers.push(setTimeout(function () { pushSharedAi(it.key, it.who, it.text); }, delay));
     });
-    (cfg.audio || []).forEach(function (au) {
+    audios.forEach(function (au) {
       var audio = new Audio(au.src);
       st.audios.push(audio);
       var delay = Math.max(0, (au.at || 0) * 1000);
@@ -411,7 +416,7 @@ function make(variant) {
     if (IS_PLAN) {
       var cf = root.querySelector(".s5-confirm");
       if (cf) cf.addEventListener("click", function () {
-        var P = window.PLAYER; if (P) { P.seek(86); P.play(); }
+        var P = window.PLAYER; if (P) { P.seek(94); P.play(); }
       });
     }
 
@@ -1948,7 +1953,8 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
   function onShow(e) {
     if (e && e.scid === "SH-03" && window.APP_STATE) { window.APP_STATE.scenarioId = null; window.APP_STATE.flow = []; }
     if (e && e.scid === "SH-03") clearAreaGraphics(e);
-    if (e && e.scid === "SH-04") startScenarioDialog();
+    if (e && e.scid === "SH-04") startScenarioDialog("s4");
+    if (e && e.scid === "SH-05") startScenarioDialog("s5");
     else if (e && window.APP_STATE && window.APP_STATE.scenarioId) setAreaGraphics(e, true);
     /* 切到前台：先把共享画布挂到自己容器上（若它还在别的屏里），再校准一次 */
     if (e && e.scid === "SH-06" && window.PLAYER) window.PLAYER.pause();   /* 这一屏交给飞行演示的独立时钟 */
