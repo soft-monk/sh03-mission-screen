@@ -336,7 +336,7 @@ function make(variant) {
       '<section class="s3-side"></section>' +
       '<div class="s3-scale"><b></b><span>2 km</span></div>' +
       '<div class="s3-coord">116.53850, 39.76102</div>' +
-      (IS_SELECT ? '<div class="s3-cards"></div><div class="s3-prompt">请选择任务场景</div>' : (IS_MISSION ? '<div class="s3-go"><i>&raquo;</i><span>进入任务执行</span><i>&raquo;</i></div>' : FRAME_HTML)) +
+      (IS_SELECT ? '<div class="s3-cards"></div><div class="s3-prompt">请选择任务场景</div>' : (IS_MISSION ? '<div class="s3-go"><i>&raquo;</i><span>进入任务执行</span><i>&raquo;</i></div><div class="s3-auto-cursor"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M5 2.5 19 13l-6.2 1.1L16 21l-3 1.2-3.2-6.9L5 19.5Z" fill="#fff" stroke="#0b1220" stroke-width="1.4" stroke-linejoin="round"/></svg></div><div class="s3-auto-ripple"></div>' : FRAME_HTML)) +
       SH06_RIGHT_HTML +
       SH06_VIDEO_HTML +
       '<button class="s3-mic">' + ic("mic", 26, "", 1.7) + '</button>' +
@@ -414,7 +414,7 @@ function make(variant) {
     if (IS_PLAN) {
       var cf = root.querySelector(".s5-confirm");
       if (cf) cf.addEventListener("click", function () {
-        var P = window.PLAYER; if (P) { P.seek(61); P.play(); }
+        var P = window.PLAYER; if (P) { P.seek(86); P.play(); }
       });
     }
 
@@ -1456,7 +1456,7 @@ function make(variant) {
     if (IS_MISSION) {
       var goEl = root.querySelector(".s3-go"), backEl = root.querySelector(".s3-back");
       if (goEl) goEl.addEventListener("click", function () {
-        var P = window.PLAYER; if (P) { P.seek(41); P.play(); }
+        var P = window.PLAYER; if (P) { P.seek(66); P.play(); }
       });
       if (backEl) backEl.addEventListener("click", function () {
         var P = window.PLAYER; if (P) { P.seek(25.5); P.pause(); }
@@ -1533,6 +1533,8 @@ function make(variant) {
         ".s3-tir span{color:#8fa8c4;flex:none;width:74px}",
         ".s3-tir b{color:#dbeafe;font-weight:600;letter-spacing:.5px}",
         ".s3-tir b.warn{color:#fbbf24}",
+        ".s3-auto-cursor{position:absolute;left:0;top:0;pointer-events:none;opacity:0;z-index:60;filter:drop-shadow(0 3px 5px rgba(0,0,0,.65))}",
+        ".s3-auto-ripple{position:absolute;width:150px;height:150px;margin:-75px 0 0 -75px;border-radius:50%;border:2px solid rgba(255,255,255,.85);pointer-events:none;opacity:0;z-index:59}",
         ".s3-go{position:absolute;right:32px;bottom:158px;width:344px;height:56px;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:12px;cursor:pointer;z-index:13;",
         "  font-size:18px;letter-spacing:3px;color:#eaf6ff;background:linear-gradient(180deg,#1d4ed8,#0b2a63);",
         "  border:1px solid rgba(56,189,248,.55);box-shadow:0 0 26px rgba(37,99,235,.45),0 0 0 1px rgba(56,189,248,.2) inset}",
@@ -1746,6 +1748,9 @@ function make(variant) {
       toolbar: root.querySelector(".s3-toolbar"),
       side: root.querySelector(".s3-side"),
       res: root.querySelector(".s3-res"),
+      goBtn: root.querySelector(".s3-go"),
+      autoCursor: root.querySelector(".s3-auto-cursor"),
+      autoRipple: root.querySelector(".s3-auto-ripple"),
       scale: root.querySelector(".s3-scale"),
       scaleBar: root.querySelector(".s3-scale b"),
       scaleText: root.querySelector(".s3-scale span"),
@@ -1891,6 +1896,27 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
       e.micBig.style.transform = "scale(" + (1 + bs * 0.05).toFixed(3) + ")";
     }
 
+    if (e.variant === "mission" && e.goBtn && e.autoCursor && e.autoRipple) {
+      var stageEl = document.getElementById("stage");
+      var sr = stageEl ? stageEl.getBoundingClientRect() : { left: 0, top: 0, width: 1920 };
+      var scl = sr.width / 1920 || 1;
+      var gr = e.goBtn.getBoundingClientRect();
+      var gx = (gr.left - sr.left) / scl + gr.width / scl / 2;
+      var gy = (gr.top - sr.top) / scl + gr.height / scl / 2;
+      var moveP = FX.easeInOut(FX.at(t, 36.0, 39.0));
+      var cx = FX.lerp(gx + 330, gx + 12, moveP);
+      var cy = FX.lerp(gy + 220, gy + 8, moveP);
+      var op = FX.at(t, 36.0, 36.25) * (1 - FX.at(t, 39.75, 40.0));
+      e.autoCursor.style.opacity = op;
+      e.autoCursor.style.transform = "translate(" + cx.toFixed(1) + "px," + cy.toFixed(1) + "px)";
+      var press = Math.sin(FX.at(t, 39.0, 39.3) * Math.PI);
+      e.goBtn.style.transform = "scale(" + (1 - press * 0.035).toFixed(4) + ")";
+      var rk = FX.at(t, 39.02, 39.34);
+      e.autoRipple.style.left = gx + "px";
+      e.autoRipple.style.top = gy + "px";
+      e.autoRipple.style.opacity = rk > 0 && rk < 1 ? (1 - rk) * 0.9 : 0;
+      e.autoRipple.style.transform = "scale(" + (0.18 + rk * 1.1).toFixed(4) + ")";
+    }
     if (e.prompt) {
       var hp = IS_SELECT ? 1 : FX.easeOut(FX.at(t, 7.60, 8.15));
       var breath = 0.5 + 0.5 * Math.abs(Math.sin(t * 2.1));
