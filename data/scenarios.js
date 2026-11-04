@@ -71,6 +71,19 @@
     s5Audio: [
       { src: "assets/audio/003.wav", at: 0, duration: 24 }
     ],
+    s6Dialog: [
+      { key: "s6-plan-generated", who: "ai", at: 0.5, text: "根据任务需求和编组方案，已生成蜂群作战方案。" },
+      { key: "s6-traverse-1", who: "ai", at: 5.0, text: "光电察打机10架，对于潜在目标区1，5分钟可完成区域遍历。" },
+      { key: "s6-traverse-2", who: "ai", at: 11.4, text: "光电察打机10架，对于潜在目标区2，5分钟可完成区域遍历。" },
+      { key: "s6-traverse-3", who: "ai", at: 17.8, text: "电子侦察机6架，对于潜在目标区2，6分钟可完成区域遍历。" },
+      { key: "s6-traverse-4", who: "ai", at: 24.2, text: "雷达GMTI 2架，对于潜在目标区1，4分钟可完成区域遍历。" },
+      { key: "s6-traverse-5", who: "ai", at: 30.6, text: "雷达SAR 1架，对于潜在目标区1，85分钟可完成区域遍历。" }
+    ],
+    s6Audio: [
+      { src: "assets/audio/004.wav", at: 0, duration: 5 },
+      { src: "assets/audio/005.wav", at: 5, duration: 32 }
+    ],
+    s6BlockUntil: 37,
     flow: ["SH-04", "SH-05", "SH-06"]
   };
   function clone(v) { return JSON.parse(JSON.stringify(v)); }
@@ -100,7 +113,7 @@
       { n: "编组2", k: "电子无人机", img: "uav-red.png", v: 8 },
       { n: "编组3", k: "通信无人机", img: "uav-green.png", v: 4 }
     ],
-    s5Dialog: [], s5Audio: [],
+    s5Dialog: [], s5Audio: [], s6Dialog: [], s6Audio: [],
     metrics: [{ k: "封控覆盖率", v: 91 }, { k: "边界完整度", v: 95 }, { k: "目标发现效率", v: 88 }, { k: "电子压制能力", v: 92 }, { k: "任务成功率", v: 89 }, { k: "资源利用率", v: 84 }],
     voice: [
       { t: 1.5, who: "ai", text: "场景一尚未完成设计，当前仅加载场景框架。" },

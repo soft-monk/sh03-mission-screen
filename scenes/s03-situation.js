@@ -109,6 +109,8 @@ function make(variant) {
       (a.audios || []).forEach(function (au) { try { au.pause(); au.currentTime = 0; } catch (err) {} });
     });
     window.APP_STATE.aiAudio = {};
+    window.APP_STATE.s6AiBlock = false;
+    window.APP_STATE.s6DialogStarted = false;
   }
   window.resetScenarioAudio = resetScenarioAudio;
   function startScenarioDialog(phase) {
@@ -1189,7 +1191,8 @@ function make(variant) {
       function renderAiLog(t) {
         if (!aiLogEl) return;
         var n = 0;
-        for (var i = 0; i < AI_EVENTS.length; i++) if (t + 1e-6 >= AI_EVENTS[i].t) n++;
+        var s6Blocked = !!(window.APP_STATE && window.APP_STATE.s6AiBlock);
+        if (!s6Blocked) for (var i = 0; i < AI_EVENTS.length; i++) if (t + 1e-6 >= AI_EVENTS[i].t) n++;
         var sharedN = sharedAiMessages().length;
         var sig = String(n) + ":" + String(sharedN);
         if (aiLogEl.getAttribute("data-n") === sig) return;
@@ -1290,6 +1293,18 @@ function make(variant) {
         st.started = true;
         if (st.t >= FL.TOTAL) { st.t = 0; st.run = true; }
         else st.run = !st.run;
+        if (st.run && !window.APP_STATE.s6DialogStarted) {
+          window.APP_STATE.s6DialogStarted = true;
+          window.APP_STATE.s6AiBlock = true;
+          startScenarioDialog("s6");
+          var scfg = window.getSelectedScenario ? window.getSelectedScenario() : null;
+          var blockMs = ((scfg && scfg.s6BlockUntil) || 37) * 1000;
+          setTimeout(function () {
+            window.APP_STATE.s6AiBlock = false;
+            if (aiLogEl) aiLogEl.removeAttribute("data-n");
+            renderAiLog(st.t);
+          }, blockMs);
+        }
         goBtn.textContent = st.run ? "暂停" : (st.t >= FL.TOTAL ? "重播" : "继续");
         st.last = 0; push();
       });
