@@ -50,25 +50,24 @@
     metrics: [{ k: "区域覆盖率", v: 93 }, { k: "链路稳定度", v: 96 }, { k: "目标发现效率", v: 91 }, { k: "电子压制能力", v: 94 }, { k: "任务成功率", v: 90 }, { k: "资源利用率", v: 86 }],
     voice: [],
     s4Dialog: [
-      { key: "s4-task-header", who: "ai", at: 0.5, text: "任务分析：" },
-      { key: "s4-area-1", who: "ai", at: 1.5, text: "潜在目标部署区1<br>中心点坐标：经度113.95度，纬度39.75度<br>区域形状：边长20km矩形<br>情报显示：存在敌方海玛斯机动目标。" },
-      { key: "s4-area-2", who: "ai", at: 16.0, text: "潜在目标部署区2<br>中心点坐标：经度114.3度，纬度40.05度<br>区域形状：边长20km矩形<br>情报显示：存在敌方雷达目标。" },
-      { key: "s4-mission-requirement", who: "ai", at: 30.0, text: "上级任务要求对两区域执行封控打击，持续40分钟时间。" }
+      { key: "s4-task-header", who: "ai", at: 0.0, text: "任务分析：" },
+      { key: "s4-area-1", who: "ai", at: 0.0, text: "潜在目标部署区1<br>中心点坐标：经度113.95度，纬度39.75度<br>区域形状：边长20km矩形<br>情报显示：敌方机动装甲目标。" },
+      { key: "s4-area-2", who: "ai", at: 14.7, text: "潜在目标部署区2<br>中心点坐标：经度114.3度，纬度40.05度<br>区域形状：边长20km矩形<br>情报显示：存在敌方雷达目标。" },
+      { key: "s4-mission-requirement", who: "ai", at: 26.5, text: "上级任务要求对两区域执行封控打击，持续40分钟时间。" }
     ],
     s4Audio: [
-      { at: 0, srcs: ["assets/audio/001.wav","assets/audio/002.wav","assets/audio/003.wav","assets/audio/004.wav","assets/audio/005.wav","assets/audio/006.wav","assets/audio/007.wav","assets/audio/008.wav"] }
+      { at: 0.5, srcs: ["assets/audio/001.wav","assets/audio/002.wav","assets/audio/003.wav","assets/audio/004.wav","assets/audio/005.wav","assets/audio/006.wav","assets/audio/007.wav","assets/audio/008.wav"] }
     ],
     s5Dialog: [
-      { key: "s5-plan-header", who: "ai", at: 0.5, text: "推荐编组方案：" },
-      { key: "s5-eo-1", who: "ai", at: 2.5, text: "光电察打机10架，部署到潜在目标区1。" },
-      { key: "s5-eo-2", who: "ai", at: 6.5, text: "光电察打机10架，部署到潜在目标区2。" },
-      { key: "s5-ew", who: "ai", at: 10.5, text: "电子侦察机6架，部署到潜在目标区2。" },
-      { key: "s5-gmti", who: "ai", at: 14.0, text: "雷达GMTI 2架，部署到潜在目标区1。" },
-      { key: "s5-sar", who: "ai", at: 17.5, text: "雷达SAR 1架，部署到潜在目标区域1。" },
-      { key: "s5-relay", who: "ai", at: 20.5, text: "中继通信机3架，部署保障通信。" }
+      { key: "s5-plan-header", who: "ai", at: 0.0, text: "推荐编组方案：" },
+      { key: "s5-eo-1", who: "ai", at: 0.0, text: "光电察打机10架，部署到潜在目标区1。" },
+      { key: "s5-eo-2", who: "ai", at: 5.6, text: "光电察打机10架，部署到潜在目标区2。" },
+      { key: "s5-ew", who: "ai", at: 9.8, text: "电子侦察机6架，部署到潜在目标区2。" },
+      { key: "s5-radar", who: "ai", at: 13.6, text: "雷达侦察机3架，部署到潜在目标区域1。" },
+      { key: "s5-relay", who: "ai", at: 17.3, text: "中继通信机3架，部署保障通信。" }
     ],
     s5Audio: [
-      { at: 0, srcs: ["assets/audio/009.wav","assets/audio/010.wav","assets/audio/011.wav","assets/audio/012.wav","assets/audio/013.wav"] }
+      { at: 0.5, srcs: ["assets/audio/009.wav","assets/audio/010.wav","assets/audio/011.wav","assets/audio/012.wav","assets/audio/013.wav"] }
     ],
     s6Dialog: [
       { key: "s6-06", who: "ai", at: 0.0, audio: "assets/audio/020.wav", text: "根据任务需求和编组方案，已生成蜂群作战方案。" },
