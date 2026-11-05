@@ -113,6 +113,17 @@ function make(variant) {
     window.APP_STATE.s6DialogStarted = false;
   }
   window.resetScenarioAudio = resetScenarioAudio;
+  window.ensureScenarioAudioPreload = function () {
+    window.APP_STATE = window.APP_STATE || {};
+    if (window.APP_STATE.scenarioAudioPreload) return window.APP_STATE.scenarioAudioPreload;
+    var preMap = {};
+    for (var i = 1; i <= 47; i++) {
+      var src = "assets/audio/" + ("00" + i).slice(-3) + ".wav";
+      var a = new Audio(src); a.preload = "auto"; a.load(); preMap[src] = a;
+    }
+    window.APP_STATE.scenarioAudioPreload = { map: preMap, count: 47 };
+    return window.APP_STATE.scenarioAudioPreload;
+  };
   function scheduleStTask(st, delay, fn) {
     var task = { remaining: Math.max(0, delay), started: 0, id: null, done: false };
     task.arm = function () {
@@ -161,36 +172,43 @@ function make(variant) {
     var st = window.APP_STATE.aiAudio[phase];
     if (st && st.started) return;
     st = window.APP_STATE.aiAudio[phase] = { started: true, audios: [], tasks: [], paused: false };
-    dialogs.forEach(function (it) {
-      scheduleStTask(st, Math.max(0, (it.at || 0) * 1000), function () { pushSharedAi(it.key, it.who, it.text); });
-    });
-    if (phase === "s6" && audios.length) {
+    if (phase === "s6" && dialogs.length) {
       var pre = window.APP_STATE.s6AudioPreload;
-      var preList = pre && pre.id === cfg.id ? pre.list : [];
+      var preMap = pre && pre.id === cfg.id ? pre.map : {};
       var playNext = function (i) {
-        if (i >= audios.length) return;
-        var audio = preList[i] || new Audio(audios[i].src);
+        if (i >= dialogs.length) return;
+        var it = dialogs[i];
+        pushSharedAi(it.key, it.who, it.text);
+        if (!it.audio) { playNext(i + 1); return; }
+        var audio = preMap[it.audio] || new Audio(it.audio);
         st.audios.push(audio);
         audio.onended = function () { playNext(i + 1); };
         var pr = audio.play(); if (pr && pr.catch) pr.catch(function () {});
       };
-      scheduleStTask(st, Math.max(0, (audios[0].at || 0) * 1000), function () { playNext(0); });
-    } else {
-      audios.forEach(function (au) {
-        var audio = new Audio(au.src);
-        st.audios.push(audio);
-        scheduleStTask(st, Math.max(0, (au.at || 0) * 1000), function () {
-          audio.__started = true;
-          var pr = audio.play(); if (pr && pr.catch) pr.catch(function () {});
-        });
-      });
+      playNext(0);
+      return;
     }
-    if (phase === "s6" && cfg.s6BlockUntil) {
-      scheduleStTask(st, cfg.s6BlockUntil * 1000, function () {
-        window.APP_STATE.s6AiBlock = false;
-        if (window.__s6FlushAi) window.__s6FlushAi();
+    dialogs.forEach(function (it) {
+      scheduleStTask(st, Math.max(0, (it.at || 0) * 1000), function () { pushSharedAi(it.key, it.who, it.text); });
+    });
+    audios.forEach(function (au) {
+      var srcs = au.srcs || [au.src];
+      var pre = window.APP_STATE.scenarioAudioPreload;
+      var preMap = pre ? pre.map : {};
+      scheduleStTask(st, Math.max(0, (au.at || 0) * 1000), function () {
+        var idx = 0;
+        function next() {
+          if (idx >= srcs.length) return;
+          var src = srcs[idx++];
+          var audio = preMap[src] || new Audio(src);
+          st.audios.push(audio);
+          audio.onended = function () { next(); };
+          audio.currentTime = 0;
+          var pr = audio.play(); if (pr && pr.catch) pr.catch(function () { next(); });
+        }
+        next();
       });
-    }
+    });
   }
   /* 区域（真实经纬度）—— 只服务平面版
      任务区：80 x 80 km（用户给定四角），中心 114.098 / 39.883
@@ -231,10 +249,9 @@ function make(variant) {
       ACTIVE_METRICS = SCFG.metrics || METRICS;
       ACTIVE_RES = SCFG.res || RES;
     }
-    if (sc && sc.id === "SH-06" && SCFG && SCFG.s6Audio) {
-      window.APP_STATE.s6AudioPreload = { id: SCFG.id, list: SCFG.s6Audio.map(function (au) {
-        var a = new Audio(au.src); a.preload = "auto"; a.load(); return a;
-      }) };
+    if (sc && sc.id === "SH-06" && SCFG) {
+      var allPre = window.ensureScenarioAudioPreload ? window.ensureScenarioAudioPreload() : { map: {}, count: 0 };
+      window.APP_STATE.s6AudioPreload = { id: SCFG.id, map: allPre.map, count: allPre.count };
     }
     var VOICE_HTML = IS_MISSION
       ? ('<section class="s4-voice">' +
@@ -1227,36 +1244,68 @@ function make(variant) {
       }
       var aiChatEl = root.querySelector(".s6-chat-scroll");
       var aiLogEl = root.querySelector(".s6-ai-log");
-      var T_JOIN = FL.T_LIFT + 90; /* matches TOFF in flight06.js */
+      var lastS6N = 0, s6EventQueue = [], s6EventBusy = false;
+      function startS6EventList(srcs) {
+        var st = window.APP_STATE && window.APP_STATE.aiAudio && window.APP_STATE.aiAudio.s6;
+        if (!st) return;
+        var pre = window.APP_STATE.s6AudioPreload;
+        var idx = 0;
+        s6EventBusy = true;
+        function next() {
+          if (idx >= srcs.length) {
+            s6EventBusy = false;
+            if (s6EventQueue.length) startS6EventList(s6EventQueue.shift());
+            return;
+          }
+          var src = srcs[idx++];
+          var audio = pre && pre.map && pre.map[src] ? pre.map[src] : new Audio(src);
+          st.audios.push(audio);
+          audio.onended = next;
+          audio.currentTime = 0;
+          var pr = audio.play();
+          if (pr && pr.catch) pr.catch(next);
+        }
+        next();
+      }
+      function playS6EventAudio(srcs) {
+        if (!srcs) return;
+        var list = Array.isArray(srcs) ? srcs : [srcs];
+        if (s6EventBusy) s6EventQueue.push(list);
+        else startS6EventList(list);
+      }
+      var T_JOIN = FL.T_LIFT + 90;
       var T_ARRIVE = Math.min.apply(null, FL.T_ARR || [T_JOIN]);
       var AI_EVENTS = [
-        { t: T_ARRIVE, who: "ai", text: "机群抵达任务区，开始分区侦察。" },
-        { t: T_SCAN, who: "ai", text: "在“潜在目标部署区-2”扫描发现2个疑似雷达目标，已加入目标档案。" },
-        { t: T_SCAN, who: "ai", text: "建议采用方案：为001预警雷达、002火控雷达两个疑似目标各派出两架光电无人机执行侦察和打击任务。" },
+        { t: T_ARRIVE, who: "ai", audio: ["assets/audio/026.wav"], text: "机群抵达任务区，开始分区侦察。" },
+        { t: T_SCAN, who: "ai", audio: ["assets/audio/027.wav","assets/audio/028.wav"], text: "在“潜在目标部署区-2”扫描发现2个疑似雷达目标，已加入目标档案。" },
+        { t: T_SCAN, who: "ai", audio: ["assets/audio/029.wav","assets/audio/030.wav"], text: "建议采用方案：为001预警雷达、002火控雷达两个疑似目标各派出两架光电无人机执行侦察和打击任务。" },
         { t: T_SCAN + 2, who: "user", text: "方案确认。" },
-        { t: FL.T_REASSIGN || 0, who: "ai", text: "已分配14号、15号光电无人机进行001预警雷达察打任务。" },
-        { t: FL.T_REASSIGN || 0, who: "ai", text: "已分配17号、18号光电无人机进行002火控雷达察打任务。" },
-        { t: FL.T_REPLAN || 0, who: "ai", text: "重新规划“潜在目标部署区-2”剩余的6架光电无人机侦察方式。" },
-        { t: T_CONFIRM_002, who: "ai", text: "智能评估对照，确认002火控雷达" },
-        { t: T_CONFIRM_001, who: "ai", text: "智能评估对照，确认001预警雷达" },
-        { t: 4392.33, who: "ai", text: "重新规划“潜在目标部署区-2”剩余的8架光电无人机侦察方式。" },
-        { t: 4508.00, who: "ai", text: "重新规划“潜在目标部署区-1”剩余的8架光电无人机侦察方式。" },
-        { t: 4825.20, who: "ai", text: "003运动目标已确认摧毁，02号光电无人机返回“潜在目标部署区-1”，重新规划9架光电无人机侦察方式。" },
-        { t: 4500.00, who: "ai", text: "在“潜在目标部署区-1”GMTI扫描发现1个运动目标，已加入目标档案。" },
-        { t: 4500.00, who: "ai", text: "建议采用方案：为003运动目标派出两架光电无人机执行侦察和打击任务。" },
+        { t: FL.T_REASSIGN || 0, who: "ai", audio: ["assets/audio/031.wav","assets/audio/032.wav"], text: "已分配14号、15号光电无人机进行001预警雷达察打任务。" },
+        { t: FL.T_REASSIGN || 0, who: "ai", audio: ["assets/audio/033.wav","assets/audio/034.wav"], text: "已分配17号、18号光电无人机进行002火控雷达察打任务。" },
+        { t: FL.T_REPLAN || 0, who: "ai", audio: ["assets/audio/035.wav"], text: "重新规划“潜在目标部署区-2”剩余的6架光电无人机侦察方式。" },
+        { t: T_CONFIRM_002, who: "ai", audio: ["assets/audio/036.wav"], text: "智能评估对照，确认002火控雷达" },
+        { t: T_CONFIRM_001, who: "ai", audio: ["assets/audio/037.wav"], text: "智能评估对照，确认001预警雷达" },
+        { t: 4392.33, who: "ai", audio: ["assets/audio/038.wav"], text: "重新规划“潜在目标部署区-2”剩余的8架光电无人机侦察方式。" },
+        { t: 4508.00, who: "ai", audio: ["assets/audio/043.wav"], text: "重新规划“潜在目标部署区-1”剩余的8架光电无人机侦察方式。" },
+        { t: 4825.20, who: "ai", audio: ["assets/audio/045.wav","assets/audio/046.wav","assets/audio/047.wav"], text: "003运动目标已确认摧毁，02号光电无人机返回“潜在目标部署区-1”，重新规划9架光电无人机侦察方式。" },
+        { t: 4500.00, who: "ai", audio: ["assets/audio/039.wav","assets/audio/040.wav"], text: "在“潜在目标部署区-1”GMTI扫描发现1个运动目标，已加入目标档案。" },
+        { t: 4500.00, who: "ai", audio: ["assets/audio/041.wav","assets/audio/042.wav"], text: "建议采用方案：为003运动目标派出两架光电无人机执行侦察和打击任务。" },
         { t: 4502.00, who: "user", text: "方案确认。" },
-        { t: T003_CONFIRM, who: "ai", text: "智能评估对照，确认003雷达目标" },
+        { t: T003_CONFIRM, who: "ai", audio: ["assets/audio/044.wav"], text: "智能评估对照，确认003雷达目标" }
       ].filter(function (ev) { return ev.t > 0; }).sort(function (a, b) { return a.t - b.t; });
       function renderAiLog(t) {
         if (!aiLogEl) return;
         var n = 0;
-        var s6Blocked = !!(window.APP_STATE && window.APP_STATE.s6AiBlock);
-        if (!s6Blocked) for (var i = 0; i < AI_EVENTS.length; i++) if (t + 1e-6 >= AI_EVENTS[i].t) n++;
+        for (var i = 0; i < AI_EVENTS.length; i++) if (t + 1e-6 >= AI_EVENTS[i].t) n++;
         var sharedN = sharedAiMessages().length;
         var sig = String(n) + ":" + String(sharedN);
         if (aiLogEl.getAttribute("data-n") === sig) return;
         aiLogEl.setAttribute("data-n", sig);
-        for (var j = 0; j < n; j++) pushSharedAi("s6-" + j, AI_EVENTS[j].who, AI_EVENTS[j].text);
+        for (var j = lastS6N; j < n; j++) {
+          pushSharedAi("s6-" + j, AI_EVENTS[j].who, AI_EVENTS[j].text);
+          if (AI_EVENTS[j].audio) playS6EventAudio(AI_EVENTS[j].audio);
+        }
+        lastS6N = Math.max(lastS6N, n);
         renderSharedAi(aiLogEl);
       }
 
@@ -1358,10 +1407,6 @@ function make(variant) {
         if (st.run && !window.APP_STATE.s6DialogStarted) {
           window.APP_STATE.s6DialogStarted = true;
           window.APP_STATE.s6AiBlock = true;
-          window.__s6FlushAi = function () {
-            if (aiLogEl) aiLogEl.removeAttribute("data-n");
-            renderAiLog(st.t);
-          };
           startScenarioDialog("s6");
         }
         if (window.setS6DialogPaused) window.setS6DialogPaused(!st.run);
@@ -2045,6 +2090,7 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
   function onShow(e) {
     if (e && e.scid === "SH-03" && window.APP_STATE) { window.APP_STATE.scenarioId = null; window.APP_STATE.flow = []; }
     if (e && e.scid === "SH-03") clearAreaGraphics(e);
+    if (e && (e.scid === "SH-04" || e.scid === "SH-05" || e.scid === "SH-06") && window.ensureScenarioAudioPreload) window.ensureScenarioAudioPreload();
     if (e && e.scid === "SH-04") startScenarioDialog("s4");
     if (e && e.scid === "SH-05") startScenarioDialog("s5");
     else if (e && window.APP_STATE && window.APP_STATE.scenarioId) setAreaGraphics(e, true);

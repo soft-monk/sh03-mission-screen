@@ -56,8 +56,7 @@
       { key: "s4-mission-requirement", who: "ai", at: 30.0, text: "上级任务要求对两区域执行封控打击，持续40分钟时间。" }
     ],
     s4Audio: [
-      { src: "assets/audio/001.wav", at: 0, duration: 30 },
-      { src: "assets/audio/002.wav", at: 30, duration: 6 }
+      { at: 0, srcs: ["assets/audio/001.wav","assets/audio/002.wav","assets/audio/003.wav","assets/audio/004.wav","assets/audio/005.wav","assets/audio/006.wav","assets/audio/007.wav","assets/audio/008.wav"] }
     ],
     s5Dialog: [
       { key: "s5-plan-header", who: "ai", at: 0.5, text: "推荐编组方案：" },
@@ -69,21 +68,20 @@
       { key: "s5-relay", who: "ai", at: 20.5, text: "中继通信机3架，部署保障通信。" }
     ],
     s5Audio: [
-      { src: "assets/audio/003.wav", at: 0, duration: 24 }
+      { at: 0, srcs: ["assets/audio/009.wav","assets/audio/010.wav","assets/audio/011.wav","assets/audio/012.wav","assets/audio/013.wav"] }
     ],
     s6Dialog: [
-      { key: "s6-plan-generated", who: "ai", at: 0.5, text: "根据任务需求和编组方案，已生成蜂群作战方案。" },
-      { key: "s6-traverse-1", who: "ai", at: 5.0, text: "光电察打机10架，对于潜在目标区1，5分钟可完成区域遍历。" },
-      { key: "s6-traverse-2", who: "ai", at: 11.4, text: "光电察打机10架，对于潜在目标区2，5分钟可完成区域遍历。" },
-      { key: "s6-traverse-3", who: "ai", at: 17.8, text: "电子侦察机6架，对于潜在目标区2，6分钟可完成区域遍历。" },
-      { key: "s6-traverse-4", who: "ai", at: 24.2, text: "雷达GMTI 2架，对于潜在目标区1，4分钟可完成区域遍历。" },
-      { key: "s6-traverse-5", who: "ai", at: 30.6, text: "雷达SAR 1架，对于潜在目标区1，85分钟可完成区域遍历。" }
+      { key: "s6-06", who: "ai", at: 0.0, audio: "assets/audio/020.wav", text: "根据任务需求和编组方案，已生成蜂群作战方案。" },
+      { key: "s6-07", who: "ai", at: 5.4, audio: "assets/audio/021.wav", text: "光电察打机10架，对于潜在目标区1，5分钟可完成区域遍历。" },
+      { key: "s6-08", who: "ai", at: 12.3, audio: "assets/audio/022.wav", text: "光电察打机10架，对于潜在目标区2，5分钟可完成区域遍历。" },
+      { key: "s6-09", who: "ai", at: 19.2, audio: "assets/audio/023.wav", text: "电子侦察机6架，对于潜在目标区2，6分钟可完成区域遍历。" },
+      { key: "s6-10", who: "ai", at: 25.8, audio: "assets/audio/024.wav", text: "雷达GMTI 2架，对于潜在目标区1，4分钟可完成区域遍历。" },
+      { key: "s6-11", who: "ai", at: 32.3, audio: "assets/audio/025.wav", text: "雷达SAR 1架，对于潜在目标区1，85分钟可完成区域遍历。" }
     ],
     s6Audio: [
-      { src: "assets/audio/004.wav", at: 0, duration: 5 },
-      { src: "assets/audio/005.wav", at: 5, duration: 32 }
+      { src: "assets/audio/001.wav" }, { src: "assets/audio/002.wav" }, { src: "assets/audio/003.wav" }, { src: "assets/audio/004.wav" }, { src: "assets/audio/005.wav" }, { src: "assets/audio/006.wav" }, { src: "assets/audio/007.wav" }, { src: "assets/audio/008.wav" }, { src: "assets/audio/009.wav" }, { src: "assets/audio/010.wav" }, { src: "assets/audio/011.wav" }, { src: "assets/audio/012.wav" }, { src: "assets/audio/013.wav" }, { src: "assets/audio/014.wav" }, { src: "assets/audio/015.wav" }, { src: "assets/audio/016.wav" }, { src: "assets/audio/017.wav" }, { src: "assets/audio/018.wav" }, { src: "assets/audio/019.wav" }, { src: "assets/audio/020.wav" }, { src: "assets/audio/021.wav" }, { src: "assets/audio/022.wav" }, { src: "assets/audio/023.wav" }, { src: "assets/audio/024.wav" }, { src: "assets/audio/025.wav" }, { src: "assets/audio/026.wav" }, { src: "assets/audio/027.wav" }, { src: "assets/audio/028.wav" }, { src: "assets/audio/029.wav" }, { src: "assets/audio/030.wav" }, { src: "assets/audio/031.wav" }, { src: "assets/audio/032.wav" }, { src: "assets/audio/033.wav" }, { src: "assets/audio/034.wav" }, { src: "assets/audio/035.wav" }, { src: "assets/audio/036.wav" }, { src: "assets/audio/037.wav" }, { src: "assets/audio/038.wav" }, { src: "assets/audio/039.wav" }, { src: "assets/audio/040.wav" }, { src: "assets/audio/041.wav" }, { src: "assets/audio/042.wav" }, { src: "assets/audio/043.wav" }, { src: "assets/audio/044.wav" }, { src: "assets/audio/045.wav" }, { src: "assets/audio/046.wav" }, { src: "assets/audio/047.wav" }
     ],
-    s6BlockUntil: 37,
+    s6BlockUntil: 0,
     flow: ["SH-04", "SH-05", "SH-06"]
   };
   function clone(v) { return JSON.parse(JSON.stringify(v)); }
