@@ -19,8 +19,10 @@ window.S06_SHELL = (function () {
   var EMPTY_VIDEO_CARDS = [
     { k: "A", title: "视频通道 A · 待接入" },
     { k: "B", title: "视频通道 B · 待接入" },
-    { k: "C", title: "视频通道 C · 待接入" },
-    { k: "D", title: "视频通道 D · 待接入" }
+    { k: "C", title: "视频通道 C · 待接入", cls: " s6-video-extra", hidden: true },
+    { k: "D", title: "视频通道 D · 待接入", cls: " s6-video-extra", hidden: true },
+    { k: "E", title: "视频通道 E · 待接入", cls: " s6-video-third", hidden: true },
+    { k: "F", title: "视频通道 F · 待接入", cls: " s6-video-third", hidden: true }
   ];
   /* 常驻界面元素（外壳自带，不依赖 make() 内部变量） */
   var MENU = [
@@ -187,6 +189,10 @@ window.S06_SHELL = (function () {
     if (stEl && CH.STATUS) stEl.innerHTML = CH.STATUS.map(function (s) {
       return "<span class=\"s3-st" + (s.on ? "" : " off") + "\">" + ic(s.icon, 15, "", 1.9) + "<em>" + s.k + "：</em><b>" + s.v + "</b></span>";
     }).join("");
+    /* 空壳没有淡入动画：把 CSS 里默认 opacity:0 的框架元素直接设为可见 */
+    [].slice.call(root.querySelectorAll(".s3-mi, .s3-toolbar, .s3-side, .s3-scale, .s3-coord, .s3-mic, .s3-st")).forEach(function (n) {
+      n.style.opacity = "1";
+    });
     var ctl = root.querySelector(".s6-ctl");
     var bar = ctl.querySelector(".s6-bar"), fill = bar.querySelector(".s6-fill"), knob = bar.querySelector(".s6-knob");
     var segsBox = bar.querySelector(".s6-segs"), segLbls = ctl.querySelector(".s6-seglbls");
