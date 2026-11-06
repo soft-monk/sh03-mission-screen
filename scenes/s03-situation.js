@@ -2,6 +2,14 @@
    左侧菜单栏 + 浮动工具条 + 右侧 AI 任务分析 + 底部状态栏 + 场景选择
    地图上不放任何区域图元，也不放无人机 */
 window.SCENES = window.SCENES || {};
+/* SH-03 不建地图：所有地图调用走这个安全空实现 */
+var NULL_MAP = new Proxy({ is3d: false }, {
+  get: function (t, k) {
+    if (k in t) return t[k];
+    if (k === "label") return function () { return { h: { set: function () {} }, set: function () {} }; };
+    return function () { return null; };
+  }
+});
 
 (function () {
 function make(variant) {
@@ -415,7 +423,8 @@ function make(variant) {
       : "";
 
     root.innerHTML =
-      '<div class="s3-map"></div>' +
+      (IS_SELECT ? '<div class="s3-map-static"></div>' : '<div class="s3-map"></div>') +
+      (IS_SELECT ? '' : '<div class="s3-map-empty"><b>地图数据待接入</b></div>') +
       '<aside class="s3-menu"></aside>' +
       '<div class="s3-toprow"><div class="s3-toolbar"></div>' + RES6_HTML + '</div>' +
       '<section class="s3-side"></section>' +
@@ -436,7 +445,11 @@ function make(variant) {
     });
     /* 共享同一块地图：后面每一屏都复用，不重建 */
     var mapHost = root.querySelector(".s3-map");
-    var map = MapViewShared(mapHost);
+    /* 地图只在场景二创建；场景 1/3 暂挂空地图层：界面照常，地图区留空 */
+    var NEED_MAP = !!mapHost && (!window.APP_STATE || !window.APP_STATE.scenarioId || window.APP_STATE.scenarioId === "scene-2");
+    var map = NEED_MAP ? MapViewShared(mapHost) : NULL_MAP;
+    var mapEmptyEl = root.querySelector(".s3-map-empty");
+    if (mapEmptyEl && NEED_MAP) mapEmptyEl.style.display = "none";
     if (map.onMoveEnd) map.onMoveEnd(root);
     var areaEls = [];
     var labelEls = [];
@@ -1571,6 +1584,17 @@ function make(variant) {
         var cfg = window.getScenarioConfig ? window.getScenarioConfig(card.id) : null;
         window.APP_STATE.flow = (cfg && cfg.flow) ? cfg.flow.slice() : ["SH-04", "SH-05", "SH-06"];
         if (P.setFlow) P.setFlow(card.id);
+        /* 场景二：趁 620ms 过渡在隐藏容器里先把地图建起来，SH-04 首帧就有图；场景一/三 不建图 */
+        if (card.id === "scene-2" && window.MapViewShared) {
+          var warm = document.getElementById("mapwarm");
+          if (!warm) {
+            warm = document.createElement("div");
+            warm.id = "mapwarm";
+            warm.style.cssText = "position:absolute;left:-20000px;top:0;width:1920px;height:1080px;pointer-events:none";
+            document.body.appendChild(warm);
+          }
+          try { window.MapViewShared(warm); } catch (err) {}
+        }
         el.classList.add("picked");
         if (window.PLAYER && window.PLAYER.lockBack) window.PLAYER.lockBack();
         cardEls.forEach(function (o, j) { if (j) o.classList.add("fade"); });
@@ -1594,6 +1618,14 @@ function make(variant) {
       sty.id = "css-s03";
       sty.textContent = [
         ".s3-map{position:absolute;inset:0}",
+        ".s3-map-static{position:absolute;inset:0;background:#040a12 url(assets/img/basemap.jpg) center center / cover no-repeat;",
+        "  filter:saturate(.92) brightness(.72)}",
+        ".s3-map-empty{position:absolute;inset:0;z-index:1;display:grid;place-items:center;",
+        "  background:radial-gradient(circle at 50% 45%,#0b1a2c,#040a12 72%)}",
+        ".s3-map-empty b{font-size:16px;letter-spacing:4px;color:#4c6480;border:1px dashed rgba(56,189,248,.25);",
+        "  padding:10px 22px;border-radius:8px;background:rgba(8,18,32,.5);font-weight:400}",
+        ".s3-map-static:after{content:'';position:absolute;inset:0;",
+        "  background:radial-gradient(circle at 50% 46%,rgba(4,10,18,.10),rgba(4,10,18,.78) 78%)}",
         ".s3-menu{position:absolute;left:0;top:74px;bottom:36px;width:96px;display:flex;flex-direction:column;gap:6px;padding-top:12px;",
         "  background:linear-gradient(180deg,rgba(9,20,34,.97),rgba(5,12,22,.99));border-right:1px solid rgba(56,189,248,.16);z-index:14}",
         ".s3-mi{width:76px;margin:0 auto;height:74px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;",
@@ -1874,6 +1906,7 @@ function make(variant) {
     return {
       map: map,
       host: mapHost,
+      needMap: NEED_MAP,
       areaEls: areaEls,
       labelEls: labelEls,
       ao: GEO.px(AO.lon, AO.lat),
@@ -2097,7 +2130,7 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
     else if (e && window.APP_STATE && window.APP_STATE.scenarioId) setAreaGraphics(e, true);
     /* 切到前台：先把共享画布挂到自己容器上（若它还在别的屏里），再校准一次 */
     if (e && e.scid === "SH-06" && window.PLAYER) window.PLAYER.pause();   /* 这一屏交给飞行演示的独立时钟 */
-    if (e && e.host && window.MapViewShared) window.MapViewShared(e.host);
+    if (e && e.host && e.needMap && window.MapViewShared) window.MapViewShared(e.host);
     if (e && e.scid === "SH-06" && e.host && e.host.closest) {
       var scr = e.host.closest(".scr");
       if (scr && scr.__s6Refresh) scr.__s6Refresh();
