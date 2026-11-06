@@ -12,7 +12,14 @@ window.S06_SKELETON = {
     /* 外壳进度由 S06_SHELL 自己的本地时钟驱动，这里不需要按播片时间做任何事 */
   },
   onShow: function (e) {
-    /* 本适配层没有地图、没有音频、没有 AI 事件，因此不接管全局播放器 */
+    /* 和场景二 SH-06 一致：进入即暂停全局定时器，停在 SH-06 不自动跳到下一屏 */
+    if (window.PLAYER && window.PLAYER.pause) window.PLAYER.pause();
+    /* 进场时容器才有真实尺寸：校准画布并重新套用相机 */
+    if (e && e.mapView) {
+      try { if (e.mapView.repaint) e.mapView.repaint(); } catch (err) {}
+      try { if (e.cam && e.mapView.setView) e.mapView.setView({ center: e.cam.center, zoom: e.cam.zoom, pitch: e.cam.pitch, bearing: e.cam.bearing }); } catch (err) {}
+      requestAnimationFrame(function () { try { if (e.mapView.repaint) e.mapView.repaint(); } catch (err) {} });
+    }
   },
   onHide: function (e) {
     if (e && e.st) e.st.dead = true;

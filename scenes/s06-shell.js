@@ -160,23 +160,23 @@ window.S06_SHELL = (function () {
     ensureLayerCss();
     ensureEmptyCss();
     var uavs = (cfg && cfg.uavs) || [];
+    var hasMap = !!(cfg && cfg.mapBounds);   /* 场景一有自己的一套瓦片与边界 */
+    var mapHost = null;
     var total = (window.FLIGHT06 && window.FLIGHT06.TOTAL) || 9000;
     var CH = { MENU: MENU, TOOLS: TOOLS, STATUS: STATUS };
     root.innerHTML =
-      htmlEmptyMap("地图数据待接入") +
+      (hasMap ? "<div class=\"s3-map\"></div>" : htmlEmptyMap("地图数据待接入")) +
       "<aside class=\"s3-menu\"></aside>" +
       "<div class=\"s3-toprow\"><div class=\"s3-toolbar\"></div>" + htmlRes(uavs) + "</div>" +
       "<section class=\"s3-side\"></section>" +
       "<div class=\"s3-scale\"><b></b><span>2 km</span></div>" +
-      "<div class=\"s3-coord\">--</div>" +
+      "<div class=\"s3-coord\">" + ((cfg && cfg.coordText) || "--") + "</div>" +
       htmlRight([]) +
       htmlVideo(EMPTY_VIDEO_CARDS, []) +
       "<button class=\"s3-mic\">" + ic("mic", 26, "", 1.7) + "</button>" +
       "<footer class=\"s3-status\"></footer>" +
       htmlControls(fmt(total)) +
       htmlLayers(LAYERS);
-    var smallBar = root.querySelector(".s6-video-smallbar");
-    if (smallBar) smallBar.classList.add("on");
     var menuEl = root.querySelector(".s3-menu");
     if (menuEl && CH.MENU) menuEl.innerHTML = CH.MENU.map(function (m, i) {
       return "<div class=\"s3-mi" + (i === 0 ? " on" : "") + "\">" + ic(m.icon, 26, "", 1.55) + "<span>" + m.k + "</span></div>";
@@ -193,6 +193,31 @@ window.S06_SHELL = (function () {
     [].slice.call(root.querySelectorAll(".s3-mi, .s3-toolbar, .s3-side, .s3-scale, .s3-coord, .s3-mic, .s3-st")).forEach(function (n) {
       n.style.opacity = "1";
     });
+    if (hasMap && window.MapViewShared) {
+      if (window.MapViewSetBounds) window.MapViewSetBounds(cfg.mapBounds);
+      mapHost = root.querySelector(".s3-map");
+      var mv = window.MapViewShared(mapHost);
+      var cam = cfg.camera || null;
+      if (mv && mv.setView && cam) mv.setView({ center: cam.center, zoom: cam.zoom, pitch: cam.pitch, bearing: cam.bearing });
+      /* 建屏时还没 .on，容器尺寸为 0；等两帧后容器有尺寸再校准一次 */
+      requestAnimationFrame(function () { requestAnimationFrame(function () { if (mv && mv.repaint) mv.repaint(); }); });
+      setTimeout(function () { if (mv && mv.repaint) mv.repaint(); }, 160);
+      /* 场景一的任务区 / 集结区：共享地图上重画一次（离开 SH-05 时图元已被清掉） */
+      try {
+        if (cfg.area && cfg.area.mission) {
+          mv.polygon("area-mission", cfg.area.mission, { fill: "#f59e0b", fillOpacity: 0, line: "#f59e0b", width: 5.5 });
+          if (mv.setArea) mv.setArea("area-mission", 1);
+        }
+        if (cfg.area && cfg.area.reserve) {
+          mv.polygon("area-reserve", cfg.area.reserve, { fill: "#22c55e", fillOpacity: 0.16, line: "#22c55e", width: 5, dash: [2.4, 1.6] });
+          if (mv.setArea) mv.setArea("area-reserve", 1);
+        }
+        if (cfg.area && cfg.area.missionLabel) { var L1 = mv.label("任务区", cfg.area.missionLabel, "#fbbf24", 17); if (L1 && L1.set) L1.set(1); }
+        if (cfg.area && cfg.area.reserveLabel) { var L2 = mv.label("我方集结区", cfg.area.reserveLabel, "#4ade80", 16); if (L2 && L2.set) L2.set(1); }
+      } catch (err) {}
+      window.__s6ShellMap = mv; window.__s6ShellCam = cam;
+    }
+
     var ctl = root.querySelector(".s6-ctl");
     var bar = ctl.querySelector(".s6-bar"), fill = bar.querySelector(".s6-fill"), knob = bar.querySelector(".s6-knob");
     var segsBox = bar.querySelector(".s6-segs"), segLbls = ctl.querySelector(".s6-seglbls");
@@ -281,7 +306,7 @@ window.S06_SHELL = (function () {
         lyrBtn.classList.toggle("on", on);
       });
     }
-    return { shell: true, st: st, root: root, aiLog: root.querySelector(".s6-ai-log") };
+    return { shell: true, st: st, root: root, aiLog: root.querySelector(".s6-ai-log"), mapView: window.__s6ShellMap || null, cam: window.__s6ShellCam || null };
   }
   return {
     LAYERS: LAYERS,

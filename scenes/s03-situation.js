@@ -446,8 +446,9 @@ function make(variant) {
     /* 共享同一块地图：后面每一屏都复用，不重建 */
     var mapHost = root.querySelector(".s3-map");
     /* 地图只在场景二创建；场景 1/3 暂挂空地图层：界面照常，地图区留空 */
-    var NEED_MAP = !!mapHost && (!window.APP_STATE || !window.APP_STATE.scenarioId || window.APP_STATE.scenarioId === "scene-2");
+    var NEED_MAP = !!mapHost && (!window.APP_STATE || !window.APP_STATE.scenarioId || window.APP_STATE.scenarioId === "scene-2" || window.APP_STATE.scenarioId === "scene-1");
     var map = NEED_MAP ? MapViewShared(mapHost) : NULL_MAP;
+    if (NEED_MAP && window.MapViewSetBounds) window.MapViewSetBounds((SCFG && SCFG.mapBounds) ? SCFG.mapBounds : null);
     var mapEmptyEl = root.querySelector(".s3-map-empty");
     if (mapEmptyEl && NEED_MAP) mapEmptyEl.style.display = "none";
     if (map.onMoveEnd) map.onMoveEnd(root);
@@ -461,7 +462,7 @@ function make(variant) {
     /* 任务区：80x80km 橙黄色实线 */
     map.polygon("area-mission", ACTIVE_AREA.mission, { fill: "#f59e0b", fillOpacity: 0, line: "#f59e0b", width: 5.5 });
     areaEls.push({ id: "area-mission", delay: 1.6 });
-    labelEls.push({ h: map.label("任务区", [113.7900, 39.9400], "#fbbf24", 17), delay: 1.6 });
+    labelEls.push({ h: map.label("任务区", ACTIVE_AREA.missionLabel || [113.7900, 39.9400], "#fbbf24", 17), delay: 1.6 });
 
     /* 潜在目标部署区：2 个红色实线矩形（20x20km），无填充 */
     ACTIVE_AREA.targets.forEach(function (tg, ti) {
@@ -495,7 +496,7 @@ function make(variant) {
     /* 我方集结区：绿色虚线 4x4km */
     map.polygon("area-reserve", ACTIVE_AREA.reserve, { fill: "#22c55e", fillOpacity: 0.16, line: "#22c55e", width: 5, dash: [2.4, 1.6] });
     areaEls.push({ id: "area-reserve", delay: 2.75 });
-    labelEls.push({ h: map.label("我方集结区", [115.9320, 39.7660], "#4ade80", 16), delay: 2.75 });
+    labelEls.push({ h: map.label("我方集结区", ACTIVE_AREA.reserveLabel || [115.9320, 39.7660], "#4ade80", 16), delay: 2.75 });
 
     /* 区域与标签不做淡入：建图即 100% 显示（预热期间就已经是最终画面） */
     areaEls.forEach(function (o) { map.setArea(o.id, SHOW_AREAS ? 1 : 0); });
@@ -1907,6 +1908,7 @@ function make(variant) {
       map: map,
       host: mapHost,
       needMap: NEED_MAP,
+      mapBounds: (SCFG && SCFG.mapBounds) ? SCFG.mapBounds : null,
       areaEls: areaEls,
       labelEls: labelEls,
       ao: GEO.px(AO.lon, AO.lat),
@@ -1977,7 +1979,7 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
     /* 区域图元与标签在 build 时就已经是最终透明度，这里不再逐帧驱动（不做淡入） */
 
     /* 左下角坐标 */
-    e.coord.textContent = "116.21800, 39.92000";
+    e.coord.textContent = (SELCFG && SELCFG.coordText) ? SELCFG.coordText : "116.21800, 39.92000";
 
     /* 比例尺：自动挑一个整数公里，条子落在 70~150px */
     var mpp = 156543.03 * Math.cos(39.920 * Math.PI / 180) / Math.pow(2, zoom);
@@ -2131,6 +2133,8 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
     /* 切到前台：先把共享画布挂到自己容器上（若它还在别的屏里），再校准一次 */
     if (e && e.scid === "SH-06" && window.PLAYER) window.PLAYER.pause();   /* 这一屏交给飞行演示的独立时钟 */
     if (e && e.host && e.needMap && window.MapViewShared) window.MapViewShared(e.host);
+    if (e && e.needMap && window.MapViewSetBounds) window.MapViewSetBounds(e.mapBounds || null);
+    if (e && e.needMap) e._camLast = null;   /* 边界变了，强制下一帧重新应用相机 */
     if (e && e.scid === "SH-06" && e.host && e.host.closest) {
       var scr = e.host.closest(".scr");
       if (scr && scr.__s6Refresh) scr.__s6Refresh();

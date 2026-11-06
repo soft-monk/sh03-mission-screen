@@ -97,6 +97,15 @@ window.MapView = function (host) {
     root.setAttribute("data-pr", k);
   }
 
+  /* 默认拖拽边界（场景二用）；场景一通过 MapViewSetBounds 临时切换到自己的范围 */
+  var DEFAULT_BOUNDS = [[112.3, 35.5], [119.8, 42.9]];
+  var pendingBounds = null;   /* 建图前调用的边界先记下，等地图实例起来再套用 */
+  window.MapViewSetBounds = function (bb) {
+    pendingBounds = bb || DEFAULT_BOUNDS;
+    if (!map || !map.setMaxBounds) return;
+    try { map.setMaxBounds(pendingBounds); } catch (e) {}
+  };
+
   function boot() {
     if (map || FILE_MODE) return;
     if (root.clientWidth < 50 || root.clientHeight < 50) { setTimeout(boot, 40); return; }
@@ -116,9 +125,10 @@ window.MapView = function (host) {
       opts.minZoom = 9;
       opts.maxZoom = 16;
       /* 拖拽边界 = 兜底整图内缩，拖到头就停住，不会漂到空白里 */
-      opts.maxBounds = [[112.3, 35.5], [119.8, 42.9]];
+      opts.maxBounds = DEFAULT_BOUNDS;
     }
     map = new maplibregl.Map(opts);
+    if (pendingBounds) { try { map.setMaxBounds(pendingBounds); } catch (e) {} }
     applyPixelRatio();
     var prRaf = 0;
     onResize = function () {
