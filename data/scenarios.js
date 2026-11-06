@@ -110,7 +110,7 @@
       { n: "编组2", k: "电子无人机", img: "uav-red.png", v: 8 },
       { n: "编组3", k: "通信无人机", img: "uav-green.png", v: 4 }
     ],
-    s5Dialog: [], s5Audio: [], s6Dialog: [], s6Audio: [],
+    s4Dialog: [], s4Audio: [], s5Dialog: [], s5Audio: [], s6Dialog: [], s6Audio: [],
     metrics: [{ k: "封控覆盖率", v: 91 }, { k: "边界完整度", v: 95 }, { k: "目标发现效率", v: 88 }, { k: "电子压制能力", v: 92 }, { k: "任务成功率", v: 89 }, { k: "资源利用率", v: 84 }],
     voice: [
       { t: 1.5, who: "ai", text: "场景一尚未完成设计，当前仅加载场景框架。" },
@@ -141,7 +141,7 @@
       { n: "编组3", k: "光电无人机", img: "uav-blue.png", v: 12 },
       { n: "编组4", k: "电子无人机", img: "uav-red.png", v: 4 }
     ],
-    s5Dialog: [], s5Audio: [],
+    s4Dialog: [], s4Audio: [], s5Dialog: [], s5Audio: [], s6Dialog: [], s6Audio: [],
     metrics: [{ k: "要点防护率", v: 94 }, { k: "预警覆盖度", v: 96 }, { k: "通信稳定度", v: 95 }, { k: "目标识别效率", v: 90 }, { k: "任务成功率", v: 92 }, { k: "资源利用率", v: 88 }],
     voice: [
       { t: 1.5, who: "ai", text: "要点防护场景已加载，正在识别重点防护目标。" },

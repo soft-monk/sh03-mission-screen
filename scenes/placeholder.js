@@ -2,10 +2,12 @@
 window.SCENES = window.SCENES || {};
 window.SCENES._placeholder = {
   build(root, sc) {
+    const cfg = window.getSelectedScenario ? window.getSelectedScenario() : null;
+    const sn = cfg ? (cfg.short || "") : "";
     root.innerHTML =
       '<div class="bg-grid"></div>' +
       '<div class="ph">' +
-        '<div class="ph-l"><span class="ph-id">' + sc.id + '</span><span class="ph-phase">阶段 ' + (sc.ch || 1) + '</span></div>' +
+        '<div class="ph-l"><span class="ph-id">' + sc.id + '</span><span class="ph-phase">' + (sn ? sn + ' · ' : '') + '阶段 ' + (sc.ch || 1) + '</span></div>' +
         '<h1>' + sc.title + '</h1>' +
         '<div class="ph-line"></div>' +
         '<ul>' + (sc.points || []).map(p => "<li><i></i>" + p + "</li>").join("") + '</ul>' +

@@ -1,6 +1,6 @@
 /* 播放器：一个时钟 + 一个纯函数 render(t)。拖进度、跳章、重播都靠它 */
 (function () {
-  const TL = window.TIMELINE;
+  let TL = window.TIMELINE;
   const stage = document.getElementById("stage");
   const screensEl = document.getElementById("screens");
   const hud = document.getElementById("hud");
@@ -44,6 +44,28 @@
     cache[sc.id] = { root, ctx, mod, sc };
     return cache[sc.id];
   }
+  /* SH 号后面补当前所属场景（SH-01/02/03 公共屏不加） */
+  function badgeLabel(i) {
+    const sc = TL.screens[i];
+    if (!sc) return "";
+    const selId = window.APP_STATE && window.APP_STATE.scenarioId;
+    const isCommon = /^SH-0[123]$/.test(sc.id);
+    if (selId && !isCommon && window.getScenarioConfig) {
+      const cfg = window.getScenarioConfig(selId);
+      if (cfg) return sc.id + " \u00b7 " + (cfg.short || cfg.name || "");
+    }
+    return sc.id;
+  }
+  function refreshBadge() {
+    if (!scrBadge || curIdx < 0) return;
+    const sc = TL.screens[curIdx];
+    if (!sc) { scrBadge.textContent = ""; return; }
+    scrBadge.textContent = badgeLabel(curIdx);
+    const selId = window.APP_STATE && window.APP_STATE.scenarioId;
+    const cfg = selId && window.getScenarioConfig ? window.getScenarioConfig(selId) : null;
+    scrBadge.title = cfg ? (sc.id + " \u00b7 " + cfg.name) : "\u5f53\u524d\u5c4f\u7f16\u53f7";
+  }
+
   function show(i) {
     const prev = curIdx >= 0 ? cache[TL.screens[curIdx].id] : null;
     if (prev) {
@@ -52,7 +74,7 @@
       if (prev.mod && prev.mod.onHide) { try { prev.mod.onHide(prev.ctx); } catch (e) {} }
     }
     curIdx = i;
-    if (scrBadge) scrBadge.textContent = TL.screens[i].id;
+    refreshBadge();
     const cur = ensure(i);
     const earlyOnShow = cur.sc.id === "SH-03";
     if (earlyOnShow && cur.mod.onShow) { try { cur.mod.onShow(cur.ctx); } catch (e) {} }
@@ -77,6 +99,9 @@
   setTimeout(prewarm, 2500);
 
   /* ---------- HUD ---------- */
+  function buildHud() {
+    trackEl.innerHTML = "";
+    chaptersEl.innerHTML = "";
   TL.phases.forEach((p, i) => {
     const seg = FX.el("div", "seg");
     seg.dataset.i = i;
@@ -88,6 +113,30 @@
     b.onclick = () => seek(p.start);
     chaptersEl.appendChild(b);
   });
+  }
+  buildHud();
+
+  function endInfoText() {
+    const sel = window.APP_STATE && window.APP_STATE.scenarioId;
+    const cfg = sel && window.getScenarioConfig ? window.getScenarioConfig(sel) : null;
+    const who = cfg ? (cfg.short + " \u00b7 " + cfg.name) : "FastHTML";
+    return who + "  \u00b7 \u603b\u957f " + FX.mmss(TL.total);
+  }
+  function updateEndInfo() {
+    const box = endcard && endcard.querySelector("p");
+    if (box) box.textContent = endInfoText();
+  }
+  function setFlow(id) {
+    const next = (window.getTimelineFor && window.getTimelineFor(id)) || window.TIMELINE;
+    if (next === TL) { updateEndInfo(); dirty = true; return; }
+    TL = next;
+    curSub = null;
+    buildHud();
+    refreshBadge();
+    updateEndInfo();
+    dirty = true;
+  }
+  updateEndInfo();
 
   function updateHud() {
     TL.phases.forEach((p, i) => {
@@ -206,6 +255,7 @@
       /* 彻底销毁地图实例：下次进入 SH-03 时重新创建 = 第一次进来的样子 */
       try { if (window.MapViewReset) window.MapViewReset(); } catch (e) {}
       curSub = null;
+      setFlow(null);
       seek(SH03_T);            /* 回到 SH-03 起点（14 s）：请选择任务场景之前 */
       setPlaying(true);        /* 自动重播这一屏，播到 25.5 s 等待点会自己停下等人选 */
       setTimeout(function () {
@@ -258,6 +308,7 @@
   btnPlay.textContent = playing ? "⏸" : "▶";
   window.PLAYER = {
     seek,
+    setFlow,
     play: () => setPlaying(true),
     pause: () => setPlaying(false),
     lockBack: () => { backLock = true; },

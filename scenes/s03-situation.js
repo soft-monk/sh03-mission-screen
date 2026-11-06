@@ -1570,6 +1570,7 @@ function make(variant) {
         window.APP_STATE.aiMessages = [];
         var cfg = window.getScenarioConfig ? window.getScenarioConfig(card.id) : null;
         window.APP_STATE.flow = (cfg && cfg.flow) ? cfg.flow.slice() : ["SH-04", "SH-05", "SH-06"];
+        if (P.setFlow) P.setFlow(card.id);
         el.classList.add("picked");
         if (window.PLAYER && window.PLAYER.lockBack) window.PLAYER.lockBack();
         cardEls.forEach(function (o, j) { if (j) o.classList.add("fade"); });
@@ -2116,8 +2117,25 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
 }
 
 /* SH-03：带场景选择；SH-04：任务信息 + 两个按钮（同一套界面，同一套地图） */
+/* SH-06 分流：场景二走真实飞行演示，其他场景走占位外壳 */
+window.dispatchScenarioScreen = function (real, fallback) {
+  return {
+    build: function (root, sc) {
+      var sel = window.APP_STATE && window.APP_STATE.scenarioId;
+      var impl = (sel && sel !== "scene-2" && fallback) ? fallback : real;
+      var ctx = (impl.build ? impl.build(root, sc) : {}) || {};
+      ctx.__impl = impl;
+      return ctx;
+    },
+    render: function (t, e) { if (e && e.__impl && e.__impl.render) e.__impl.render(t, e); },
+    onShow: function (e) { if (e && e.__impl && e.__impl.onShow) e.__impl.onShow(e); },
+    onHide: function (e) { if (e && e.__impl && e.__impl.onHide) e.__impl.onHide(e); },
+    usesMap: true,
+    ownSubs: false
+  };
+};
 window.SCENES["SH-03"] = make("select");
 window.SCENES["SH-04"] = make("mission");
 window.SCENES["SH-05"] = make("plan");   /* 主框架 + 三栏（机型/推荐方案/理由） */
-window.SCENES["SH-06"] = make("frame");  /* 主框架 + A* 航路 */
+window.SCENES["SH-06"] = window.dispatchScenarioScreen(make("frame"), window.S06_SKELETON);  /* 主框架 + A* 航路 */
 })();
