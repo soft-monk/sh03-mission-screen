@@ -7,7 +7,9 @@
     short: "场景二",
     enabled: true,
     region: "东部区域封控区",
-    camera: { center: [114.100, 39.880], zoom: 9.13, pitch: 38, bearing: -20 },
+    camera: { center: [114.100, 39.880], zoom: 10.0, pitch: 38, bearing: -20 },
+    mapBounds: [[113.20, 39.20], [116.40, 40.60]],
+    minZoom: 10,
     area: {
       mission: [[113.62960, 39.51435], [114.56639, 39.51435], [114.56639, 40.25096], [113.62960, 40.25096]],
       targets: [
@@ -148,6 +150,7 @@
       { n: "编组3", k: "光电无人机", img: "uav-blue.png", v: 12 },
       { n: "编组4", k: "电子无人机", img: "uav-red.png", v: 4 }
     ],
+    mapBounds: null,
     s4Dialog: [], s4Audio: [], s5Dialog: [], s5Audio: [], s6Dialog: [], s6Audio: [],
     metrics: [{ k: "要点防护率", v: 94 }, { k: "预警覆盖度", v: 96 }, { k: "通信稳定度", v: 95 }, { k: "目标识别效率", v: 90 }, { k: "任务成功率", v: 92 }, { k: "资源利用率", v: 88 }],
     voice: [

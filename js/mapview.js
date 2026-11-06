@@ -26,35 +26,25 @@ window.MapView = function (host) {
     var style = {
       version: 8,
       sources: {
-        /* 兜底整图：z8 瓦片 5x5 拼成的 1280x1280 卫星图，覆盖 112.5~119.53E / 36.6~42.03N
-           （约 1250x1080km）。缩得很远或细节瓦片没到的时候，至少还有它垫着，不会只剩黑底。 */
-        base: {
-          type: "image",
-          url: "assets/img/basemap.jpg",
-          coordinates: [[109.6875, 44.0876], [122.3438, 44.0876], [122.3438, 34.3071], [109.6875, 34.3071]]
-        },
+
         sat: {
           type: "raster",
           tiles: ["assets/map/online/{z}/{x}/{y}.jpg"],
-          tileSize: 256, minzoom: 11, maxzoom: 13, attribution: "Esri World Imagery (本地缓存)"
+          tileSize: 256, minzoom: 11, maxzoom: 12, attribution: "Esri World Imagery (本地缓存)"
         }
       },
-      /* 注意：image 源（兜底整图）和 terrain 一起用会让 3D 整屏画不出来（实测），
-         所以 3D 模式只留卫星瓦片；兜底图只在平面版挂。 */
+      /* 不再挂兜底整图（原 basemap.jpg）：拖出瓦片范围直接显示底色，
+         让地图边界一眼可见；3D 模式本来就只留卫星瓦片。 */
       layers: []
     };
 
-    /* 3D 不挂 image 兜底源（见上），平面版才铺 bg + base + sat */
-    style.layers = [{ id: "sat", type: "raster", source: "sat" }];
-    if (IS3D) {
-      delete style.sources.base;
-    } else {
-      style.layers = [
-        { id: "bg", type: "background", paint: { "background-color": "#0a1420" } },
-        { id: "base", type: "raster", source: "base" },
-        { id: "sat", type: "raster", source: "sat" }
-      ];
-    }
+    /* 平面版：底色 + 卫星瓦片；3D 版只留卫星瓦片 */
+    style.layers = IS3D
+      ? [{ id: "sat", type: "raster", source: "sat" }]
+      : [
+          { id: "bg", type: "background", paint: { "background-color": "#0a1420" } },
+          { id: "sat", type: "raster", source: "sat" }
+        ];
     /* 只有 3D 模式才挂 DEM：平面模式的 style 里根本没有这个源，一张地形瓦片都不会请求 */
     if (IS3D) {
       style.sources.dem = {
@@ -106,6 +96,14 @@ window.MapView = function (host) {
     try { map.setMaxBounds(pendingBounds); } catch (e) {}
   };
 
+  /* 可切换的缩放上下限：场景二缩到 10 就到底，避免露出没有瓦片的深色底 */
+  var pendingZoomRange = null;
+  window.MapViewSetZoomRange = function (minZ, maxZ) {
+    pendingZoomRange = [minZ == null ? 9 : minZ, maxZ == null ? 12 : maxZ];
+    if (!map) return;
+    try { map.setMinZoom(pendingZoomRange[0]); map.setMaxZoom(pendingZoomRange[1]); } catch (e) {}
+  };
+
   function boot() {
     if (map || FILE_MODE) return;
     if (root.clientWidth < 50 || root.clientHeight < 50) { setTimeout(boot, 40); return; }
@@ -123,12 +121,13 @@ window.MapView = function (host) {
     if (!IS3D) {
       /* 缩放范围：z9 = 视野约 450km（正好在兜底整图里）；z16 = 比 z13 细节放大 8 倍，再大就糊 */
       opts.minZoom = 9;
-      opts.maxZoom = 16;
+      opts.maxZoom = 12;   /* 瓦片只到 z12（z13 未离线缓存），限到 12 就不会放出一片黑 */
       /* 拖拽边界 = 兜底整图内缩，拖到头就停住，不会漂到空白里 */
       opts.maxBounds = DEFAULT_BOUNDS;
     }
     map = new maplibregl.Map(opts);
     if (pendingBounds) { try { map.setMaxBounds(pendingBounds); } catch (e) {} }
+    if (pendingZoomRange) { try { map.setMinZoom(pendingZoomRange[0]); map.setMaxZoom(pendingZoomRange[1]); } catch (e) {} }
     applyPixelRatio();
     var prRaf = 0;
     onResize = function () {

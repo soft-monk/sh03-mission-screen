@@ -449,6 +449,7 @@ function make(variant) {
     var NEED_MAP = !!mapHost && (!window.APP_STATE || !window.APP_STATE.scenarioId || window.APP_STATE.scenarioId === "scene-2" || window.APP_STATE.scenarioId === "scene-1");
     var map = NEED_MAP ? MapViewShared(mapHost) : NULL_MAP;
     if (NEED_MAP && window.MapViewSetBounds) window.MapViewSetBounds((SCFG && SCFG.mapBounds) ? SCFG.mapBounds : null);
+    if (NEED_MAP && window.MapViewSetZoomRange) window.MapViewSetZoomRange((SCFG && SCFG.minZoom) || null, 12);
     var mapEmptyEl = root.querySelector(".s3-map-empty");
     if (mapEmptyEl && NEED_MAP) mapEmptyEl.style.display = "none";
     if (map.onMoveEnd) map.onMoveEnd(root);
@@ -1909,6 +1910,7 @@ function make(variant) {
       host: mapHost,
       needMap: NEED_MAP,
       mapBounds: (SCFG && SCFG.mapBounds) ? SCFG.mapBounds : null,
+      minZoom: (SCFG && SCFG.minZoom) || null,
       areaEls: areaEls,
       labelEls: labelEls,
       ao: GEO.px(AO.lon, AO.lat),
@@ -2134,6 +2136,7 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
     if (e && e.scid === "SH-06" && window.PLAYER) window.PLAYER.pause();   /* 这一屏交给飞行演示的独立时钟 */
     if (e && e.host && e.needMap && window.MapViewShared) window.MapViewShared(e.host);
     if (e && e.needMap && window.MapViewSetBounds) window.MapViewSetBounds(e.mapBounds || null);
+    if (e && e.needMap && window.MapViewSetZoomRange) window.MapViewSetZoomRange(e.minZoom || null, 12);
     if (e && e.needMap) e._camLast = null;   /* 边界变了，强制下一帧重新应用相机 */
     if (e && e.scid === "SH-06" && e.host && e.host.closest) {
       var scr = e.host.closest(".scr");

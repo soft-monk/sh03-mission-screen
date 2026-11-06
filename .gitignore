@@ -1,4 +1,5 @@
 # ---- 调试产物 / 临时文件 ----
+/tmp/
 /_tools/*
 !/_tools/verify.mjs
 !/_tools/verify06.cjs
