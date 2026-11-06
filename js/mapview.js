@@ -260,6 +260,23 @@ window.MapView = function (host) {
         }
       });
     },
+    /* 多个多边形合并成一个 source（fill + line 共 2 层），用于 9 个禁飞区这类同风格图元 */
+    polygons: function (id, rings, st) {
+      registry[id] = { fillOpacity: st.fillOpacity == null ? 0.1 : st.fillOpacity, lineOpacity: 1 };
+      when(function () {
+        if (map.getSource(id)) return;
+        var features = (rings || []).map(function (coords) {
+          var ring = coords.slice();
+          ring.push(ring[0]);
+          return { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } };
+        });
+        map.addSource(id, { type: "geojson", data: { type: "FeatureCollection", features: features } });
+        map.addLayer({ id: id + "-f", type: "fill", source: id, paint: { "fill-color": st.fill, "fill-opacity": registry[id].fillOpacity } });
+        var lp = { "line-color": st.line, "line-width": st.width, "line-opacity": 1 };
+        if (st.dash) lp["line-dasharray"] = st.dash;
+        map.addLayer({ id: id + "-l", type: "line", source: id, layout: { "line-join": "round" }, paint: lp });
+      });
+    },
     /* 注册一个图标（无人机 png 用） */
     image: function (name, url) {
       when(function () {

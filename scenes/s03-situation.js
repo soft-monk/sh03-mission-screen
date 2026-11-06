@@ -488,11 +488,14 @@ function make(variant) {
       { n: "禁飞区9", lp: [115.79253,39.79417], pts: [[115.76302,39.79017],[115.76302,39.77525],[115.75437,39.76415],[115.77416,39.75983],[115.776,39.77624],[115.78253,39.78558]] }
     ];
     NOFLY = (SCFG && SCFG.noFly) ? SCFG.noFly : NOFLY;
-    NOFLY.forEach(function (z, i) {
-      map.polygon("area-nf" + (i + 1), z.pts, { fill: "#ef4444", fillOpacity: 0, line: "#ef4444", width: 4.5 });
-      areaEls.push({ id: "area-nf" + (i + 1), delay: 2.45 });
-      labelEls.push({ h: map.label(z.n, z.lp, "#fca5a5", 15), delay: 2.45 });
-    });
+    /* 9 个禁飞区合并成 1 个 source + 2 个图层（原来 18 层） */
+    if (NOFLY.length) {
+      map.polygons("area-nf", NOFLY.map(function (z) { return z.pts; }), { fill: "#ef4444", fillOpacity: 0, line: "#ef4444", width: 4.5 });
+      areaEls.push({ id: "area-nf", delay: 2.45 });
+      NOFLY.forEach(function (z) {
+        labelEls.push({ h: map.label(z.n, z.lp, "#fca5a5", 15), delay: 2.45 });
+      });
+    }
 
     /* 我方集结区：绿色虚线 4x4km */
     map.polygon("area-reserve", ACTIVE_AREA.reserve, { fill: "#22c55e", fillOpacity: 0.16, line: "#22c55e", width: 5, dash: [2.4, 1.6] });
