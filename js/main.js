@@ -288,24 +288,11 @@
     else if (e.key === "h" || e.key === "H") hud.classList.toggle("ctrlon");
   });
 
-  /* 调试/自测用：?t=90 直接跳到第 90 秒；&pause=1 停在那一帧；帧率表默认常显，&fps=0 可关闭 */
+  /* 调试/自测用：?t=90 直接跳到第 90 秒；&pause=1 停在那一帧 */
   const q = new URLSearchParams(location.search);
   if (q.has("t")) T = FX.clamp(parseFloat(q.get("t")) || 0, 0, TL.total);
   if (q.get("pause") === "1") playing = false;
 
-  /* 帧率表：默认全局常显（?fps=0 可关闭） */
-  if (q.get("fps") !== "0") {
-    const box = FX.el("div");
-    box.style.cssText = "position:fixed;left:12px;top:12px;z-index:99997;font:13px/1.4 Consolas,monospace;color:#7dd3fc;background:rgba(4,9,16,.85);padding:6px 10px;border-radius:6px;pointer-events:none";
-    document.body.appendChild(box);
-    let fc = 0, ft = performance.now(), fps = 0;
-    (function loop() {
-      requestAnimationFrame(loop);
-      fc++;
-      const now = performance.now();
-      if (now - ft >= 500) { fps = Math.round(fc * 1000 / (now - ft)); fc = 0; ft = now; box.textContent = fps + " fps"; }
-    })();
-  }
   btnPlay.textContent = playing ? "⏸" : "▶";
   window.PLAYER = {
     seek,
