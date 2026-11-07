@@ -322,3 +322,34 @@ b19af48 feat(sh06): show planned routes from entry and limit speeds
 验证（无头 Chrome，端口已释放）：页面内 fps 节点 0 个、`__READY` 为 true、`SCENES` 注册正常、场景二 SH-04 正常、无 JS 错误。
 
 备注：以后要看帧率用 DevTools Performance 面板；`?t=` / `&pause=1` 调试参数保留。
+
+### 6.22 新增 4 份时间轴文档（2026-11-06）
+
+新建 `docs/` 目录，, 四份文档（只读代码整理，未改任何源码）：
+
+- `docs/timeline-common.md`：公共 SH-01~SH-03（0~26 s），含两屏内部节拍、两条字幕、SH-03 点卡后的 6 步动作。
+- `docs/timeline-scene1.md`：场景一 SH-04/05/06 + SH-101~106（总长 199 s）。
+- `docs/timeline-scene2.md`：场景二 SH-04/05/06 + SH-07（总长 308 s），含 SH-06 独立飞行时钟（0~9000 s）与 026~047 事件表。
+- `docs/timeline-scene3.md`：场景三 SH-04/05/06 + SH-201~206（总长 199 s）。
+
+每份结构：屏表（起止/时长/章节）→ 进入时动作（建图/相机/图元）→ 屏内时间点事件表 → 显示文字 → 语音 → 交互点 → 已知缺口。
+
+说明：文档中的屏内节拍取自源码常数（如自动鼠标 36/39/39.3/39.75、气泡 t 值、SH-06 事件秒数），未做浏览器逐帧核对。
+
+### 6.23 底部字幕功能整体删除（2026-11-06）
+
+背景：字幕从 2026-11-03 起只是被 `#subtitle{display:none !important}` 隐藏，数据和渲染逻辑仍在。本次按要求**连代码一起删掉**。
+
+删除内容：
+- `js/timeline.js`：`subs` 数组（19 条台词）、`subs.forEach` 计算 `dur` 的整段、返回值里的 `subs` 字段。
+- `js/main.js`：`subEl/subWho/subTxt` 三个 DOM 引用、`updateSub()` 整个函数、`curSub` 变量（含 setFlow / replay 两处重置）、`render()` 里的 `updateSub()` 调用、`hud.subon` 类切换。
+- `index.html`：`<div id="subtitle">…</div>`。
+- `css/stage.css`：`#subtitle` 的 7 条规则 + `#hud.subon .hud-bottom` 那条（后者本来只是「有字幕时把底部背景设成 none」）。
+- `scenes/s03-situation.js`、`scenes/s06-skeleton.js`：`ownSubs` 标记（main.js 已不读，属死字段）。
+- `data/flows.js`：分支对象里的 `subs: []` 字段。
+
+静态验证：全部 JS `node --check` 通过；`TIMELINE` 仍是 total 308 / 18 屏 / 1 等待点 / 无 subs；场景一、三 仍 199 s / 12 屏 / 5 段；场景二表与 `window.TIMELINE` 仍是同一对象；全仓（排除文档与 tmp）搜索 `subtitle|ownSubs|subon|subs` **0 命中**。
+
+未做运行验证：本轮 Chrome headless 启动失败（端口 9333 无监听），没能跑浏览器实测；改动是纯删除，且删除前字幕本来就被 CSS 隐藏，画面预期无变化。
+
+文档同步：`docs/timeline-common.md` 的「公共字幕」整节改为「已验证移除」说明；场景一/三 的「本分支为空」改为「功能已移除」；场景二 SH-04/05/06 三处字幕表删除。

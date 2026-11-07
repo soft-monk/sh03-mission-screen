@@ -32,27 +32,6 @@ window.TIMELINE = (function () {
     { id: "SH-18", t: 293, dur: 15, ch: 5, title: "任务总结", points: ["报告数字滚动", "打击成功率 92%，主要威胁节点清除", "转入下一部署地域"] }
   ];
 
-  const subs = [
-    { t: 7.0, who: "系统语音", text: "请进行系统状态确认" },
-    { t: 11.0, who: "系统语音", text: "自检通过，系统就绪" },
-    { t: 27.5, who: "系统语音", text: "已完成战场态势建模，当前区域存在三类任务模式匹配结果。" },
-    { t: 31.0, who: "系统语音", text: "检测到固定通信受限、敌方纵深防御明显，建议构建前沿局部任务体系。" },
-    { t: 33.5, who: "用户语音", text: "推荐一个任务模式。" },
-    { t: 35.5, who: "大模型回复", text: "当前态势下，敌方呈分散防御结构，通信节点暴露度较高，建议优先选择【敏捷拒止布控】模式。" },
-    { t: 67, who: "系统语音", text: "已生成三套任务编组方案，推荐方案二：多域协同压制。" },
-    { t: 72, who: "系统语音", text: "兼顾大范围侦察覆盖、通信中继保障和电子压制需求。" },
-    { t: 125, who: "系统语音", text: "通信链路已完成自组网，当前链路质量达到任务标准。" },
-    { t: 130, who: "系统语音", text: "前沿节点已具备独立通信与感知支撑能力。" },
-    { t: 160, who: "系统语音", text: "检测到异常电磁信号聚集区域，已标记为潜在目标区。" },
-    { t: 178, who: "系统语音", text: "已识别三处高置信目标，其中一处为指挥通信节点。" },
-    { t: 193, who: "用户语音", text: "哪个目标优先级最高？" },
-    { t: 195, who: "大模型回复", text: "目标001为高价值节点，具备指挥与通信双重功能，建议优先纳入打击序列。" },
-    { t: 208, who: "系统语音", text: "基于目标价值、暴露时间窗口与链路稳定性，已生成三种打击方案。" },
-    { t: 226, who: "大模型回复", text: "已为你选择方案二：多集群协同压制，该方案在当前环境下综合成功率最高。" },
-    { t: 241, who: "系统语音", text: "目标区域出现移动迹象，建议调整光电集群观察角度。" },
-    { t: 294, who: "系统语音", text: "任务完成，目标打击成功率92%，主要威胁节点已清除。" },
-    { t: 302, who: "系统语音", text: "前沿节点可执行资源撤收、链路释放并转入下一部署地域。" }
-  ];
 
 /* 等待点：播到这个时刻暂停，等人点击才继续 */
 const holds = [
@@ -60,13 +39,6 @@ const holds = [
 ];
 
 const total = 308;
-
-  /* 每条字幕显示多久：到下一个说话人为止，最多 7 秒，最少 3 秒 */
-  subs.forEach((s, i) => {
-    const next = subs[i + 1];
-    const end = Math.min(total, next ? Math.min(next.t, s.t + 7) : s.t + 7);
-    s.dur = Math.max(1.5, end - s.t);
-  });
 
     screens.forEach((s, i) => { s.end = i + 1 < screens.length ? screens[i + 1].t : total; s.dur = s.end - s.t; });
 
@@ -77,5 +49,5 @@ const total = 308;
     return { key: chapters[i].key, name: chapters[i].name, start, end, dur: end - start };
   });
 
-  return { total, chapters, screens, subs, phases, holds };
+  return { total, chapters, screens, phases, holds };
 })();

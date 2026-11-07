@@ -4,9 +4,6 @@
   const stage = document.getElementById("stage");
   const screensEl = document.getElementById("screens");
   const hud = document.getElementById("hud");
-  const subEl = document.getElementById("subtitle");
-  const subWho = subEl.querySelector(".who");
-  const subTxt = subEl.querySelector(".txt");
   const trackEl = document.getElementById("track");
   const chaptersEl = document.getElementById("chapters");
   const bootcap = document.getElementById("bootcap");
@@ -130,7 +127,6 @@
     const next = (window.getTimelineFor && window.getTimelineFor(id)) || window.TIMELINE;
     if (next === TL) { updateEndInfo(); dirty = true; return; }
     TL = next;
-    curSub = null;
     buildHud();
     refreshBadge();
     updateEndInfo();
@@ -158,28 +154,6 @@
     stage.dataset.scr = TL.screens[idxAt(T)].id;
   }
 
-  let curSub = null;
-  function updateSub() {
-    /* 有些屏把播报放在自己的面板里（ownSubs），就不出底部黑条 */
-    const cs = curIdx >= 0 ? cache[TL.screens[curIdx].id] : null;
-    const own = !!(cs && cs.mod && cs.mod.ownSubs);
-    let hit = null;
-    if (!own) for (const s of TL.subs) if (T >= s.t && T < s.t + s.dur) { hit = s; break; }
-    if (hit !== curSub) {
-      curSub = hit;
-      if (hit) {
-        subWho.textContent = hit.who;
-        subWho.className = "who" + (hit.who === "大模型回复" ? " ai" : hit.who === "用户语音" ? " user" : "");
-        subTxt.textContent = hit.text;
-        subEl.classList.add("on");
-        hud.classList.add("subon");
-      } else {
-        subEl.classList.remove("on");
-        hud.classList.remove("subon");
-      }
-    }
-  }
-
   /* ---------- 主循环 ---------- */
   function render() {
     const i = idxAt(T);
@@ -187,7 +161,6 @@
     const c = cache[TL.screens[i].id];
     if (c && c.mod.render) c.mod.render(T - c.sc.t, c.ctx, T, TL.screens[i]);
     updateHud();
-    updateSub();
   }
   function tick(now) {
     const dt = last ? Math.min(0.12, Math.max(0, (now - last) / 1000)) : 0;
@@ -254,7 +227,6 @@
       curIdx = -1;
       /* 彻底销毁地图实例：下次进入 SH-03 时重新创建 = 第一次进来的样子 */
       try { if (window.MapViewReset) window.MapViewReset(); } catch (e) {}
-      curSub = null;
       setFlow(null);
       seek(SH03_T);            /* 回到 SH-03 起点（14 s）：请选择任务场景之前 */
       setPlaying(true);        /* 自动重播这一屏，播到 25.5 s 等待点会自己停下等人选 */

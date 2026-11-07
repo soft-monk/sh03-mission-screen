@@ -52,7 +52,7 @@
       var end = i + 1 < chapters.length ? chapters[i + 1].t : total;
       return { key: chapters[i].key, name: chapters[i].name, start: start, end: end, dur: end - start };
     });
-    return { total: total, chapters: chapters, screens: screens, subs: [], phases: phases, holds: HOLD };
+    return { total: total, chapters: chapters, screens: screens, phases: phases, holds: HOLD };
   }
 
   var FLOWS = {

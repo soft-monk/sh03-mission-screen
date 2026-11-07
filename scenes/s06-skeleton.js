@@ -24,6 +24,5 @@ window.S06_SKELETON = {
   onHide: function (e) {
     if (e && e.st) e.st.dead = true;
   },
-  usesMap: false,
-  ownSubs: false
+  usesMap: false
 };

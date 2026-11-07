@@ -26,14 +26,6 @@
 .frame{position:absolute;inset:6px;border:1px solid rgba(120,150,185,.16);border-radius:16px;pointer-events:none;z-index:40}
 .hud-bottom{position:absolute;left:0;right:0;bottom:0;z-index:30;padding:2px 40px 10px;
   background:none}
-#hud.subon .hud-bottom{background:none}
-#subtitle{display:none !important}
-#subtitle{height:46px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:19px;color:#e6f4ff;opacity:0;transition:opacity .3s}
-#subtitle.on{opacity:1}
-#subtitle .who{flex:none;font-size:12px;padding:3px 9px;border-radius:10px;background:rgba(56,189,248,.14);border:1px solid var(--line2);color:#7dd3fc;letter-spacing:1px}
-#subtitle .who.ai{background:rgba(168,85,247,.16);border-color:rgba(168,85,247,.45);color:#d8b4fe}
-#subtitle .who.user{background:rgba(34,197,94,.14);border-color:rgba(34,197,94,.4);color:#86efac}
-#subtitle .txt{max-width:1500px;line-height:1.35}
 
 #chapters{display:flex;gap:3px;padding-left:78px;height:18px;margin-bottom:2px}
 #chapters b{flex:1;font-size:12px;font-weight:400;color:#4c6480;text-align:center;letter-spacing:.5px;transition:color .25s;cursor:pointer}

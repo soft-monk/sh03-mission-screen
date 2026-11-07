@@ -2154,7 +2154,7 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
   }
 
   return {
-    build: build, render: render, onShow: onShow, usesMap: true, ownSubs: IS_MISSION,
+    build: build, render: render, onShow: onShow, usesMap: true,
     onHide: function (e) { if (hideHook) { try { hideHook(); } catch (err) {} } clearAreaGraphics(e); }
   };
 }
@@ -2173,8 +2173,7 @@ window.dispatchScenarioScreen = function (real, fallback) {
     render: function (t, e) { if (e && e.__impl && e.__impl.render) e.__impl.render(t, e); },
     onShow: function (e) { if (e && e.__impl && e.__impl.onShow) e.__impl.onShow(e); },
     onHide: function (e) { if (e && e.__impl && e.__impl.onHide) e.__impl.onHide(e); },
-    usesMap: true,
-    ownSubs: false
+    usesMap: true
   };
 };
 window.SCENES["SH-03"] = make("select");
