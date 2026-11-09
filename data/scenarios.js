@@ -107,12 +107,12 @@
       reserveLabel: [121.30000, 25.12100]
     },
     noFly: [],
-    res: [{ k: "光电", img: "uav-blue.png", v: "32", c: "56,189,248" }, { k: "雷达", img: "uav-yellow.png", v: "36", c: "250,204,21" }, { k: "电子", img: "uav-red.png", v: "20", c: "248,113,113" }, { k: "通信", img: "uav-green.png", v: "16", c: "74,222,128" }],
+    res: [{ k: "光电", img: "uav-blue.png", v: "48", c: "56,189,248" }, { k: "雷达", img: "uav-yellow.png", v: "24", c: "250,204,21" }, { k: "电子", img: "uav-red.png", v: "24", c: "248,113,113" }, { k: "通信", img: "uav-green.png", v: "24", c: "74,222,128" }],
     uavs: [
-      { k: "光电无人机", img: "uav-blue.png", c: "56,189,248", total: 32, avail: 32, caps: ["侦察", "识别", "跟踪"], used: 30, rest: 2 },
-      { k: "雷达无人机", img: "uav-yellow.png", c: "250,204,21", total: 36, avail: 36, caps: ["探测", "扫描", "测距"], used: 8, rest: 28 },
-      { k: "电子无人机", img: "uav-red.png", c: "248,113,113", total: 20, avail: 20, caps: ["干扰", "压制", "侦测"], used: 2, rest: 18 },
-      { k: "通信无人机", img: "uav-green.png", c: "74,222,128", total: 16, avail: 16, caps: ["中继", "通信", "数据"], used: 4, rest: 12 }
+      { k: "光电无人机", img: "uav-blue.png", c: "56,189,248", total: 48, avail: 48, caps: ["侦察", "识别", "跟踪"], used: 30, rest: 18 },
+      { k: "雷达无人机", img: "uav-yellow.png", c: "250,204,21", total: 24, avail: 24, caps: ["探测", "扫描", "测距"], used: 8, rest: 16 },
+      { k: "电子无人机", img: "uav-red.png", c: "248,113,113", total: 24, avail: 24, caps: ["干扰", "压制", "侦测"], used: 2, rest: 22 },
+      { k: "通信无人机", img: "uav-green.png", c: "74,222,128", total: 24, avail: 24, caps: ["中继", "通信", "数据"], used: 4, rest: 20 }
     ],
     groups: [
       { n: "编组1", k: "光电无人机", img: "uav-blue.png", v: 30 },
