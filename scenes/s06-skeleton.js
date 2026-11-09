@@ -20,9 +20,13 @@ window.S06_SKELETON = {
       try { if (e.cam && e.mapView.setView) e.mapView.setView({ center: e.cam.center, zoom: e.cam.zoom, pitch: e.cam.pitch, bearing: e.cam.bearing }); } catch (err) {}
       requestAnimationFrame(function () { try { if (e.mapView.repaint) e.mapView.repaint(); } catch (err) {} });
     }
+    /* 屏被缓存复用：回看本屏时 build 不再执行，航线由这里按当前开关状态重画 */
+    if (e && e.redraw) { try { e.redraw(); } catch (err) {} }
   },
   onHide: function (e) {
     if (e && e.st) e.st.dead = true;
+    /* 场景一：离开 SH-06 清掉编组航线与规划航路，避免残留到下一屏 */
+    if (e && e.cleanup) { try { e.cleanup(); } catch (err) {} }
   },
   usesMap: false
 };

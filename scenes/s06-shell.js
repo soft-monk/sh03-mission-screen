@@ -155,6 +155,66 @@ window.S06_SHELL = (function () {
     ].join("\n");
     document.head.appendChild(st);
   }
+  /* ---------- 场景一 SH-06：编组航线 + 任务区规划航路 ----------
+     transit 用实线 path + 地名标签（同场景二编组航线）；area 用虚线 tracks（同场景二规划航迹）。
+     数据来自 data/routes-s1.js（离线生成），这里只负责画、开关、清理。 */
+  var S1_PLAN_ID = "tracks-s1";
+
+  function s1Draw(mv, acc) {
+    var RS = window.ROUTES_S1;
+    if (!mv || !RS) return;
+    acc.ids.length = 0;
+    acc.labels.length = 0;
+    (RS.transit || []).forEach(function (r) {
+      try {
+        mv.path("s1-route-" + r.id, r.pts, { color: r.color, width: 3 });
+        var lb = mv.label(r.name, r.mid || r.pts[Math.floor(r.pts.length / 2)], r.color, 15, "s1-route-" + r.id);
+        if (lb && lb.set) lb.set(1);
+        acc.labels.push(lb);
+        acc.ids.push("s1-route-" + r.id);
+      } catch (err) {}
+    });
+    if (mv.tracks) {
+      try {
+        mv.tracks(S1_PLAN_ID, (RS.area || []).map(function (p) { return { color: p.color, pts: p.pts }; }));
+        acc.plan = true;
+      } catch (err) {}
+    }
+  }
+
+  function s1SetVisible(mv, acc, on, target) {
+    var vis = on ? "visible" : "none";
+    var raw = null;
+    try { raw = mv && mv.map && mv.map(); } catch (err) {}
+    if (target === "routes" || target === undefined) {
+      acc.ids.forEach(function (id) {
+        try { if (raw && raw.getLayer(id + "-l")) raw.setLayoutProperty(id + "-l", "visibility", vis); } catch (err) {}
+      });
+      acc.labels.forEach(function (h) { try { if (h && h.set) h.set(on ? 1 : 0); } catch (err) {} });
+    }
+    if (target === "plan" || target === undefined) {
+      try { if (raw && raw.getLayer(S1_PLAN_ID + "-l")) raw.setLayoutProperty(S1_PLAN_ID + "-l", "visibility", vis); } catch (err) {}
+    }
+  }
+
+  function s1Clear(mv, acc) {
+    if (!mv) return;
+    try { if (acc.plan && mv.tracks) mv.tracks(S1_PLAN_ID, []); } catch (err) {}
+    var raw = null;
+    try { raw = mv.map && mv.map(); } catch (err) {}
+    acc.ids.forEach(function (id) {
+      try {
+        if (!raw) return;
+        if (raw.getLayer(id + "-l")) raw.removeLayer(id + "-l");
+        if (raw.getSource(id)) raw.removeSource(id);
+      } catch (err) {}
+    });
+    acc.labels.forEach(function (h) { try { if (h && h.set) h.set(0); } catch (err) {} });
+    acc.ids.length = 0;
+    acc.labels.length = 0;
+    acc.plan = false;
+  }
+
   /* 空地图层装配：完整外壳 + 无地图、无目标、无视频源、无 AI 事件 */
   function mountEmpty(root, sc, cfg) {
     ensureLayerCss();
@@ -162,6 +222,7 @@ window.S06_SHELL = (function () {
     var uavs = (cfg && cfg.uavs) || [];
     var hasMap = !!(cfg && cfg.mapBounds);   /* 场景一有自己的一套瓦片与边界 */
     var mapHost = null;
+    var s1acc = { ids: [], labels: [], plan: false, showRoutes: true, showPlan: true };
     var total = (window.FLIGHT06 && window.FLIGHT06.TOTAL) || 9000;
     var CH = { MENU: MENU, TOOLS: TOOLS, STATUS: STATUS };
     root.innerHTML =
@@ -176,7 +237,7 @@ window.S06_SHELL = (function () {
       "<button class=\"s3-mic\">" + ic("mic", 26, "", 1.7) + "</button>" +
       "<footer class=\"s3-status\"></footer>" +
       htmlControls(fmt(total)) +
-      htmlLayers(LAYERS);
+      htmlLayers(hasMap ? [{ k: "s1routes", label: "编组航线" }].concat(LAYERS) : LAYERS);
     var menuEl = root.querySelector(".s3-menu");
     if (menuEl && CH.MENU) menuEl.innerHTML = CH.MENU.map(function (m, i) {
       return "<div class=\"s3-mi" + (i === 0 ? " on" : "") + "\">" + ic(m.icon, 26, "", 1.55) + "<span>" + m.k + "</span></div>";
@@ -215,6 +276,8 @@ window.S06_SHELL = (function () {
         if (cfg.area && cfg.area.missionLabel) { var L1 = mv.label("任务区", cfg.area.missionLabel, "#fbbf24", 17); if (L1 && L1.set) L1.set(1); }
         if (cfg.area && cfg.area.reserveLabel) { var L2 = mv.label("我方集结区", cfg.area.reserveLabel, "#4ade80", 16); if (L2 && L2.set) L2.set(1); }
       } catch (err) {}
+      /* 场景一：编组航线 + 任务区规划航路（进入即显示，与场景二“先规划、后动态”的节奏一致） */
+      s1Draw(mv, s1acc);
       window.__s6ShellMap = mv; window.__s6ShellCam = cam;
     }
 
@@ -291,11 +354,29 @@ window.S06_SHELL = (function () {
     root.__onSpace = function () { goBtn.click(); };
     root.__s6Refresh = function () { paint(); };
     var lyrPanel = root.querySelector(".s6-lyr-panel");
+    function applyLayerToggle(k, on) {
+      if (!hasMap) return;
+      if (k === "s1routes") { s1acc.showRoutes = on; s1SetVisible(mv, s1acc, on, "routes"); }
+      else if (k === "tracks") { s1acc.showPlan = on; s1SetVisible(mv, s1acc, on, "plan"); }
+    }
+    /* 屏是缓存的：回看 SH-06 只走 onShow、不重建 → 这里按当前开关状态重画一次 */
+    function redrawS1() {
+      if (!hasMap) return;
+      s1Draw(mv, s1acc);
+      s1SetVisible(mv, s1acc, s1acc.showRoutes, "routes");
+      s1SetVisible(mv, s1acc, s1acc.showPlan, "plan");
+    }
     [].slice.call(root.querySelectorAll("button[data-all]")).forEach(function (b) {
       b.addEventListener("click", function () {
         var v = b.getAttribute("data-all") === "1";
-        [].slice.call(lyrPanel.querySelectorAll("input[data-k]")).forEach(function (cb) { cb.checked = v; });
+        [].slice.call(lyrPanel.querySelectorAll("input[data-k]")).forEach(function (cb) {
+          cb.checked = v;
+          applyLayerToggle(cb.getAttribute("data-k"), v);
+        });
       });
+    });
+    [].slice.call(lyrPanel.querySelectorAll("input[data-k]")).forEach(function (cb) {
+      cb.addEventListener("change", function () { applyLayerToggle(cb.getAttribute("data-k"), cb.checked); });
     });
     if (tbEl) {
       var lyrBtn = null;
@@ -306,7 +387,9 @@ window.S06_SHELL = (function () {
         lyrBtn.classList.toggle("on", on);
       });
     }
-    return { shell: true, st: st, root: root, aiLog: root.querySelector(".s6-ai-log"), mapView: window.__s6ShellMap || null, cam: window.__s6ShellCam || null };
+    return { shell: true, st: st, root: root, aiLog: root.querySelector(".s6-ai-log"), mapView: window.__s6ShellMap || null, cam: window.__s6ShellCam || null,
+      redraw: redrawS1,
+      cleanup: function () { if (hasMap) s1Clear(mv, s1acc); } };
   }
   return {
     LAYERS: LAYERS,
