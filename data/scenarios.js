@@ -119,14 +119,14 @@
       { n: "编组2", k: "电子无人机", img: "uav-red.png", v: 8 },
       { n: "编组3", k: "通信无人机", img: "uav-green.png", v: 4 }
     ],
-    s4Dialog: [], s4Audio: [], s5Dialog: [], s5Audio: [], s6Dialog: [], s6Audio: [],
+    s4Dialog: [
+      { key: "s4-task-header", who: "ai", at: 0.0, text: "任务分析：" },
+      { key: "s4-area", who: "ai", at: 0.0, text: "沿海岛屿任务区<br>中心点坐标：经度121.02度，纬度24.84度<br>区域形状：边长40km矩形<br>情报显示：区域内岛屿与近岸目标分散，需全域覆盖侦察。" },
+      { key: "s4-mission-requirement", who: "ai", at: 26.5, text: "上级任务要求<br>对沿海岛屿任务区全域执行侦察与封控<br>持续40分钟时间<br>按网格化分区覆盖，确保无盲区。" }
+    ],
+    s4Audio: [], s5Dialog: [], s5Audio: [], s6Dialog: [], s6Audio: [],
     metrics: [{ k: "封控覆盖率", v: 91 }, { k: "边界完整度", v: 95 }, { k: "目标发现效率", v: 88 }, { k: "电子压制能力", v: 92 }, { k: "任务成功率", v: 89 }, { k: "资源利用率", v: 84 }],
-    voice: [
-      { t: 1.5, who: "ai", text: "场景一尚未完成设计，当前仅加载场景框架。" },
-      { t: 5.0, who: "ai", text: "场景一任务区域、目标和兵力配置待补充。" },
-      { t: 7.5, who: "user", text: "查看场景一配置。" },
-      { t: 9.5, who: "ai", text: "场景一后续流程将在设计完成后接入。" }
-    ]
+    voice: []
   });
   var S3 = variant("scene-3", "要点防护", "场景三", {
     region: "北部要点防护区",
