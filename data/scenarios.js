@@ -92,7 +92,7 @@
     return cfg;
   }
   var S2 = variant("scene-1", "敏捷拒止布控", "场景一", {
-    region: "场景一待设计区域",
+    region: "沿海岛屿任务区",
     /* 场景一：镜头锁定 zoom 11（离线瓦片只到 z11~z13，且兜底图不覆盖该纬度） */
     camera: { center: [121.073, 24.978], zoom: 11, pitch: 38, bearing: -20 },
     coordText: "121.07300, 24.97800",
