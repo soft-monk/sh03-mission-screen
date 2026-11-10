@@ -223,7 +223,8 @@ window.S06_SHELL = (function () {
     var hasMap = !!(cfg && cfg.mapBounds);   /* 场景一有自己的一套瓦片与边界 */
     var mapHost = null;
     var s1acc = { ids: [], labels: [], plan: false, showRoutes: true, showPlan: true };
-    var total = (window.FLIGHT06 && window.FLIGHT06.TOTAL) || 9000;
+    var FL = (hasMap && window.FLIGHT_S1) ? window.FLIGHT_S1 : null;
+    var total = FL ? FL.TOTAL : ((window.FLIGHT06 && window.FLIGHT06.TOTAL) || 9000);
     var CH = { MENU: MENU, TOOLS: TOOLS, STATUS: STATUS };
     root.innerHTML =
       (hasMap ? "<div class=\"s3-map\"></div>" : htmlEmptyMap("地图数据待接入")) +
@@ -258,6 +259,8 @@ window.S06_SHELL = (function () {
       if (window.MapViewSetBounds) window.MapViewSetBounds(cfg.mapBounds);
       mapHost = root.querySelector(".s3-map");
       var mv = window.MapViewShared(mapHost);
+      /* 机群图标（与场景二同名：uav-blue/yellow/red/green） */
+      ["blue", "yellow", "red", "green"].forEach(function (c) { mv.image("uav-" + c, "assets/img/uav-" + c + ".png"); });
       var cam = cfg.camera || null;
       if (mv && mv.setView && cam) mv.setView({ center: cam.center, zoom: cam.zoom, pitch: cam.pitch, bearing: cam.bearing });
       /* 建屏时还没 .on，容器尺寸为 0；等两帧后容器有尺寸再校准一次 */
@@ -288,14 +291,32 @@ window.S06_SHELL = (function () {
     var spds = [].slice.call(ctl.querySelectorAll(".s6-spds b"));
     var st = { t: 0, speed: 1, run: false, last: 0, dead: false };
     totLbl.textContent = fmt(total);
+    /* 场景一飞行仿真：每帧按时间取机群位置与尾迹（与场景二 SH-06 同款数据流） */
+    function renderFlight() {
+      if (!FL || !mv) return;
+      var f = FL.simulate(st.t);
+      mv.fleet("s1-fleet", f.map(function (d) {
+        return { type: d.type, color: d.color, lon: d.lon, lat: d.lat, r: d.r };
+      }));
+      mv.trails("s1-trails", f.filter(function (d) { return d.trail && d.trail.length > 1; })
+        .map(function (d) { return { color: d.color, pts: d.trail }; }));
+    }
+    function clearFlight() {
+      if (!mv) return;
+      try { mv.fleet("s1-fleet", []); } catch (err) {}
+      try { mv.trails("s1-trails", []); } catch (err) {}
+    }
     function paint() {
       var r = st.t / total;
       fill.style.width = (r * 100).toFixed(2) + "%";
       knob.style.left = (r * 100).toFixed(2) + "%";
       tmLbl.textContent = fmt(st.t);
+      renderFlight();
     }
     (function buildSegs() {
-      var marks = [[0, "集结待命"], [total * 0.2, "编队飞行"], [total * 0.45, "侦察"]];
+      var marks = FL
+        ? [[0, "集结待命"], [FL.T_LIFT, "起飞编队"], [FL.T_FORM, "编队飞行"], [FL.T_IN, "侦察盘旋"]]
+        : [[0, "集结待命"], [total * 0.2, "编队飞行"], [total * 0.45, "侦察"]];
       segsBox.innerHTML = "";
       segLbls.innerHTML = "";
       for (var i = 0; i < marks.length; i++) {
@@ -365,6 +386,7 @@ window.S06_SHELL = (function () {
       s1Draw(mv, s1acc);
       s1SetVisible(mv, s1acc, s1acc.showRoutes, "routes");
       s1SetVisible(mv, s1acc, s1acc.showPlan, "plan");
+      renderFlight();
     }
     [].slice.call(root.querySelectorAll("button[data-all]")).forEach(function (b) {
       b.addEventListener("click", function () {
@@ -389,7 +411,7 @@ window.S06_SHELL = (function () {
     }
     return { shell: true, st: st, root: root, aiLog: root.querySelector(".s6-ai-log"), mapView: window.__s6ShellMap || null, cam: window.__s6ShellCam || null,
       redraw: redrawS1,
-      cleanup: function () { if (hasMap) s1Clear(mv, s1acc); } };
+      cleanup: function () { if (hasMap) { s1Clear(mv, s1acc); clearFlight(); } } };
   }
   return {
     LAYERS: LAYERS,
