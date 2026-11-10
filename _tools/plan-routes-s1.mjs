@@ -238,7 +238,7 @@ function raceTrackEW(cx, cy, legM, rM, n = 12) {
 
 /* 雷达 GMTI（2 架）：东南山地区一条东西向跑道，两架半圈错开 */
 const gmtiRoutes = Array.from({ length: GMTI_BUDGET }, (_, i) => {
-  const raw = raceTrackEW(9000, -12000, 16000, 1200, 12);
+  const raw = raceTrackEW(9000, -9000, 16000, 1200, 12);
   return {
     id: "M-" + String(i + 1).padStart(2, "0"),
     group: "gmti", kind: "racetrack", zone: "east",
@@ -247,7 +247,7 @@ const gmtiRoutes = Array.from({ length: GMTI_BUDGET }, (_, i) => {
 });
 
 const ewarRoutes = [1, 2].map((i) => {
-  const raw = raceTrack(7000, -9000, 3000, 1200, 12);
+  const raw = raceTrack(3000, -3000, 3000, 1200, 12);
   return { id: "E-" + String(i).padStart(2, "0"), group: "ewar", kind: "racetrack", zone: "east",
     color: COLOR.ewar, lenKm: lenKm(raw), pts: raw.map(([x, y]) => ll(x, y)) };
 });
