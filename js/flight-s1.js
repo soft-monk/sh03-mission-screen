@@ -21,6 +21,18 @@ window.FLIGHT_S1 = (function () {
   var ICON = { photo: "blue", sar: "yellow", gmti: "yellow", ewar: "red", comm: "green" };
   var COLOR = { blue: "#38bdf8", yellow: "#facc15", red: "#f87171", green: "#4ade80" };
 
+  /* 任务区（用于覆盖网格与扇区判定） */
+  var TA = (window.ROUTES_S1 && window.ROUTES_S1.meta && window.ROUTES_S1.meta.taskArea) ||
+           { w: 120.82616, e: 121.22204, s: 24.65562, n: 25.01738 };
+  var ACX = (TA.w + TA.e) / 2, ACY = (TA.s + TA.n) / 2;
+  var AHX = ((TA.e - TA.w) * M_LON) / 2, AHY = ((TA.n - TA.s) * M_LAT) / 2;
+
+  /* 扫描 / 扇区 / 条带 / 覆盖格（参数与场景二 SH-06 一致） */
+  var SCAN = { r0: 2000, r1: 2800, half: Math.PI / 6, seg: 10, rate: 10, fade: 0.6 };
+  var FAN = { radar: { r0: 2000, r1: 35000 }, jam: { r0: 1000, r1: 30000 }, half: Math.PI / 4, seg: 28, fade: 0.6 };
+  var SARB = { near: 8000, far: 10000, width: 100, fade: 0.6 };
+  var COV = { cell: 500, step: 30 };
+
   /* ---------- 折线工具 ---------- */
   function makePath(pts) {
     var seg = [], cum = [0], total = 0;
@@ -119,7 +131,7 @@ window.FLIGHT_S1 = (function () {
       if (tIn > T_IN) T_IN = tIn;
 
       drones.push({
-        icon: icon, color: color,
+        icon: icon, color: color, group: r.group, kind: r.kind,
         park: [parkLon, parkLat],
         lead: lead, orbit: orbit, pingpong: pingpong,
         leadLen: lead.len, orbitLen: orbit.len
@@ -185,8 +197,173 @@ window.FLIGHT_S1 = (function () {
     return "侦察盘旋";
   }
 
+  /* ================= 扫描 / 扇区 / 条带 / 覆盖格 =================
+     参数与场景二 SH-06 一致：光电 2–2.8km ±30°、SAR 地距 8–10km 带宽 2km、
+     GMTI 2–35km ±45°、电子 1–30km ±45°；覆盖格 500m。 */
+  var cells = null, covFirst = null, NX = 0, NY = 0, CW = 0, CH = 0;
+
+  function inAreaM(p, margin) {
+    return Math.abs((p.lon - ACX) * M_LON) <= AHX + margin &&
+           Math.abs((p.lat - ACY) * M_LAT) <= AHY + margin;
+  }
+  function headingOfPos(p) { return Math.atan2(p.dx || 0, p.dy || 0); }
+  /* 从 p 沿方位角 an、前进 dist 米、再横向偏移 lateral 米 */
+  function ptAlong(p, an, dist, lateral) {
+    var lan = an + Math.PI / 2;
+    return [+(p.lon + (dist * Math.sin(an) + (lateral || 0) * Math.sin(lan)) / M_LON).toFixed(5),
+            +(p.lat + (dist * Math.cos(an) + (lateral || 0) * Math.cos(lan)) / M_LAT).toFixed(5)];
+  }
+  function sectorQuad(p, hd, r0, r1, half, seg) {
+    var quad = [], i, rel;
+    for (i = 0; i <= seg; i++) { rel = -half + 2 * half * (i / seg); quad.push(ptAlong(p, hd + rel, r1, 0)); }
+    for (i = seg; i >= 0; i--) { rel = -half + 2 * half * (i / seg); quad.push(ptAlong(p, hd + rel, r0, 0)); }
+    quad.push(quad[0]);
+    return quad;
+  }
+
+  function scans(t) {
+    var out = [];
+    if (t < T_LIFT) return out;
+    for (var i = 0; i < drones.length; i++) {
+      var d = drones[i];
+      if (d.group !== "photo") continue;
+      var p = posOf(d, t);
+      if (!inAreaM(p, 3000)) continue;
+      var hd = headingOfPos(p);
+      var el = Math.max(0, t - T_LIFT);
+      var sw = -SCAN.half + 2 * SCAN.half * (((el * SCAN.rate) / 60) % 1);
+      out.push({
+        quad: sectorQuad(p, hd, SCAN.r0, SCAN.r1, SCAN.half, SCAN.seg),
+        sweep: [ptAlong(p, hd + sw, SCAN.r0, 0), ptAlong(p, hd + sw, SCAN.r1, 0)],
+        k: Math.max(0, Math.min(1, el / SCAN.fade))
+      });
+    }
+    return out;
+  }
+
+  function sarScans(t) {
+    var out = [];
+    if (t < T_LIFT) return out;
+    for (var i = 0; i < drones.length; i++) {
+      var d = drones[i];
+      if (d.group !== "sar") continue;
+      var p = posOf(d, t);
+      if (!inAreaM(p, 3000)) continue;
+      var side = headingOfPos(p) + Math.PI / 2;   /* 左舷侧视 */
+      var el = Math.max(0, t - T_LIFT);
+      out.push({
+        band: [ptAlong(p, side, SARB.near, 0), ptAlong(p, side, SARB.far, 0)],
+        rays: [[[p.lon, p.lat], ptAlong(p, side, SARB.near, -SARB.width / 2)],
+               [[p.lon, p.lat], ptAlong(p, side, SARB.far, SARB.width / 2)]],
+        k: Math.max(0, Math.min(1, el / SARB.fade))
+      });
+    }
+    return out;
+  }
+
+  function fans(t) {
+    var out = { radar: [], jam: [] };
+    if (t < T_LIFT) return out;
+    for (var i = 0; i < drones.length; i++) {
+      var d = drones[i];
+      var pr = d.group === "gmti" ? FAN.radar : (d.group === "ewar" ? FAN.jam : null);
+      if (!pr) continue;
+      var p = posOf(d, t);
+      if (!inAreaM(p, 3000)) continue;
+      var el = Math.max(0, t - T_LIFT);
+      var item = {
+        quad: sectorQuad(p, headingOfPos(p), pr.r0, pr.r1, FAN.half, FAN.seg),
+        k: Math.max(0, Math.min(1, el / FAN.fade))
+      };
+      (d.group === "gmti" ? out.radar : out.jam).push(item);
+    }
+    return out;
+  }
+
+  /* 覆盖格：500m，按“首次被扫到的时刻”逐格点亮；首扫时刻表在第一次用到时才算 */
+  function ensureCells() {
+    if (cells) return;
+    NX = Math.max(1, Math.round((2 * AHX) / COV.cell));
+    NY = Math.max(1, Math.round((2 * AHY) / COV.cell));
+    CW = (2 * AHX) / NX;
+    CH = (2 * AHY) / NY;
+    var hx = CW / 2 / M_LON, hy = CH / 2 / M_LAT;
+    cells = [];
+    for (var i = 0; i < NX; i++) {
+      for (var j = 0; j < NY; j++) {
+        var mx = -AHX + (i + 0.5) * CW, my = -AHY + (j + 0.5) * CH;
+        var lon = ACX + mx / M_LON, lat = ACY + my / M_LAT;
+        cells.push({
+          mx: mx, my: my,
+          ring: [[lon - hx, lat - hy], [lon + hx, lat - hy], [lon + hx, lat + hy], [lon - hx, lat + hy], [lon - hx, lat - hy]]
+        });
+      }
+    }
+  }
+
+  function ensureFirst() {
+    ensureCells();
+    if (covFirst) return;
+    var kinds = { photo: [], sar: [], gmti: [], ewar: [] };
+    for (var i = 0; i < drones.length; i++) if (kinds[drones[i].group]) kinds[drones[i].group].push(drones[i]);
+    covFirst = {};
+    Object.keys(kinds).forEach(function (k) { covFirst[k] = new Float64Array(cells.length); covFirst[k].fill(Infinity); });
+
+    var par = {
+      photo: { r0: SCAN.r0, r1: SCAN.r1, cos: Math.cos(SCAN.half + 0.35) },
+      gmti: { r0: FAN.radar.r0, r1: FAN.radar.r1, cos: Math.cos(FAN.half + 0.2) },
+      ewar: { r0: FAN.jam.r0, r1: FAN.jam.r1, cos: Math.cos(FAN.half + 0.2) },
+      sar: { r0: SARB.near, r1: SARB.far, cos: 0 }
+    };
+
+    for (var tt = T_LIFT; tt <= TOTAL; tt += COV.step) {
+      for (var k in kinds) {
+        var pr = par[k], arr = covFirst[k], ds = kinds[k];
+        if (!ds.length) continue;
+        var r0e = Math.max(0, pr.r0 - 700), r1e = pr.r1 + 700;
+        for (var di = 0; di < ds.length; di++) {
+          var p = posOf(ds[di], tt);
+          if (!inAreaM(p, 3000)) continue;
+          var hd = headingOfPos(p);
+          var fx = Math.sin(hd), fy = Math.cos(hd);
+          var px = (p.lon - ACX) * M_LON, py = (p.lat - ACY) * M_LAT;
+          var i0 = Math.max(0, Math.floor((px - r1e + AHX) / CW));
+          var i1 = Math.min(NX - 1, Math.floor((px + r1e + AHX) / CW));
+          var j0 = Math.max(0, Math.floor((py - r1e + AHY) / CH));
+          var j1 = Math.min(NY - 1, Math.floor((py + r1e + AHY) / CH));
+          for (var ii = i0; ii <= i1; ii++) {
+            for (var jj = j0; jj <= j1; jj++) {
+              var ci = ii * NY + jj;
+              if (arr[ci] <= tt) continue;
+              var dx = cells[ci].mx - px, dy = cells[ci].my - py;
+              var dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist < r0e || dist > r1e) continue;
+              if (k === "sar") {
+                var along = dx * fx + dy * fy;
+                var cross = -dx * fy + dy * fx;       /* 左舷为正 */
+                if (cross <= 0 || Math.abs(along) > SARB.width / 2 + 600) continue;
+              } else if ((dx * fx + dy * fy) / (dist || 1) < pr.cos) continue;
+              arr[ci] = tt;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  function coverage(t) {
+    ensureFirst();
+    var out = { photo: [], sar: [], gmti: [], ewar: [] };
+    for (var k in out) {
+      var arr = covFirst[k];
+      for (var i = 0; i < arr.length; i++) if (arr[i] <= t) out[k].push(cells[i].ring);
+    }
+    return out;
+  }
+
   return {
     TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_FORM: T_FORM, T_IN: T_IN,
-    phase: phase, simulate: simulate, count: function () { return drones.length; }
+    phase: phase, simulate: simulate, count: function () { return drones.length; },
+    scans: scans, sarScans: sarScans, fans: fans, coverage: coverage
   };
 })();

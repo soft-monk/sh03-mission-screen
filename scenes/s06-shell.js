@@ -159,6 +159,28 @@ window.S06_SHELL = (function () {
      transit 用实线 path + 地名标签（同场景二编组航线）；area 用虚线 tracks（同场景二规划航迹）。
      数据来自 data/routes-s1.js（离线生成），这里只负责画、开关、清理。 */
   var S1_PLAN_ID = "tracks-s1";
+  /* 场景一扫描/覆盖图层分组：mapview 每个 source 对应一个 <id>-l 图层 */
+  var S1_VIS = {
+    scan: ["scan-f", "scan-r", "scan-o", "scan-s", "scan-bf", "scan-bo", "scan-bl"],
+    sbeam: ["sbeam-b", "sbeam-r"],
+    rfan: ["rfan-f", "rfan-o"],
+    jfan: ["jfan-f", "jfan-o"],
+    "cov-photo": ["cov-photo-f", "cov-photo-l"],
+    "cov-gmti": ["cov-gmti-f", "cov-gmti-l"],
+    "cov-sar": ["cov-sar-f", "cov-sar-l"],
+    "cov-ewar": ["cov-ewar-f", "cov-ewar-l"]
+  };
+  function s1SetGroupVisible(mv, key, on) {
+    var ids = S1_VIS[key];
+    if (!ids) return;
+    var raw = null;
+    try { raw = mv && mv.map && mv.map(); } catch (err) {}
+    if (!raw) return;
+    var vis = on ? "visible" : "none";
+    ids.forEach(function (lid) {
+      try { if (raw.getLayer(lid + "-l")) raw.setLayoutProperty(lid + "-l", "visibility", vis); } catch (err) {}
+    });
+  }
 
   function s1Draw(mv, acc) {
     var RS = window.ROUTES_S1;
@@ -306,17 +328,59 @@ window.S06_SHELL = (function () {
       }));
       mv.trails("s1-trails", f.filter(function (d) { return d.trail && d.trail.length > 1; })
         .map(function (d) { return { color: d.color, pts: d.trail }; }));
+      /* 扫描扇形 / SAR 条带 / GMTI 与电子扇区 */
+      if (FL.scans) mv.scan("scan", FL.scans(st.t));
+      if (FL.sarScans) mv.beam("sbeam", FL.sarScans(st.t));
+      if (FL.fans) {
+        var fans = FL.fans(st.t);
+        mv.fan("rfan", fans.radar);
+        mv.fan("jfan", fans.jam);
+      }
+      renderCover(force);
     }
-    function requestFlight() {
+    var lastCovBucket = -1, lastCovAt = 0;
+    /* 覆盖小格：每 30 仿真秒才重建一次；拖拽时先跳过，松手补一次；
+       另外限制最快 4 次/秒，避免高倍速/快速拖动时连续重建上千个格子 */
+    function renderCover(force) {
+      if (!FL || !FL.coverage || !mv) return;
+      if (dragging && !force) return;
+      var bucket = Math.floor(st.t / 30);
+      if (!force && bucket === lastCovBucket) return;
+      var now = (window.performance && performance.now) ? performance.now() : Date.now();
+      if (!force && now - lastCovAt < 250) return;
+      lastCovAt = now;
+      lastCovBucket = bucket;
+      var cv = FL.coverage(st.t);
+      mv.cover("cov-photo", cv.photo, "#38bdf8");
+      mv.cover("cov-sar", cv.sar, "#f59e0b");
+      mv.cover("cov-gmti", cv.gmti, "#facc15");
+      mv.cover("cov-ewar", cv.ewar, "#f87171");
+    }
+    var flightForce = false;
+    function requestFlight(force) {
+      if (force) flightForce = true;
       if (flightPending || st.dead) return;
       flightPending = true;
-      requestAnimationFrame(function () { flightPending = false; renderFlight(); });
+      requestAnimationFrame(function () {
+        flightPending = false;
+        var f = flightForce; flightForce = false;
+        renderFlight(f);
+      });
     }
     function clearFlight() {
       lastFlightT = -1;
+      lastCovBucket = -1;
       if (!mv) return;
       try { mv.fleet("s1-fleet", []); } catch (err) {}
       try { mv.trails("s1-trails", []); } catch (err) {}
+      try { mv.scan("scan", []); } catch (err) {}
+      try { mv.beam("sbeam", []); } catch (err) {}
+      try { mv.fan("rfan", []); } catch (err) {}
+      try { mv.fan("jfan", []); } catch (err) {}
+      try { mv.cover("cov-photo", [], "#38bdf8"); } catch (err) {}
+      try { mv.cover("cov-sar", [], "#f59e0b"); } catch (err) {}
+      try { mv.cover("cov-gmti", [], "#facc15"); } catch (err) {}
+      try { mv.cover("cov-ewar", [], "#f87171"); } catch (err) {}
     }
     /* 进度条很便宜，每帧刷新；地图绘制交给 requestFlight 合并 + 节流 */
     function paintBar() {
@@ -375,7 +439,7 @@ window.S06_SHELL = (function () {
     var dragging = false;
     bar.addEventListener("pointerdown", function (ev) { dragging = true; try { bar.setPointerCapture(ev.pointerId); } catch (e) {} seekFromEvent(ev); });
     bar.addEventListener("pointermove", function (ev) { if (dragging) seekFromEvent(ev); });
-    bar.addEventListener("pointerup", function () { dragging = false; });
+    bar.addEventListener("pointerup", function () { dragging = false; requestFlight(true); });
     bar.addEventListener("pointercancel", function () { dragging = false; });
     (function loop(now) {
       if (st.dead) return;
@@ -398,6 +462,7 @@ window.S06_SHELL = (function () {
       if (!hasMap) return;
       if (k === "s1routes") { s1acc.showRoutes = on; s1SetVisible(mv, s1acc, on, "routes"); }
       else if (k === "tracks") { s1acc.showPlan = on; s1SetVisible(mv, s1acc, on, "plan"); }
+      else if (S1_VIS[k]) s1SetGroupVisible(mv, k, on);
     }
     /* 屏是缓存的：回看 SH-06 只走 onShow、不重建 → 这里按当前开关状态重画一次 */
     function redrawS1() {
