@@ -289,11 +289,17 @@ window.S06_SHELL = (function () {
     var segsBox = bar.querySelector(".s6-segs"), segLbls = ctl.querySelector(".s6-seglbls");
     var goBtn = ctl.querySelector(".s6-go"), tmLbl = ctl.querySelector(".s6-tm b"), totLbl = ctl.querySelector(".s6-tot");
     var spds = [].slice.call(ctl.querySelectorAll(".s6-spds b"));
-    var st = { t: 0, speed: 1, run: false, last: 0, dead: false };
+    var st = { t: 0, speed: 1, run: false, last: 0, acc: 0, dead: false };
     totLbl.textContent = fmt(total);
-    /* 场景一飞行仿真：每帧按时间取机群位置与尾迹（与场景二 SH-06 同款数据流） */
-    function renderFlight() {
-      if (!FL || !mv) return;
+    /* 场景一飞行仿真：按时间取机群位置与尾迹（与场景二 SH-06 同款数据流）
+       地图数据更新比进度条贵得多，所以这里做两件事：
+       1) 渲染合并到下一帧：拖拽时每个 pointermove 不再各自重算一次；
+       2) 时间没变（或已退场）就不重发数据。 */
+    var lastFlightT = -1, flightPending = false;
+    function renderFlight(force) {
+      if (!FL || !mv || st.dead) return;
+      if (!force && lastFlightT >= 0 && Math.abs(st.t - lastFlightT) < 1e-6) return;
+      lastFlightT = st.t;
       var f = FL.simulate(st.t);
       mv.fleet("s1-fleet", f.map(function (d) {
         return { type: d.type, color: d.color, lon: d.lon, lat: d.lat, r: d.r };
@@ -301,17 +307,27 @@ window.S06_SHELL = (function () {
       mv.trails("s1-trails", f.filter(function (d) { return d.trail && d.trail.length > 1; })
         .map(function (d) { return { color: d.color, pts: d.trail }; }));
     }
+    function requestFlight() {
+      if (flightPending || st.dead) return;
+      flightPending = true;
+      requestAnimationFrame(function () { flightPending = false; renderFlight(); });
+    }
     function clearFlight() {
+      lastFlightT = -1;
       if (!mv) return;
       try { mv.fleet("s1-fleet", []); } catch (err) {}
       try { mv.trails("s1-trails", []); } catch (err) {}
     }
-    function paint() {
+    /* 进度条很便宜，每帧刷新；地图绘制交给 requestFlight 合并 + 节流 */
+    function paintBar() {
       var r = st.t / total;
       fill.style.width = (r * 100).toFixed(2) + "%";
       knob.style.left = (r * 100).toFixed(2) + "%";
       tmLbl.textContent = fmt(st.t);
-      renderFlight();
+    }
+    function paint() {
+      paintBar();
+      requestFlight();
     }
     (function buildSegs() {
       var marks = FL
@@ -370,7 +386,10 @@ window.S06_SHELL = (function () {
       st.last = now;
       st.t = Math.min(total, st.t + dt * st.speed);
       if (st.t >= total) { st.run = false; goBtn.classList.remove("playing"); goBtn.setAttribute("aria-label", "播放"); }
-      paint();
+      /* 地图数据每 0.08 s 更新一次（12.5 fps，与场景二同款节流）；进度条仍每帧走 */
+      st.acc += dt;
+      paintBar();
+      if (st.acc >= 0.08) { st.acc = 0; requestFlight(); }
     })(performance.now());
     root.__onSpace = function () { goBtn.click(); };
     root.__s6Refresh = function () { paint(); };
@@ -386,7 +405,7 @@ window.S06_SHELL = (function () {
       s1Draw(mv, s1acc);
       s1SetVisible(mv, s1acc, s1acc.showRoutes, "routes");
       s1SetVisible(mv, s1acc, s1acc.showPlan, "plan");
-      renderFlight();
+      renderFlight(true);
     }
     [].slice.call(root.querySelectorAll("button[data-all]")).forEach(function (b) {
       b.addEventListener("click", function () {
