@@ -41,6 +41,7 @@ const COLS_KM = [9.7, 8.4, 7.1, 5.7, 4.9, 4.1];
 const ROWS_KM = [9.9, 8.9, 7.9, 6.9, 6.4];
 const GAP_WEST = 3200;                // 光电腿距（西侧 / 海岸）：稀疏
 const GAP_EAST = 800;                 // 光电腿距（东侧 / 山地）：密集（= 环形扇区厚度）
+const PHOTO_EDGE = 400;               // 光电腿端离格子上下边的留白（行间留出间隔）
 const GMTI_BUDGET = 2;                // 雷达 GMTI：2 架，同一条东西向跑道环
 const LEG_MIN = 800, LEG_MAX = 4400;
 
@@ -151,10 +152,12 @@ const photoRoutes = [];
       const gapCol = GAP_WEST + (GAP_EAST - GAP_WEST) * tCol;
       const n = Math.max(2, Math.ceil((x1 - x0) / gapCol));
       const step = (x1 - x0) / n;
-      const ya = yBot + 100, yb = yTop - 100;
+      const ya = yBot + PHOTO_EDGE, yb = yTop - PHOTO_EDGE;
+      /* 奇偶行错开半个腿距：1/3/5 行腿在子带中点，2/4 行腿左移半格，避免上下两架共线 */
+      const phase = (r % 2 === 0) ? 0.5 : 0.0;
       const raw = [];
       for (let i = 0; i < n; i++) {
-        const x = x0 + step * (i + 0.5);
+        const x = x0 + step * (i + phase);
         if (i % 2 === 0) raw.push([x, ya], [x, yb]);
         else raw.push([x, yb], [x, ya]);
       }
@@ -387,6 +390,51 @@ function verify() {
   /* 6) 覆盖 */
   const withXY = D.area.map((r) => Object.assign({}, r, { _xy: r.pts.map(toXY) }));
   const photoXY = withXY.filter((r) => r.group === "photo");
+
+  /* 5b) 光电两两分离：不得共线重叠、不得贴近并线、不得交叉 */
+  const photoSep = (() => {
+    const legsOf = (r) => {
+      const o = [];
+      for (let k = 0; k + 1 < r._xy.length; k += 2) o.push([r._xy[k], r._xy[k + 1]]);
+      return o;
+    };
+    const cross = (a, b, c, d) => {
+      const den = (b[0] - a[0]) * (d[1] - c[1]) - (b[1] - a[1]) * (d[0] - c[0]);
+      if (Math.abs(den) < 1e-12) return false;
+      const t = ((c[0] - a[0]) * (d[1] - c[1]) - (c[1] - a[1]) * (d[0] - c[0])) / den;
+      const u = ((c[0] - a[0]) * (b[1] - a[1]) - (c[1] - a[1]) * (b[0] - a[0])) / den;
+      return t > 1e-3 && t < 1 - 1e-3 && u > 1e-3 && u < 1 - 1e-3;
+    };
+    let sameX = 0, nearMerge = 0, overlap = 0, crossPairs = 0, minD = Infinity;
+    for (let i = 0; i < photoXY.length; i++) {
+      for (let j = i + 1; j < photoXY.length; j++) {
+        const A = photoXY[i]._xy, B = photoXY[j]._xy;
+        for (let a = 1; a < A.length; a++) for (let b = 1; b < B.length; b++)
+          if (cross(A[a - 1], A[a], B[b - 1], B[b])) crossPairs += 1;
+        for (const a of legsOf(photoXY[i])) for (const b of legsOf(photoXY[j])) {
+          const dx = Math.abs(a[0][0] - b[0][0]);
+          const ay0 = Math.min(a[0][1], a[1][1]), ay1 = Math.max(a[0][1], a[1][1]);
+          const by0 = Math.min(b[0][1], b[1][1]), by1 = Math.max(b[0][1], b[1][1]);
+          const gapY = Math.max(0, Math.max(ay0, by0) - Math.min(ay1, by1));
+          if (dx < 5) {
+            sameX += 1;
+            if (gapY < 300) nearMerge += 1;
+            if (dx < 1) {
+              const ov = Math.min(ay1, by1) - Math.max(ay0, by0);
+              if (ov > 0) overlap += ov;
+            }
+          }
+          const d = dx < 1 ? gapY : Math.hypot(dx, gapY);
+          if (d < minD) minD = d;
+        }
+      }
+    }
+    return { sameX, nearMerge, overlap, crossPairs, minD };
+  })();
+  if (photoSep.overlap > 1) errs.push("光电两两共线重叠 " + Math.round(photoSep.overlap) + " m");
+  if (photoSep.nearMerge > 0) errs.push("光电两两贴近并线（同 x 且 y 间隙<300m）" + photoSep.nearMerge + " 处");
+  if (photoSep.crossPairs > 0) errs.push("光电两两交叉 " + photoSep.crossPairs + " 处");
+
   const sarXY = withXY.filter((r) => r.group === "sar");
   const covPhoto = coverage(photoXY, SCAN_R);
   const covSar = sarBandCoverage(sarXY);
@@ -425,6 +473,7 @@ function verify() {
     return r.id + ":" + n + "腿/" + r.lenKm + "km";
   }).join(" "));
   console.log("[verify] GMTI:", D.area.filter((r) => r.group === "gmti").map((r) => r.id + " " + r.lenKm + "km").join(" / "));
+  console.log("[verify] 光电分离: 共线重叠 " + Math.round(photoSep.overlap) + "m | 交叉 " + photoSep.crossPairs + " 处 | 同x竖腿 " + photoSep.sameX + " | 最小间距 " + Math.round(photoSep.minD) + "m");
   console.log("[verify] 光电覆盖 全区 " + covPhoto + "%（西北 " + covPhotoNW + "% / 东南 " + covPhotoSE + "%）");
   console.log("[verify] SAR 覆盖  全区 " + covSar + "%");
   console.log("[verify] 疏密对比 西北: " + nw.length + " 环 / " + dens(nw) + " 环每100km² / 平均腿距 " + gapAvg(nw) + "km");
@@ -452,7 +501,7 @@ function serialize() {
 
   const head = [
     "/* 由 _tools/plan-routes-s1.mjs 生成，勿手改坐标；要调疏密改脚本参数后重跑。",
-    "   所有区内航段横平竖直：光电为竖直窄长闭环、SAR 为多腿蛇形（6 架分摊）、GMTI 为东西向跑道环、",
+    "   所有区内航段横平竖直：光电为多腿蛇形（疏密渐变、奇偶行错开）、SAR 为多腿蛇形（3x2 分块）、GMTI 为东西向跑道环、",
     "   电子/通信为正置跑道环。格子由西北向东南收窄，闭环宽度随之变小 —— 西北稀、东南密。 */",
     "window.ROUTES_S1 = {",
     '  "meta": ' + JSON.stringify({
