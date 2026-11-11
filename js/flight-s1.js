@@ -75,6 +75,7 @@ window.FLIGHT_S1 = (function () {
   var drones = [];
   var T_IN = T_LIFT;
   var MAX_ORBIT = 0;
+  var MAX_LOOP = 0;
 
   (function build() {
     var RS = window.ROUTES_S1;
@@ -139,12 +140,43 @@ window.FLIGHT_S1 = (function () {
         leadLen: lead.len, orbitLen: orbit.len
       });
     });
+    /* 同一轨道成对的两架（GMTI / 电子 / 中继）：第二架从进入轨道起减速到一半速度，
+       飞满一个周期后恢复，从而稳定落后半圈；全程不停机、不悬停 */
+    var byTrack = {};
+    drones.forEach(function (d) {
+      var key = d.group + "|" + JSON.stringify(d.orbit.pts);
+      (byTrack[key] = byTrack[key] || []).push(d);
+    });
+    /* 两架到达轨道的时间不同，相位差里已经含了 V×(t0b−t0a)；
+       要凑成恰好半圈，需在此基础上补 want = L/2 − V×(t0b−t0a) 的距离。
+       补法：第二架从进入轨道起以半速飞，缓慢把这 want 距离“欠”出来，再恢复原速。 */
+    Object.keys(byTrack).forEach(function (k) {
+      var list = byTrack[k];
+      for (var i = 1; i < list.length; i += 2) {
+        var a = list[i - 1], b = list[i];
+        var t0a = T_LIFT + a.leadLen / V, t0b = T_LIFT + b.leadLen / V;
+        var want = b.orbitLen / 2 - V * (t0b - t0a);
+        want = ((want % b.orbitLen) + b.orbitLen) % b.orbitLen;
+        if (want < 200) continue;                    /* 已经差半圈就不用减速 */
+        b.slow = true;
+        b.slowDist = want;
+        b.slowDur = want / (V / 2);                  /* 半速飞行，欠满 want 为止 */
+        b.slowT0 = t0b;
+      }
+    });
     T_IN = Math.ceil(T_IN);
     MAX_ORBIT = Math.ceil(MAX_ORBIT);
+    /* 最晚“跑完一圈”的时刻：减速段多花 2×want/V 的时间 */
+    var lastDone = 0;
+    drones.forEach(function (d) {
+      var done = T_LIFT + d.leadLen / V + (d.orbitLen + 2 * (d.slow ? d.slowDist : 0)) / V;
+      if (done > lastDone) lastDone = done;
+    });
+    MAX_LOOP = lastDone;
   })();
 
   /* 总时长：全部进入盘旋后再留约 35 分钟 */
-  var TOTAL = Math.max(3600, Math.ceil((T_IN + MAX_ORBIT / V + 300) / 60) * 60);
+  var TOTAL = Math.max(3600, Math.ceil((MAX_LOOP + 300) / 60) * 60);
 
   function posOf(d, t) {
     if (t <= T_LIFT) return { lon: d.park[0], lat: d.park[1], dx: 0, dy: 0 };
@@ -154,6 +186,13 @@ window.FLIGHT_S1 = (function () {
       p = pointAt(d.lead, dist);
     } else {
       var u = dist - d.leadLen;
+      if (d.slow) {
+        /* 减速段：每经过 t 秒少走 V/2 米，累计 slowDist 后恢复原速 */
+        var k = (t - d.slowT0) / d.slowDur;
+        if (k > 1) k = 1;
+        if (k > 0) u -= k * d.slowDist;
+        if (u < 0) u = 0;
+      }
       if (d.pingpong) {
         var m = u % (2 * d.orbitLen);
         p = pointAt(d.orbit, m <= d.orbitLen ? m : 2 * d.orbitLen - m);
