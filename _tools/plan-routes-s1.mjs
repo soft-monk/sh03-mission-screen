@@ -189,9 +189,9 @@ const sarRoutes = [];
       const legs = [];
       const K = Math.ceil((x1 - x0) / SAR_LEG_GAP);
       for (let k = 0; k <= K; k++) {
-        let x = x0 + 500 + k * SAR_LEG_GAP;
-        if (x > HALF_X - 100) x = HALF_X - 100;          /* 不越出任务区 */
-        if (!legs.length || x - legs[legs.length - 1] > 200) legs.push(x);
+        const x = x0 + 500 + k * SAR_LEG_GAP;
+        if (x > x1 - 500) continue;                      /* 腿不出本块，避免与邻块重叠/交叉 */
+        legs.push(x);
       }
       const raw = [];
       legs.forEach((x, i) => {
@@ -279,6 +279,58 @@ function distToSeg(px, py, a, b) {
   let t = L2 ? ((px - a[0]) * bx + (py - a[1]) * by) / L2 : 0;
   t = Math.max(0, Math.min(1, t));
   return Math.hypot(px - a[0] - bx * t, py - a[1] - by * t);
+}
+
+/* 两条航线集合的“互不重叠/不交叉”检查：共线重叠、交叉、最小间距 */
+function sepCheck(list) {
+  const legsOf = (r) => {
+    const o = [];
+    for (let k = 0; k + 1 < r._xy.length; k += 2) o.push([r._xy[k], r._xy[k + 1]]);
+    return o;
+  };
+  const cross = (a, b, c, d) => {
+    const den = (b[0] - a[0]) * (d[1] - c[1]) - (b[1] - a[1]) * (d[0] - c[0]);
+    if (Math.abs(den) < 1e-12) return false;
+    const t = ((c[0] - a[0]) * (d[1] - c[1]) - (c[1] - a[1]) * (d[0] - c[0])) / den;
+    const u = ((c[0] - a[0]) * (b[1] - a[1]) - (c[1] - a[1]) * (b[0] - a[0])) / den;
+    return t > 1e-3 && t < 1 - 1e-3 && u > 1e-3 && u < 1 - 1e-3;
+  };
+  const segDist = (a, b) => {
+    const d2 = (p, x, y) => {
+      const bx = y[0] - x[0], by = y[1] - x[1];
+      const L2 = bx * bx + by * by;
+      let t = L2 ? ((p[0] - x[0]) * bx + (p[1] - x[1]) * by) / L2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      return Math.hypot(p[0] - x[0] - bx * t, p[1] - x[1] - by * t);
+    };
+    return Math.min(d2(a[0], b[0], b[1]), d2(a[1], b[0], b[1]), d2(b[0], a[0], a[1]), d2(b[1], a[0], a[1]));
+  };
+  let sameX = 0, nearMerge = 0, overlap = 0, crossPairs = 0, minD = Infinity;
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      const A = list[i]._xy, B = list[j]._xy;
+      for (let a = 1; a < A.length; a++) for (let b = 1; b < B.length; b++) {
+        if (cross(A[a - 1], A[a], B[b - 1], B[b])) crossPairs += 1;
+        const d = segDist([A[a - 1], A[a]], [B[b - 1], B[b]]);
+        if (d < minD) minD = d;
+      }
+      for (const a of legsOf(list[i])) for (const b of legsOf(list[j])) {
+        const dx = Math.abs(a[0][0] - b[0][0]);
+        const ay0 = Math.min(a[0][1], a[1][1]), ay1 = Math.max(a[0][1], a[1][1]);
+        const by0 = Math.min(b[0][1], b[1][1]), by1 = Math.max(b[0][1], b[1][1]);
+        const gapY = Math.max(0, Math.max(ay0, by0) - Math.min(ay1, by1));
+        if (dx < 5) {
+          sameX += 1;
+          if (gapY < 300) nearMerge += 1;
+          if (dx < 1) {
+            const ov = Math.min(ay1, by1) - Math.max(ay0, by0);
+            if (ov > 0) overlap += ov;
+          }
+        }
+      }
+    }
+  }
+  return { sameX, nearMerge, overlap, crossPairs, minD };
 }
 
 /* SAR 覆盖：固定西侧 0.5–2.5km 测绘带，沿航向 ±1.1km 容差（与画面一致） */
@@ -392,50 +444,16 @@ function verify() {
   const photoXY = withXY.filter((r) => r.group === "photo");
 
   /* 5b) 光电两两分离：不得共线重叠、不得贴近并线、不得交叉 */
-  const photoSep = (() => {
-    const legsOf = (r) => {
-      const o = [];
-      for (let k = 0; k + 1 < r._xy.length; k += 2) o.push([r._xy[k], r._xy[k + 1]]);
-      return o;
-    };
-    const cross = (a, b, c, d) => {
-      const den = (b[0] - a[0]) * (d[1] - c[1]) - (b[1] - a[1]) * (d[0] - c[0]);
-      if (Math.abs(den) < 1e-12) return false;
-      const t = ((c[0] - a[0]) * (d[1] - c[1]) - (c[1] - a[1]) * (d[0] - c[0])) / den;
-      const u = ((c[0] - a[0]) * (b[1] - a[1]) - (c[1] - a[1]) * (b[0] - a[0])) / den;
-      return t > 1e-3 && t < 1 - 1e-3 && u > 1e-3 && u < 1 - 1e-3;
-    };
-    let sameX = 0, nearMerge = 0, overlap = 0, crossPairs = 0, minD = Infinity;
-    for (let i = 0; i < photoXY.length; i++) {
-      for (let j = i + 1; j < photoXY.length; j++) {
-        const A = photoXY[i]._xy, B = photoXY[j]._xy;
-        for (let a = 1; a < A.length; a++) for (let b = 1; b < B.length; b++)
-          if (cross(A[a - 1], A[a], B[b - 1], B[b])) crossPairs += 1;
-        for (const a of legsOf(photoXY[i])) for (const b of legsOf(photoXY[j])) {
-          const dx = Math.abs(a[0][0] - b[0][0]);
-          const ay0 = Math.min(a[0][1], a[1][1]), ay1 = Math.max(a[0][1], a[1][1]);
-          const by0 = Math.min(b[0][1], b[1][1]), by1 = Math.max(b[0][1], b[1][1]);
-          const gapY = Math.max(0, Math.max(ay0, by0) - Math.min(ay1, by1));
-          if (dx < 5) {
-            sameX += 1;
-            if (gapY < 300) nearMerge += 1;
-            if (dx < 1) {
-              const ov = Math.min(ay1, by1) - Math.max(ay0, by0);
-              if (ov > 0) overlap += ov;
-            }
-          }
-          const d = dx < 1 ? gapY : Math.hypot(dx, gapY);
-          if (d < minD) minD = d;
-        }
-      }
-    }
-    return { sameX, nearMerge, overlap, crossPairs, minD };
-  })();
+  const photoSep = sepCheck(photoXY);
   if (photoSep.overlap > 1) errs.push("光电两两共线重叠 " + Math.round(photoSep.overlap) + " m");
   if (photoSep.nearMerge > 0) errs.push("光电两两贴近并线（同 x 且 y 间隙<300m）" + photoSep.nearMerge + " 处");
   if (photoSep.crossPairs > 0) errs.push("光电两两交叉 " + photoSep.crossPairs + " 处");
 
   const sarXY = withXY.filter((r) => r.group === "sar");
+  /* 5c) SAR 两两分离：同样不得共线重叠、不得交叉 */
+  const sarSep = sepCheck(sarXY);
+  if (sarSep.overlap > 1) errs.push("SAR 两两共线重叠 " + Math.round(sarSep.overlap) + " m");
+  if (sarSep.crossPairs > 0) errs.push("SAR 两两交叉 " + sarSep.crossPairs + " 处");
   const covPhoto = coverage(photoXY, SCAN_R);
   const covSar = sarBandCoverage(sarXY);
   const covPhotoNW = coverage(photoXY, SCAN_R, (x, y) => x < 0 && y > 0);
@@ -475,6 +493,7 @@ function verify() {
   console.log("[verify] GMTI:", D.area.filter((r) => r.group === "gmti").map((r) => r.id + " " + r.lenKm + "km").join(" / "));
   console.log("[verify] 光电分离: 共线重叠 " + Math.round(photoSep.overlap) + "m | 交叉 " + photoSep.crossPairs + " 处 | 同x竖腿 " + photoSep.sameX + " | 最小间距 " + Math.round(photoSep.minD) + "m");
   console.log("[verify] 光电覆盖 全区 " + covPhoto + "%（西北 " + covPhotoNW + "% / 东南 " + covPhotoSE + "%）");
+  console.log("[verify] SAR 分离: 共线重叠 " + Math.round(sarSep.overlap) + "m | 交叉 " + sarSep.crossPairs + " 处 | 最小间距 " + Math.round(sarSep.minD) + "m");
   console.log("[verify] SAR 覆盖  全区 " + covSar + "%");
   console.log("[verify] 疏密对比 西北: " + nw.length + " 环 / " + dens(nw) + " 环每100km² / 平均腿距 " + gapAvg(nw) + "km");
   console.log("[verify] 疏密对比 东南: " + se.length + " 环 / " + dens(se) + " 环每100km² / 平均腿距 " + gapAvg(se) + "km");
