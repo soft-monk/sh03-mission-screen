@@ -36,15 +36,11 @@ const COLOR = { photo: "#38bdf8", sar: "#facc15", gmti: "#f59e0b", ewar: "#f8717
 const SCAN_R = 2800;                  // 光电扫描半径（同场景二）
 const OVERLAP = 0.85;                 // 排版系数：有效半径 = 扫描半径 × 该系数（<1 表示相邻带重叠）
 const R_EFF = Math.round(SCAN_R * OVERLAP);
-const SAR_HALF = 1000;                // SAR 测绘带半宽（2km 带宽）
 /* 光电格子（km，从西到东 / 从北到南），合计 40km；西北大、东南小 */
 const COLS_KM = [9.7, 8.4, 7.1, 5.7, 4.9, 4.1];
 const ROWS_KM = [9.9, 8.9, 7.9, 6.9, 6.4];
 const GAP_WEST = 5000;                // 西侧（海岸）闭环腿距：稀疏
 const GAP_EAST = 2400;                // 东侧（山地）闭环腿距：密集
-const SAR_GAP_WEST = 2400;            // 西侧 SAR 腿距
-const SAR_GAP_EAST = 1600;            // 东侧 SAR 腿距
-const SAR_BUDGET = 6;                 // 雷达 SAR：6 架，各飞一段蛇形
 const GMTI_BUDGET = 2;                // 雷达 GMTI：2 架，同一条东西向跑道环
 const LEG_MIN = 800, LEG_MAX = 4400;
 
@@ -56,11 +52,6 @@ const lenKm = (pts) => {
   for (let i = 1; i < pts.length; i++) s += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
   return +(s / 1000).toFixed(1);
 };
-const radiusAt = (x) => {
-  const t = Math.max(0, Math.min(1, (x + HALF_X) / (2 * HALF_X)));
-  return SAR_GAP_WEST + (SAR_GAP_EAST - SAR_GAP_WEST) * t;
-};
-
 /* ---------- 编组航线：二次贝塞尔曲线，自动降曲率直到互不交叉 ---------- */
 const RALLY_XY = xy((RALLY.w + RALLY.e) / 2, (RALLY.s + RALLY.n) / 2);
 const TRANSIT_ENTRIES = [
@@ -132,7 +123,7 @@ const transit = (function () {
   return picked.map((r) => ({ id: r.id, name: r.name, group: r.group, color: r.color, lenKm: r.lenKm, mid: r.mid, pts: r.pts }));
 })();
 
-/* ---------- 光电：整片铺“竖腿闭环”，格子由西北向东南收窄 ---------- */
+/* ---------- 光电：每格一条“之字/蛇形”（南北竖腿 + 东西折返），格子由西北向东南收窄 ---------- */
 const photoRoutes = [];
 (function buildPhoto() {
   /* 列边界（西 → 东）与行边界（北 → 南）；按比例缩放到正好铺满任务区 */
@@ -152,7 +143,7 @@ const photoRoutes = [];
     const x0 = colEdges[c], x1 = colEdges[c + 1];
     const cx = (x0 + x1) / 2;
     const t = (cx + HALF_X) / (2 * HALF_X);                 // 0 = 最西，1 = 最东
-    const gap = GAP_WEST + (GAP_EAST - GAP_WEST) * t;         // 闭环腿距随位置收窄
+    const gap = GAP_WEST + (GAP_EAST - GAP_WEST) * t;         // 两条竖腿的间距随位置收窄
     for (let r = 0; r < ROWS_KM.length; r++) {
       idx += 1;
       const yTop = rowEdges[r], yBot = rowEdges[r + 1];
@@ -160,14 +151,14 @@ const photoRoutes = [];
       const cellH = yTop - yBot;
       const legLen = Math.max(LEG_MIN, Math.min(LEG_MAX, cellH - 2 * R_EFF));
       const hl = gap / 2, vh = legLen / 2;
+      /* 之字形：左腿自南向北 → 顶部东西折返 → 右腿自北向南 */
       const raw = [
         [cx - hl, cy - vh], [cx - hl, cy + vh],
-        [cx + hl, cy + vh], [cx + hl, cy - vh],
-        [cx - hl, cy - vh]
+        [cx + hl, cy + vh], [cx + hl, cy - vh]
       ];
       photoRoutes.push({
         id: "P-" + String(idx).padStart(2, "0"),
-        group: "photo", kind: "loop",
+        group: "photo", kind: "serpentine",
         zone: cx < 0 ? "west" : "east",
         color: COLOR.photo, lenKm: lenKm(raw), pts: raw.map(([x, y]) => ll(x, y))
       });
@@ -175,32 +166,40 @@ const photoRoutes = [];
   }
 })();
 
-/* ---------- 雷达 SAR（6 架）：全区平行腿切成 6 段，每架在自己带内走蛇形往返 ---------- */
+/* ---------- 雷达 SAR（6 架）：任务区 3×2 分块，每架在自己块内蛇形（南北腿 + 东西折返） ---------- */
 const sarRoutes = [];
 (function buildSar() {
-  const legs = [];
-  let x = -HALF_X + radiusAt(-HALF_X) / 2;
-  while (x < HALF_X - 300) {
-    legs.push({ x });
-    x += radiusAt(x);
-  }
-  const y0 = -HALF_Y + 300, y1 = HALF_Y - 300;
-  for (let a = 0; a < SAR_BUDGET; a++) {
-    const from = Math.round((a * legs.length) / SAR_BUDGET);
-    const to = Math.round(((a + 1) * legs.length) / SAR_BUDGET);
-    const g = legs.slice(from, to);
-    if (g.length < 2) continue;                       // 少于 2 条腿不成蛇形
-    const raw = [];
-    g.forEach((leg, i) => {
-      if (i % 2 === 0) { raw.push([leg.x, y0], [leg.x, y1]); }
-      else { raw.push([leg.x, y1], [leg.x, y0]); }
-    });
-    sarRoutes.push({
-      id: "R-" + String(a + 1).padStart(2, "0"),
-      group: "sar", kind: "serpentine",
-      zone: (g[0].x + g[g.length - 1].x) / 2 < 0 ? "west" : "east",
-      color: COLOR.sar, lenKm: lenKm(raw), pts: raw.map(([x2, y2]) => ll(x2, y2))
-    });
+  const BC = 3, BR = 2;                       // 3 列 × 2 行
+  const bw = (2 * HALF_X) / BC, bh = (2 * HALF_Y) / BR;
+  const LEG_GAP = 2000;                       // 块内腿距 = 测绘带宽度
+  const EDGE = 800;                           // 腿两端离块边的余量
+  let idx = 0;
+  for (let bc = 0; bc < BC; bc++) {
+    for (let br = 0; br < BR; br++) {
+      idx += 1;
+      const x0 = -HALF_X + bc * bw, x1 = x0 + bw;
+      const y0 = -HALF_Y + br * bh, y1 = y0 + bh;
+      const ya = y0 + EDGE, yb = y1 - EDGE;
+      /* 腿从块西侧 +0.5km 起，按测绘带铺到块东侧外 0.5km（西侧视才能盖住块东缘） */
+      const legs = [];
+      const K = Math.ceil((x1 - x0) / LEG_GAP);
+      for (let k = 0; k <= K; k++) {
+        let x = x0 + 500 + k * LEG_GAP;
+        if (x > HALF_X - 100) x = HALF_X - 100;          /* 不越出任务区 */
+        if (!legs.length || x - legs[legs.length - 1] > 200) legs.push(x);
+      }
+      const raw = [];
+      legs.forEach((x, i) => {
+        if (i % 2 === 0) raw.push([x, ya], [x, yb]);
+        else raw.push([x, yb], [x, ya]);
+      });
+      sarRoutes.push({
+        id: "R-" + String(idx).padStart(2, "0"),
+        group: "sar", kind: "serpentine",
+        zone: "block" + idx,
+        color: COLOR.sar, lenKm: lenKm(raw), pts: raw.map(([x2, y2]) => ll(x2, y2))
+      });
+    }
   }
 })();
 
@@ -275,6 +274,35 @@ function distToSeg(px, py, a, b) {
   let t = L2 ? ((px - a[0]) * bx + (py - a[1]) * by) / L2 : 0;
   t = Math.max(0, Math.min(1, t));
   return Math.hypot(px - a[0] - bx * t, py - a[1] - by * t);
+}
+
+/* SAR 覆盖：固定西侧 0.5–2.5km 测绘带，沿航向 ±1.1km 容差（与画面一致） */
+function sarBandCoverage(routes) {
+  const step = 500;
+  const nx = Math.max(2, Math.round((2 * HALF_X) / step));
+  const ny = Math.max(2, Math.round((2 * HALF_Y) / step));
+  let hit = 0, total = 0;
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < ny; j++) {
+      const x = -HALF_X + ((i + 0.5) / nx) * 2 * HALF_X;
+      const y = -HALF_Y + ((j + 0.5) / ny) * 2 * HALF_Y;
+      total += 1;
+      let ok = false;
+      for (const r of routes) {
+        for (let k = 1; k < r._xy.length && !ok; k++) {
+          const a = r._xy[k - 1], b = r._xy[k];
+          if (Math.abs(b[0] - a[0]) > 1) continue;          /* 只认南北向腿 */
+          const y0 = Math.min(a[1], b[1]) - 1100, y1 = Math.max(a[1], b[1]) + 1100;
+          if (y < y0 || y > y1) continue;
+          const dx = x - a[0];
+          if (dx >= 500 && dx <= 2500) ok = true;
+        }
+        if (ok) break;
+      }
+      if (ok) hit += 1;
+    }
+  }
+  return total ? +((hit / total) * 100).toFixed(1) : 0;
 }
 function coverage(routes, radius, filter) {
   const step = 500;
@@ -359,7 +387,7 @@ function verify() {
   const photoXY = withXY.filter((r) => r.group === "photo");
   const sarXY = withXY.filter((r) => r.group === "sar");
   const covPhoto = coverage(photoXY, SCAN_R);
-  const covSar = coverage(sarXY, SAR_HALF);
+  const covSar = sarBandCoverage(sarXY);
   const covPhotoNW = coverage(photoXY, SCAN_R, (x, y) => x < 0 && y > 0);
   const covPhotoSE = coverage(photoXY, SCAN_R, (x, y) => x > 0 && y < 0);
 
@@ -428,7 +456,7 @@ function serialize() {
       scanRadius: SCAN_R,
       colsKm: COLS_KM,
       rowsKm: ROWS_KM,
-      gaps: { photoWest: GAP_WEST, photoEast: GAP_EAST, sarWest: SAR_GAP_WEST, sarEast: SAR_GAP_EAST }
+      gaps: { photoWest: GAP_WEST, photoEast: GAP_EAST, sarBand: [500, 2500], sarBlocks: "3x2" }
     }, null, 2).replace(/\n/g, "\n  ") + ","
   ].join("\n");
 

@@ -170,6 +170,16 @@ window.S06_SHELL = (function () {
     "cov-sar": ["cov-sar-f", "cov-sar-l"],
     "cov-ewar": ["cov-ewar-f", "cov-ewar-l"]
   };
+  /* 直接按图层 id 切显隐（尾迹这类不走 <id>-l 命名规则的图层） */
+  function s1SetLayers(mv, layerIds, on) {
+    var raw = null;
+    try { raw = mv && mv.map && mv.map(); } catch (err) {}
+    if (!raw) return;
+    var vis = on ? "visible" : "none";
+    layerIds.forEach(function (lid) {
+      try { if (raw.getLayer(lid)) raw.setLayoutProperty(lid, "visibility", vis); } catch (err) {}
+    });
+  }
   function s1SetGroupVisible(mv, key, on) {
     var ids = S1_VIS[key];
     if (!ids) return;
@@ -462,6 +472,7 @@ window.S06_SHELL = (function () {
       if (!hasMap) return;
       if (k === "s1routes") { s1acc.showRoutes = on; s1SetVisible(mv, s1acc, on, "routes"); }
       else if (k === "tracks") { s1acc.showPlan = on; s1SetVisible(mv, s1acc, on, "plan"); }
+      else if (k === "trails") s1SetLayers(mv, ["s1-trails-c", "s1-trails-l"], on);
       else if (S1_VIS[k]) s1SetGroupVisible(mv, k, on);
     }
     /* 屏是缓存的：回看 SH-06 只走 onShow、不重建 → 这里按当前开关状态重画一次 */

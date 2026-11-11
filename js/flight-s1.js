@@ -30,8 +30,8 @@ window.FLIGHT_S1 = (function () {
   /* 扫描 / 扇区 / 条带 / 覆盖格（参数与场景二 SH-06 一致） */
   var SCAN = { r0: 2000, r1: 2800, half: Math.PI / 6, seg: 10, rate: 10, fade: 0.6 };
   var FAN = { radar: { r0: 2000, r1: 35000 }, jam: { r0: 1000, r1: 30000 }, half: Math.PI / 4, seg: 28, fade: 0.6 };
-  var SARB = { near: 8000, far: 10000, width: 100, fade: 0.6 };
-  var COV = { cell: 500, step: 30 };
+  var SARB = { near: 500, far: 2500, width: 100, fade: 0.6 };   // 西侧测绘带（贴航迹）
+  var COV = { cell: 500, step: 10 };
 
   /* ---------- 折线工具 ---------- */
   function makePath(pts) {
@@ -74,6 +74,7 @@ window.FLIGHT_S1 = (function () {
   /* ---------- 组装每架无人机的“航程”：停机位 → 编组航线 → 转场 → 任务航路 ---------- */
   var drones = [];
   var T_IN = T_LIFT;
+  var MAX_ORBIT = 0;
 
   (function build() {
     var RS = window.ROUTES_S1;
@@ -129,6 +130,7 @@ window.FLIGHT_S1 = (function () {
 
       var tIn = T_LIFT + lead.len / V;
       if (tIn > T_IN) T_IN = tIn;
+      if (orbit.len > MAX_ORBIT) MAX_ORBIT = orbit.len;
 
       drones.push({
         icon: icon, color: color, group: r.group, kind: r.kind,
@@ -138,10 +140,11 @@ window.FLIGHT_S1 = (function () {
       });
     });
     T_IN = Math.ceil(T_IN);
+    MAX_ORBIT = Math.ceil(MAX_ORBIT);
   })();
 
   /* 总时长：全部进入盘旋后再留约 35 分钟 */
-  var TOTAL = Math.max(3600, Math.ceil((T_IN + 2100) / 60) * 60);
+  var TOTAL = Math.max(3600, Math.ceil((T_IN + MAX_ORBIT / V + 300) / 60) * 60);
 
   function posOf(d, t) {
     if (t <= T_LIFT) return { lon: d.park[0], lat: d.park[1], dx: 0, dy: 0 };
@@ -249,7 +252,7 @@ window.FLIGHT_S1 = (function () {
       if (d.group !== "sar") continue;
       var p = posOf(d, t);
       if (!inAreaM(p, 3000)) continue;
-      var side = headingOfPos(p) + Math.PI / 2;   /* 左舷侧视 */
+      var side = -Math.PI / 2;                    /* 固定朝西（与覆盖判定一致） */
       var el = Math.max(0, t - T_LIFT);
       out.push({
         band: [ptAlong(p, side, SARB.near, 0), ptAlong(p, side, SARB.far, 0)],
@@ -310,9 +313,9 @@ window.FLIGHT_S1 = (function () {
     Object.keys(kinds).forEach(function (k) { covFirst[k] = new Float64Array(cells.length); covFirst[k].fill(Infinity); });
 
     var par = {
-      photo: { r0: SCAN.r0, r1: SCAN.r1, cos: Math.cos(SCAN.half + 0.35) },
-      gmti: { r0: FAN.radar.r0, r1: FAN.radar.r1, cos: Math.cos(FAN.half + 0.2) },
-      ewar: { r0: FAN.jam.r0, r1: FAN.jam.r1, cos: Math.cos(FAN.half + 0.2) },
+      photo: { r0: SCAN.r0, r1: SCAN.r1, cos: Math.cos(SCAN.half) },
+      gmti: { r0: FAN.radar.r0, r1: FAN.radar.r1, cos: Math.cos(FAN.half) },
+      ewar: { r0: FAN.jam.r0, r1: FAN.jam.r1, cos: Math.cos(FAN.half) },
       sar: { r0: SARB.near, r1: SARB.far, cos: 0 }
     };
 
@@ -320,7 +323,7 @@ window.FLIGHT_S1 = (function () {
       for (var k in kinds) {
         var pr = par[k], arr = covFirst[k], ds = kinds[k];
         if (!ds.length) continue;
-        var r0e = Math.max(0, pr.r0 - 700), r1e = pr.r1 + 700;
+        var r0e = Math.max(0, pr.r0 - 50), r1e = pr.r1 + 50;
         for (var di = 0; di < ds.length; di++) {
           var p = posOf(ds[di], tt);
           if (!inAreaM(p, 3000)) continue;
@@ -336,13 +339,15 @@ window.FLIGHT_S1 = (function () {
               var ci = ii * NY + jj;
               if (arr[ci] <= tt) continue;
               var dx = cells[ci].mx - px, dy = cells[ci].my - py;
-              var dist = Math.sqrt(dx * dx + dy * dy);
-              if (dist < r0e || dist > r1e) continue;
               if (k === "sar") {
-                var along = dx * fx + dy * fy;
-                var cross = -dx * fy + dy * fx;       /* 左舷为正 */
-                if (cross <= 0 || Math.abs(along) > SARB.width / 2 + 600) continue;
-              } else if ((dx * fx + dy * fy) / (dist || 1) < pr.cos) continue;
+                /* 固定朝西的测绘带：西侧 0.5–2.5km、沿航向 ±1.1km（不走圆形距离判定） */
+                if (dx > -SARB.near || dx < -SARB.far) continue;
+                if (Math.abs(dy) > 1100) continue;
+              } else {
+                var dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < r0e || dist > r1e) continue;
+                if ((dx * fx + dy * fy) / (dist || 1) < pr.cos) continue;
+              }
               arr[ci] = tt;
             }
           }
