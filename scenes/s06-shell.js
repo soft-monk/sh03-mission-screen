@@ -109,6 +109,16 @@ window.S06_SHELL = (function () {
       "<div class=\"s6-lyr-h\"><b>图层</b><button data-all=\"1\">全显</button><button data-all=\"0\">全隐</button></div>" +
       (layers || []).map(function (o) {
         if (o.sec) return "<div class=\"s6-lyr-sec\">" + o.sec + "</div>";
+        if (o.children && o.children.length) {
+          return "<div class=\"s6-lyr-grp\" data-grp=\"" + o.k + "\">" +
+            "<div class=\"s6-lyr-head\"><i class=\"s6-lyr-caret\"></i>" +
+              "<input type=\"checkbox\" checked data-k=\"" + o.k + "\"><span>" + o.label + "</span></div>" +
+            "<div class=\"s6-lyr-sub\">" +
+              o.children.map(function (c) {
+                return "<label class=\"s6-lyr\"><input type=\"checkbox\" checked data-k=\"" + c.k + "\"><span>" + c.label + "</span></label>";
+              }).join("") +
+            "</div></div>";
+        }
         return "<label class=\"s6-lyr\"><input type=\"checkbox\" checked data-k=\"" + o.k + "\"><span>" + o.label + "</span></label>";
       }).join("") +
     "</section>";
@@ -138,7 +148,15 @@ window.S06_SHELL = (function () {
       ".s6-lyr{display:flex;align-items:center;gap:9px;padding:7px 2px;cursor:pointer;user-select:none}",
       ".s6-lyr input{accent-color:#38bdf8;width:14px;height:14px;cursor:pointer}",
       ".s6-lyr-sec{margin:8px 0 2px;padding:5px 2px 4px;border-top:1px solid rgba(56,189,248,.16);color:#7dd3fc;font-size:12px;letter-spacing:1px}",
-      ".s6-lyr-sec:first-of-type{border-top:0;margin-top:2px}"
+      ".s6-lyr-sec:first-of-type{border-top:0;margin-top:2px}",
+      ".s6-lyr-grp{margin:0}",
+      ".s6-lyr-head{display:flex;align-items:center;gap:9px;padding:7px 2px;cursor:pointer;user-select:none}",
+      ".s6-lyr-head input{accent-color:#38bdf8;width:14px;height:14px;cursor:pointer}",
+      ".s6-lyr-caret{flex:none;width:9px;height:9px;border-right:1.6px solid #7dd3fc;border-bottom:1.6px solid #7dd3fc;",
+      "  transform:rotate(-45deg);transition:transform .15s ease;margin-right:2px}",
+      ".s6-lyr-grp.on .s6-lyr-caret{transform:rotate(45deg)}",
+      ".s6-lyr-sub{display:none;padding-left:17px}",
+      ".s6-lyr-grp.on .s6-lyr-sub{display:block}"
     ].join("\n");
     document.head.appendChild(st);
   }
@@ -159,6 +177,14 @@ window.S06_SHELL = (function () {
      transit 用实线 path + 地名标签（同场景二编组航线）；area 用虚线 tracks（同场景二规划航迹）。
      数据来自 data/routes-s1.js（离线生成），这里只负责画、开关、清理。 */
   var S1_PLAN_ID = "tracks-s1";
+  /* 规划航迹按机型分层：颜色沿用机型色，再靠线型/线宽区分 */
+  var S1_PLAN_STYLES = {
+    photo: { dash: [2, 3], width: 2.0, opacity: 0.75 },
+    sar:   { dash: [6, 3], width: 3.2, opacity: 0.95 },
+    gmti:  { dash: [1, 2, 6, 2], width: 3.0, opacity: 0.95 },
+    ewar:  { dash: [0.6, 2.6], width: 3.0, opacity: 0.95 },
+    comm:  { dash: [3.5, 2], width: 3.6, opacity: 0.95 }
+  };
   /* 场景一扫描/覆盖图层分组：mapview 每个 source 对应一个 <id>-l 图层 */
   var S1_VIS = {
     scan: ["scan-f", "scan-r", "scan-o", "scan-s", "scan-bf", "scan-bo", "scan-bl"],
@@ -197,6 +223,7 @@ window.S06_SHELL = (function () {
     if (!mv || !RS) return;
     acc.ids.length = 0;
     acc.labels.length = 0;
+    acc.planIds.length = 0;
     (RS.transit || []).forEach(function (r) {
       try {
         mv.path("s1-route-" + r.id, r.pts, { color: r.color, width: 3 });
@@ -207,10 +234,19 @@ window.S06_SHELL = (function () {
       } catch (err) {}
     });
     if (mv.tracks) {
-      try {
-        mv.tracks(S1_PLAN_ID, (RS.area || []).map(function (p) { return { color: p.color, pts: p.pts }; }));
-        acc.plan = true;
-      } catch (err) {}
+      var groups = {};
+      (RS.area || []).forEach(function (p) { (groups[p.group] = groups[p.group] || []).push(p); });
+      Object.keys(S1_PLAN_STYLES).forEach(function (g) {
+        var list = groups[g];
+        if (!list || !list.length) return;
+        var st = S1_PLAN_STYLES[g];
+        try {
+          mv.tracks(S1_PLAN_ID + "-" + g, list.map(function (p) { return { color: p.color, pts: p.pts }; }),
+            { color: list[0].color, dash: st.dash, width: st.width, opacity: st.opacity });
+          acc.planIds.push(S1_PLAN_ID + "-" + g);
+        } catch (err) {}
+      });
+      acc.plan = true;
     }
   }
 
@@ -225,13 +261,18 @@ window.S06_SHELL = (function () {
       acc.labels.forEach(function (h) { try { if (h && h.set) h.set(on ? 1 : 0); } catch (err) {} });
     }
     if (target === "plan" || target === undefined) {
-      try { if (raw && raw.getLayer(S1_PLAN_ID + "-l")) raw.setLayoutProperty(S1_PLAN_ID + "-l", "visibility", vis); } catch (err) {}
+      (acc.planIds || []).forEach(function (id) {
+        try { if (raw && raw.getLayer(id + "-l")) raw.setLayoutProperty(id + "-l", "visibility", vis); } catch (err) {}
+      });
     }
   }
 
   function s1Clear(mv, acc) {
     if (!mv) return;
-    try { if (acc.plan && mv.tracks) mv.tracks(S1_PLAN_ID, []); } catch (err) {}
+    if (acc.plan && mv.tracks) {
+      (acc.planIds || []).forEach(function (id) { try { mv.tracks(id, []); } catch (err) {} });
+    }
+    acc.planIds = [];
     var raw = null;
     try { raw = mv.map && mv.map(); } catch (err) {}
     acc.ids.forEach(function (id) {
@@ -254,10 +295,27 @@ window.S06_SHELL = (function () {
     var uavs = (cfg && cfg.uavs) || [];
     var hasMap = !!(cfg && cfg.mapBounds);   /* 场景一有自己的一套瓦片与边界 */
     var mapHost = null;
-    var s1acc = { ids: [], labels: [], plan: false, showRoutes: true, showPlan: true };
+    var s1acc = { ids: [], labels: [], plan: false, planIds: [], showRoutes: true };
     var FL = (hasMap && window.FLIGHT_S1) ? window.FLIGHT_S1 : null;
     var total = FL ? FL.TOTAL : ((window.FLIGHT06 && window.FLIGHT06.TOTAL) || 9000);
     var CH = { MENU: MENU, TOOLS: TOOLS, STATUS: STATUS };
+    /* 场景一：规划航迹做成“总开关 + 5 个机型子开关”，默认折叠 */
+    var shellLayers = LAYERS;
+    if (hasMap) {
+      shellLayers = [];
+      LAYERS.forEach(function (o) {
+        if (o.k === "tracks") {
+          shellLayers.push({ k: "tracks", label: "规划航迹", children: [
+            { k: "tracks-photo", label: "光电侦察" },
+            { k: "tracks-sar", label: "雷达 SAR" },
+            { k: "tracks-gmti", label: "雷达 GMTI" },
+            { k: "tracks-ewar", label: "电子干扰" },
+            { k: "tracks-comm", label: "通信中继" }
+          ] });
+        } else shellLayers.push(o);
+      });
+      shellLayers = [{ k: "s1routes", label: "编组航线" }].concat(shellLayers);
+    }
     root.innerHTML =
       (hasMap ? "<div class=\"s3-map\"></div>" : htmlEmptyMap("地图数据待接入")) +
       "<aside class=\"s3-menu\"></aside>" +
@@ -270,7 +328,7 @@ window.S06_SHELL = (function () {
       "<button class=\"s3-mic\">" + ic("mic", 26, "", 1.7) + "</button>" +
       "<footer class=\"s3-status\"></footer>" +
       htmlControls(fmt(total)) +
-      htmlLayers(hasMap ? [{ k: "s1routes", label: "编组航线" }].concat(LAYERS) : LAYERS);
+      htmlLayers(shellLayers);
     var menuEl = root.querySelector(".s3-menu");
     if (menuEl && CH.MENU) menuEl.innerHTML = CH.MENU.map(function (m, i) {
       return "<div class=\"s3-mi" + (i === 0 ? " on" : "") + "\">" + ic(m.icon, 26, "", 1.55) + "<span>" + m.k + "</span></div>";
@@ -468,19 +526,38 @@ window.S06_SHELL = (function () {
     root.__onSpace = function () { goBtn.click(); };
     root.__s6Refresh = function () { paint(); };
     var lyrPanel = root.querySelector(".s6-lyr-panel");
+    var PLAN_KEYS = ["photo", "sar", "gmti", "ewar", "comm"];
+    function setPlanLayer(g, on) { s1SetLayers(mv, [S1_PLAN_ID + "-" + g + "-l"], on); }
+    function planSub(g) { return lyrPanel.querySelector('input[data-k="tracks-' + g + '"]'); }
+    /* 总开关只反映“至少一个子开关开着” */
+    function syncMaster() {
+      var master = lyrPanel.querySelector('input[data-k="tracks"]');
+      if (!master) return;
+      var any = false;
+      PLAN_KEYS.forEach(function (g) { var c = planSub(g); if (c && c.checked) any = true; });
+      master.checked = any;
+    }
     function applyLayerToggle(k, on) {
       if (!hasMap) return;
       if (k === "s1routes") { s1acc.showRoutes = on; s1SetVisible(mv, s1acc, on, "routes"); }
-      else if (k === "tracks") { s1acc.showPlan = on; s1SetVisible(mv, s1acc, on, "plan"); }
+      else if (k === "tracks") PLAN_KEYS.forEach(function (g) { setPlanLayer(g, on); });
+      else if (k.indexOf("tracks-") === 0) setPlanLayer(k.slice(7), on);
       else if (k === "trails") s1SetLayers(mv, ["s1-trails-c", "s1-trails-l"], on);
       else if (S1_VIS[k]) s1SetGroupVisible(mv, k, on);
+    }
+    /* 回看重绘后按当前勾选状态恢复各图层 */
+    function applyAllToggleStates() {
+      [].slice.call(lyrPanel.querySelectorAll("input[data-k]")).forEach(function (cb) {
+        var k = cb.getAttribute("data-k");
+        if (k !== "tracks") applyLayerToggle(k, cb.checked);
+      });
+      syncMaster();
     }
     /* 屏是缓存的：回看 SH-06 只走 onShow、不重建 → 这里按当前开关状态重画一次 */
     function redrawS1() {
       if (!hasMap) return;
       s1Draw(mv, s1acc);
-      s1SetVisible(mv, s1acc, s1acc.showRoutes, "routes");
-      s1SetVisible(mv, s1acc, s1acc.showPlan, "plan");
+      applyAllToggleStates();
       renderFlight(true);
     }
     [].slice.call(root.querySelectorAll("button[data-all]")).forEach(function (b) {
@@ -493,7 +570,22 @@ window.S06_SHELL = (function () {
       });
     });
     [].slice.call(lyrPanel.querySelectorAll("input[data-k]")).forEach(function (cb) {
-      cb.addEventListener("change", function () { applyLayerToggle(cb.getAttribute("data-k"), cb.checked); });
+      cb.addEventListener("change", function () {
+        var k = cb.getAttribute("data-k");
+        if (k === "tracks") {
+          PLAN_KEYS.forEach(function (g) { var sub = planSub(g); if (sub) sub.checked = cb.checked; });
+        }
+        applyLayerToggle(k, cb.checked);
+        if (k.indexOf("tracks-") === 0) syncMaster();
+      });
+    });
+    /* 点整行标题展开/收起；点勾选框本身不触发展开 */
+    [].slice.call(lyrPanel.querySelectorAll(".s6-lyr-head")).forEach(function (h) {
+      h.addEventListener("click", function (ev) {
+        if (ev.target && ev.target.tagName === "INPUT") return;
+        var grp = h.parentNode;
+        if (grp && grp.classList) grp.classList.toggle("on");
+      });
     });
     if (tbEl) {
       var lyrBtn = null;

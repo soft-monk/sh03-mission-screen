@@ -365,7 +365,8 @@ window.MapView = function (host) {
       });
     },
     /* 规划航迹（淡虚线，铺在尾迹下面）：lines: [{ color, pts }] */
-    tracks: function (id, lines) {
+    tracks: function (id, lines, style) {
+      var st = style || {};
       var data = {
         type: "FeatureCollection",
         features: (lines || []).map(function (L) {
@@ -376,15 +377,16 @@ window.MapView = function (host) {
         var src = map.getSource(id);
         if (src) { src.setData(data); return; }
         map.addSource(id, { type: "geojson", data: data });
+        var paint = {
+          "line-color": st.color || ["get", "c"],
+          "line-width": st.width == null ? 2.5 : st.width,
+          "line-opacity": st.opacity == null ? 0.8 : st.opacity
+        };
+        if (st.dash !== null) paint["line-dasharray"] = st.dash || [1.8, 2.6];
         map.addLayer({
           id: id + "-l", type: "line", source: id,
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: {
-            "line-color": ["get", "c"],
-            "line-width": 2.5,
-            "line-opacity": 0.8,
-            "line-dasharray": [1.8, 2.6]
-          }
+          paint: paint
         });
       });
     },

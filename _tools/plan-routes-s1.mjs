@@ -39,8 +39,8 @@ const R_EFF = Math.round(SCAN_R * OVERLAP);
 /* 光电格子（km，从西到东 / 从北到南），合计 40km；西北大、东南小 */
 const COLS_KM = [9.7, 8.4, 7.1, 5.7, 4.9, 4.1];
 const ROWS_KM = [9.9, 8.9, 7.9, 6.9, 6.4];
-const GAP_WEST = 5000;                // 西侧（海岸）闭环腿距：稀疏
-const GAP_EAST = 2400;                // 东侧（山地）闭环腿距：密集
+const GAP_WEST = 3200;                // 光电腿距（西侧 / 海岸）：稀疏
+const GAP_EAST = 800;                 // 光电腿距（东侧 / 山地）：密集（= 环形扇区厚度）
 const GMTI_BUDGET = 2;                // 雷达 GMTI：2 架，同一条东西向跑道环
 const LEG_MIN = 800, LEG_MAX = 4400;
 
@@ -142,20 +142,22 @@ const photoRoutes = [];
   for (let c = 0; c < COLS_KM.length; c++) {
     const x0 = colEdges[c], x1 = colEdges[c + 1];
     const cx = (x0 + x1) / 2;
-    const t = (cx + HALF_X) / (2 * HALF_X);                 // 0 = 最西，1 = 最东
-    const gap = GAP_WEST + (GAP_EAST - GAP_WEST) * t;         // 两条竖腿的间距随位置收窄
     for (let r = 0; r < ROWS_KM.length; r++) {
       idx += 1;
       const yTop = rowEdges[r], yBot = rowEdges[r + 1];
-      const cy = (yTop + yBot) / 2;
-      const cellH = yTop - yBot;
-      const legLen = Math.max(LEG_MIN, Math.min(LEG_MAX, cellH - 2 * R_EFF));
-      const hl = gap / 2, vh = legLen / 2;
-      /* 之字形：左腿自南向北 → 顶部东西折返 → 右腿自北向南 */
-      const raw = [
-        [cx - hl, cy - vh], [cx - hl, cy + vh],
-        [cx + hl, cy + vh], [cx + hl, cy - vh]
-      ];
+      /* 蛇形：竖腿贯穿格高，腿距 = 扫描带宽度（环形扇区厚度 0.8km），铺满格宽 */
+      /* 腿距按格心位置在“西 3.2km（疏）→ 东 0.8km（密）”之间渐变 */
+      const tCol = (cx + HALF_X) / (2 * HALF_X);
+      const gapCol = GAP_WEST + (GAP_EAST - GAP_WEST) * tCol;
+      const n = Math.max(2, Math.ceil((x1 - x0) / gapCol));
+      const step = (x1 - x0) / n;
+      const ya = yBot + 100, yb = yTop - 100;
+      const raw = [];
+      for (let i = 0; i < n; i++) {
+        const x = x0 + step * (i + 0.5);
+        if (i % 2 === 0) raw.push([x, ya], [x, yb]);
+        else raw.push([x, yb], [x, ya]);
+      }
       photoRoutes.push({
         id: "P-" + String(idx).padStart(2, "0"),
         group: "photo", kind: "serpentine",
@@ -171,7 +173,7 @@ const sarRoutes = [];
 (function buildSar() {
   const BC = 3, BR = 2;                       // 3 列 × 2 行
   const bw = (2 * HALF_X) / BC, bh = (2 * HALF_Y) / BR;
-  const LEG_GAP = 2000;                       // 块内腿距 = 测绘带宽度
+  const SAR_LEG_GAP = 2000;                   // 块内腿距 = 测绘带宽度
   const EDGE = 800;                           // 腿两端离块边的余量
   let idx = 0;
   for (let bc = 0; bc < BC; bc++) {
@@ -182,9 +184,9 @@ const sarRoutes = [];
       const ya = y0 + EDGE, yb = y1 - EDGE;
       /* 腿从块西侧 +0.5km 起，按测绘带铺到块东侧外 0.5km（西侧视才能盖住块东缘） */
       const legs = [];
-      const K = Math.ceil((x1 - x0) / LEG_GAP);
+      const K = Math.ceil((x1 - x0) / SAR_LEG_GAP);
       for (let k = 0; k <= K; k++) {
-        let x = x0 + 500 + k * LEG_GAP;
+        let x = x0 + 500 + k * SAR_LEG_GAP;
         if (x > HALF_X - 100) x = HALF_X - 100;          /* 不越出任务区 */
         if (!legs.length || x - legs[legs.length - 1] > 200) legs.push(x);
       }
@@ -399,9 +401,12 @@ function verify() {
     for (const p of r._xy) { sx += p[0]; sy += p[1]; }
     return [sx / r._xy.length, sy / r._xy.length];
   };
-  const gapStat = (r) => {
-    const xs = r._xy.map((p) => p[0]);
-    return Math.max(...xs) - Math.min(...xs);
+  const gapStat = (r) => {                       /* 相邻竖腿的平均间距 */
+    const xs = [...new Set(r._xy.filter((_, i) => i % 2 === 0).map((p) => Math.round(p[0])))].sort((a, b) => a - b);
+    if (xs.length < 2) return 0;
+    let sum = 0;
+    for (let i = 1; i < xs.length; i++) sum += xs[i] - xs[i - 1];
+    return sum / (xs.length - 1);
   };
   const nw = q((r) => centerOf(r)[0] < 0 && centerOf(r)[1] > 0);
   const se = q((r) => centerOf(r)[0] > 0 && centerOf(r)[1] < 0);
@@ -422,8 +427,8 @@ function verify() {
   console.log("[verify] GMTI:", D.area.filter((r) => r.group === "gmti").map((r) => r.id + " " + r.lenKm + "km").join(" / "));
   console.log("[verify] 光电覆盖 全区 " + covPhoto + "%（西北 " + covPhotoNW + "% / 东南 " + covPhotoSE + "%）");
   console.log("[verify] SAR 覆盖  全区 " + covSar + "%");
-  console.log("[verify] 疏密对比 西北: " + nw.length + " 环 / " + dens(nw) + " 环每100km² / 平均闭环宽 " + gapAvg(nw) + "km");
-  console.log("[verify] 疏密对比 东南: " + se.length + " 环 / " + dens(se) + " 环每100km² / 平均闭环宽 " + gapAvg(se) + "km");
+  console.log("[verify] 疏密对比 西北: " + nw.length + " 环 / " + dens(nw) + " 环每100km² / 平均腿距 " + gapAvg(nw) + "km");
+  console.log("[verify] 疏密对比 东南: " + se.length + " 环 / " + dens(se) + " 环每100km² / 平均腿距 " + gapAvg(se) + "km");
   if (errs.length) { console.error("[verify] 失败:\n - " + errs.join("\n - ")); process.exit(1); }
   console.log("[verify] 通过");
 }
