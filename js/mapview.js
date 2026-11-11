@@ -365,6 +365,32 @@ window.MapView = function (host) {
       });
     },
     /* 规划航迹（淡虚线，铺在尾迹下面）：lines: [{ color, pts }] */
+    symbols: function (id, feats, opts) {
+      var o = opts || {};
+      var data = {
+        type: "FeatureCollection",
+        features: (feats || []).map(function (f) {
+          return { type: "Feature", properties: { i: f.icon, r: f.r || 0 },
+            geometry: { type: "Point", coordinates: [f.lon, f.lat] } };
+        })
+      };
+      when(function () {
+        var src = map.getSource(id);
+        if (src) { src.setData(data); return; }
+        map.addSource(id, { type: "geojson", data: data });
+        map.addLayer({
+          id: id + "-l", type: "symbol", source: id,
+          layout: {
+            "icon-image": ["get", "i"],
+            "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.05 * (o.size || 1), 12, 0.12 * (o.size || 1)],
+            "icon-rotation-alignment": "map",
+            "icon-rotate": ["get", "r"],
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true
+          }
+        });
+      });
+    },
     tracks: function (id, lines, style) {
       var st = style || {};
       var data = {
@@ -505,10 +531,12 @@ window.MapView = function (host) {
           map.addSource(id, { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } } });
         }
         if (!map.getLayer(id + "-l")) {
+          var lp = { "line-color": st.color, "line-width": st.width || 3, "line-opacity": st.opacity == null ? 1 : st.opacity };
+          if (st.dash) lp["line-dasharray"] = st.dash;
           map.addLayer({
             id: id + "-l", type: "line", source: id,
             layout: { "line-join": "round", "line-cap": "round" },
-            paint: { "line-color": st.color, "line-width": st.width || 3, "line-opacity": st.opacity == null ? 1 : st.opacity }
+            paint: lp
           });
         }
       });

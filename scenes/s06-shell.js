@@ -185,6 +185,9 @@ window.S06_SHELL = (function () {
     ewar:  { dash: [0.6, 2.6], width: 3.0, opacity: 0.95 },
     comm:  { dash: [3.5, 2], width: 3.6, opacity: 0.95 }
   };
+  /* 场景一机场：跑道 / 滑行道 / 目标（黄=疑似、红=确认） */
+  var S1_BASE = window.BASE_S1;
+  var S1_BASE_TIMES = null;
   /* 场景一扫描/覆盖图层分组：mapview 每个 source 对应一个 <id>-l 图层 */
   var S1_VIS = {
     scan: ["scan-f", "scan-r", "scan-o", "scan-s", "scan-bf", "scan-bo", "scan-bl"],
@@ -218,6 +221,141 @@ window.S06_SHELL = (function () {
     });
   }
 
+  /* ---------- 机场（场景一 SH-06） ---------- */
+  function s1InPoly(pt, ring) {
+    var inside = false;
+    for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      var xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+      if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+
+  /* 每个目标：盘旋阶段首次被光电扇形扫到 → 疑似；之后光电抵近 ≤800m → 确认 */
+  function s1BaseTimes() {
+    if (S1_BASE_TIMES || !S1_BASE || !window.FLIGHT_S1 || !window.ROUTES_S1) return S1_BASE_TIMES || {};
+    var FL = window.FLIGHT_S1, TA = window.ROUTES_S1.meta.taskArea;
+    var ML = 111030, MN = 111320 * Math.cos(((TA.s + TA.n) / 2) * Math.PI / 180);
+    var CX = (TA.w + TA.e) / 2, CY = (TA.s + TA.n) / 2;
+    var pend = S1_BASE.targets.map(function (o) {
+      return { o: o, x: (o.pos[0] - CX) * MN, y: (o.pos[1] - CY) * ML, sus: 0, conf: 0 };
+    });
+    for (var t = FL.T_IN; t <= FL.TOTAL; t += 10) {
+      var f = FL.simulate(t), sc = null, left = 0;
+      for (var i = 0; i < pend.length; i++) {
+        var q = pend[i];
+        if (q.conf) continue;
+        left++;
+        if (!q.sus) {
+          if (!sc) sc = FL.scans(t);
+          for (var k = 0; k < sc.length; k++) {
+            if (s1InPoly(q.o.pos, sc[k].quad)) { q.sus = t; break; }
+          }
+          if (!q.sus) continue;
+        }
+        for (var j = 0; j < 30; j++) {
+          var dx = q.x - (f[j].lon - CX) * MN, dy = q.y - (f[j].lat - CY) * ML;
+          if (Math.hypot(dx, dy) <= 800) { q.conf = t; break; }
+        }
+      }
+      if (!left) break;
+    }
+    var out = {};
+    pend.forEach(function (q) { out[q.o.id] = { sus: q.sus, conf: q.conf || q.sus }; });
+    S1_BASE_TIMES = out;
+    return out;
+  }
+
+  function s1DrawBase(mv, acc) {
+    if (!S1_BASE || !mv) return;
+    var B = S1_BASE;
+    try {
+      mv.image("base-radar-y", "assets/img/radar-target-yellow.png");
+      mv.image("base-radar-r", "assets/img/radar-target-red.png");
+      mv.image("base-hangar-y", "assets/img/hangar-yellow.png");
+      mv.image("base-hangar-r", "assets/img/hangar-red.png");
+      mv.image("base-jet-y", "assets/img/jet-yellow.png");
+      mv.image("base-jet-r", "assets/img/jet-red.png");
+    } catch (e) {}
+    try { mv.path("base-runway", [B.runway.a, B.runway.b], { color: "#94a3b8", width: 14, opacity: 0.95 }); } catch (e) {}
+    try { mv.path("base-taxiway", [B.taxiway.a, B.taxiway.b], { color: "#64748b", width: 5, opacity: 0.9 }); } catch (e) {}
+    try { mv.path("base-centerline", [B.runway.a, B.runway.b], { color: "#f8fafc", width: 1.6, dash: [7, 6], opacity: 0.95 }); } catch (e) {}
+    var feats = B.targets.filter(function (o) { return o._st >= 1; }).map(function (o) {
+      return { icon: "base-" + o.kind + (o._st >= 2 ? "-r" : "-y"), lon: o.pos[0], lat: o.pos[1], r: B.runway.bearing };
+    });
+    try { mv.symbols("base-targets", feats, { size: 1 }); } catch (e) {}
+    B.targets.forEach(function (o) {
+      var ring = [];
+      for (var k = 0; k <= 16; k++) {
+        var a = k / 16 * Math.PI * 2;
+        ring.push([o.pos[0] + Math.cos(a) * 0.0026, o.pos[1] + Math.sin(a) * 0.0029]);
+      }
+      try { mv.polygon("base-ring-" + o.id, ring, { fill: "#f59e0b", fillOpacity: 0.16, line: "#f59e0b", width: 2 }); } catch (e) {}
+      try {
+        var raw0 = mv.map();
+        ["base-ring-" + o.id + "-f", "base-ring-" + o.id + "-l"].forEach(function (id) {
+          if (raw0 && raw0.getLayer(id)) raw0.setLayoutProperty(id, "visibility", "none");
+        });
+      } catch (e) {}
+      try { o._lbl = mv.label(o.name, [o.pos[0] + 0.0013, o.pos[1] + 0.0018], "#fbbf24", 13, "base-lbl-" + o.id); } catch (e) {}
+    });
+    try { mv.label(B.name, B.label, "#7dd3fc", 14, "base-name").set(1); } catch (e) {}
+    acc.base = true;
+  }
+
+  function s1UpdateBase(mv, acc, t) {
+    if (!acc.base || !S1_BASE || !mv) return;
+    var times = s1BaseTimes();
+    var feats = [], changed = false;
+    S1_BASE.targets.forEach(function (o) {
+      var tm = times[o.id] || { sus: 0, conf: 0 };
+      var nx = tm.sus && t >= tm.sus ? (tm.conf && t >= tm.conf ? 2 : 1) : 0;
+      if (nx !== o._st) { o._st = nx; changed = true; }
+      if (nx >= 1) feats.push({ icon: "base-" + o.kind + (nx >= 2 ? "-r" : "-y"), lon: o.pos[0], lat: o.pos[1], r: S1_BASE.runway.bearing });
+      if (nx && o._lbl) {
+        try { o._lbl.setText(nx >= 2 ? o.name : o.name + "（疑似）"); o._lbl.setColor(nx >= 2 ? "#f87171" : "#fbbf24"); } catch (e) {}
+      }
+      if (o._lbl) o._lbl.set(nx ? 1 : 0);
+    });
+    if (!changed) return;
+    try { mv.symbols("base-targets", feats, { size: 1 }); } catch (e) {}
+    var raw = null;
+    try { raw = mv.map(); } catch (e) {}
+    if (!raw) return;
+    S1_BASE.targets.forEach(function (o) {
+      var col = o._st >= 2 ? "#ef4444" : "#f59e0b";
+      var vis = o._st ? "visible" : "none";
+      try {
+        ["base-ring-" + o.id + "-f", "base-ring-" + o.id + "-l"].forEach(function (id) {
+          if (!raw.getLayer(id)) return;
+          raw.setLayoutProperty(id, "visibility", vis);
+          if (o._st) raw.setPaintProperty(id, id.indexOf("-f") > 0 ? "fill-color" : "line-color", col);
+        });
+      } catch (e) {}
+    });
+  }
+
+  function s1ClearBase(mv, acc) {
+    if (!acc.base || !S1_BASE || !mv) return;
+    var raw = null;
+    try { raw = mv.map(); } catch (e) {}
+    S1_BASE.targets.forEach(function (o) {
+      o._st = 0;
+      try { if (o._lbl) o._lbl.set(0); } catch (e) {}
+      try {
+        ["base-ring-" + o.id + "-f", "base-ring-" + o.id + "-l"].forEach(function (id) {
+          if (raw && raw.getLayer(id)) raw.setLayoutProperty(id, "visibility", "none");
+        });
+      } catch (e) {}
+    });
+    try { mv.label(S1_BASE.name, S1_BASE.label, "#7dd3fc", 14, "base-name").set(0); } catch (e) {}
+    try { mv.symbols("base-targets", [], {}); } catch (e) {}
+    ["base-runway-l", "base-taxiway-l", "base-centerline-l"].forEach(function (id) {
+      try { if (raw && raw.getLayer(id)) raw.setLayoutProperty(id, "visibility", "none"); } catch (e) {}
+    });
+    acc.base = false;
+  }
+
   function s1Draw(mv, acc) {
     var RS = window.ROUTES_S1;
     if (!mv || !RS) return;
@@ -248,6 +386,7 @@ window.S06_SHELL = (function () {
       });
       acc.plan = true;
     }
+    s1DrawBase(mv, acc);
   }
 
   function s1SetVisible(mv, acc, on, target) {
@@ -286,6 +425,7 @@ window.S06_SHELL = (function () {
     acc.ids.length = 0;
     acc.labels.length = 0;
     acc.plan = false;
+    s1ClearBase(mv, acc);
   }
 
   /* 空地图层装配：完整外壳 + 无地图、无目标、无视频源、无 AI 事件 */
@@ -295,7 +435,7 @@ window.S06_SHELL = (function () {
     var uavs = (cfg && cfg.uavs) || [];
     var hasMap = !!(cfg && cfg.mapBounds);   /* 场景一有自己的一套瓦片与边界 */
     var mapHost = null;
-    var s1acc = { ids: [], labels: [], plan: false, planIds: [], showRoutes: true };
+    var s1acc = { ids: [], labels: [], plan: false, planIds: [], base: false, showRoutes: true };
     var FL = (hasMap && window.FLIGHT_S1) ? window.FLIGHT_S1 : null;
     var total = FL ? FL.TOTAL : ((window.FLIGHT06 && window.FLIGHT06.TOTAL) || 9000);
     var CH = { MENU: MENU, TOOLS: TOOLS, STATUS: STATUS };
@@ -405,6 +545,7 @@ window.S06_SHELL = (function () {
         mv.fan("jfan", fans.jam);
       }
       renderCover(force);
+      s1UpdateBase(mv, s1acc, st.t);
     }
     var lastCovBucket = -1, lastCovAt = 0;
     /* 覆盖小格：每 30 仿真秒才重建一次；拖拽时先跳过，松手补一次；
