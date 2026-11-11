@@ -299,7 +299,6 @@ window.S06_SHELL = (function () {
       } catch (e) {}
       try { o._lbl = mv.label(o.name, [o.pos[0] + 0.0013, o.pos[1] + 0.0018], "#fbbf24", 13, "base-lbl-" + o.id); } catch (e) {}
     });
-    try { mv.label(B.name, B.label, "#7dd3fc", 14, "base-name").set(1); } catch (e) {}
     acc.base = true;
   }
 
@@ -348,7 +347,6 @@ window.S06_SHELL = (function () {
         });
       } catch (e) {}
     });
-    try { mv.label(S1_BASE.name, S1_BASE.label, "#7dd3fc", 14, "base-name").set(0); } catch (e) {}
     try { mv.symbols("base-targets", [], {}); } catch (e) {}
     ["base-runway-l", "base-taxiway-l", "base-centerline-l"].forEach(function (id) {
       try { if (raw && raw.getLayer(id)) raw.setLayoutProperty(id, "visibility", "none"); } catch (e) {}
@@ -365,9 +363,6 @@ window.S06_SHELL = (function () {
     (RS.transit || []).forEach(function (r) {
       try {
         mv.path("s1-route-" + r.id, r.pts, { color: r.color, width: 3 });
-        var lb = mv.label(r.name, r.mid || r.pts[Math.floor(r.pts.length / 2)], r.color, 15, "s1-route-" + r.id);
-        if (lb && lb.set) lb.set(1);
-        acc.labels.push(lb);
         acc.ids.push("s1-route-" + r.id);
       } catch (err) {}
     });

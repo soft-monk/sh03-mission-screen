@@ -17,8 +17,6 @@ window.BASE_S1 = (function () {
             +(A[1] + (uy * u + vy * v) / M_LAT).toFixed(6)];
   }
   return {
-    name: "岸基机场",
-    label: at(len / 2, -820),
     runway: {
       a: at(0, 0),
       b: at(len, 0),

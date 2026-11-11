@@ -17,7 +17,6 @@ window.FLIGHT_S1 = (function () {
   var RALLY = { lon: 121.3000, lat: 25.1210 };   // 集结区中心（与 scenarios.js 一致）
   var HIST_DT = 5, HIST_N = 60;                  // 尾迹：5 s 一点，保留 300 s
 
-  var GROUP_ROUTE = { photo: "G1", sar: "G2", gmti: "G2", ewar: "G3", comm: "G4" };
   var ICON = { photo: "blue", sar: "yellow", gmti: "yellow", ewar: "red", comm: "green" };
   var COLOR = { blue: "#38bdf8", yellow: "#facc15", red: "#f87171", green: "#4ade80" };
 
@@ -80,18 +79,18 @@ window.FLIGHT_S1 = (function () {
   (function build() {
     var RS = window.ROUTES_S1;
     if (!RS) return;
-    var routes = {};
-    (RS.transit || []).forEach(function (r) { routes[r.id] = r.pts; });
 
     /* 停机位：集结区内 8 列方阵 */
     var PARK_COLS = 8, PARK_GAP = 350;
     var parked = 0;
-    var laneCache = {};
 
     (RS.area || []).forEach(function (r) {
-      var routeId = GROUP_ROUTE[r.group];
-      var base = routes[routeId];
-      if (!base) return;
+      /* 进场：先沿 4 条编组航线飞到任务区边界（车道由 r.lan 给出），再直飞自己的进场点 */
+      var routes = window.ROUTES_S1.transit || [];
+      var corr = null;
+      for (var ri = 0; ri < routes.length; ri++) if (routes[ri].id === r.corr) { corr = routes[ri].pts; break; }
+      var base = corr || [[RALLY.lon, RALLY.lat], r.pts[0]];
+      if (!base[1]) return;
       var icon = ICON[r.group] || "blue";
       var color = COLOR[icon];
       var k = parked++;
@@ -99,11 +98,7 @@ window.FLIGHT_S1 = (function () {
       var parkLon = RALLY.lon + ((col - (PARK_COLS - 1) / 2) * PARK_GAP) / M_LON;
       var parkLat = RALLY.lat - (row * PARK_GAP) / M_LAT;
 
-      /* 同一编组 5 条间隔 400 m 的并行航线 */
-      var lane = k % 5;
-      var key = routeId + "|" + lane;
-      if (!laneCache[key]) laneCache[key] = makePath(offsetPath(base, (lane - 2) * 400));
-      var transit = laneCache[key];
+      var transit = makePath(offsetPath(base, r.lan || 0));
 
       var enter = transit.pts[transit.pts.length - 1];
       var orbitPts = r.pts;

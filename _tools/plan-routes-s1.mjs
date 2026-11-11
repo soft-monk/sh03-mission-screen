@@ -53,14 +53,8 @@ const lenKm = (pts) => {
   for (let i = 1; i < pts.length; i++) s += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
   return +(s / 1000).toFixed(1);
 };
-/* ---------- 编组航线：二次贝塞尔曲线，自动降曲率直到互不交叉 ---------- */
+/* ---------- 进场：集结区中心 + 折线工具 ---------- */
 const RALLY_XY = xy((RALLY.w + RALLY.e) / 2, (RALLY.s + RALLY.n) / 2);
-const TRANSIT_ENTRIES = [
-  { id: "G1", name: "编组1", group: "photo", entry: [120.9500, AREA.n] },
-  { id: "G2", name: "编组2", group: "sar", entry: [AREA.e, 24.7500] },
-  { id: "G3", name: "编组3", group: "ewar", entry: [AREA.e, 24.7000] },
-  { id: "G4", name: "编组4", group: "comm", entry: [121.0241, AREA.n] }
-];
 
 function segIntersect(a, b, c, d) {
   const den = (b[0] - a[0]) * (d[1] - c[1]) - (b[1] - a[1]) * (d[0] - c[0]);
@@ -77,52 +71,24 @@ function polylinesCross(A, B) {
 }
 const insideArea = (p) => Math.abs(p[0]) <= HALF_X + 1e-6 && Math.abs(p[1]) <= HALF_Y + 1e-6;
 
-function buildTransit(k) {
-  const items = TRANSIT_ENTRIES.map((r) => {
-    const p = xy(r.entry[0], r.entry[1]);
-    return Object.assign({}, r, { E: p, bearing: Math.atan2(p[0] - RALLY_XY[0], p[1] - RALLY_XY[1]) });
-  }).sort((a, b) => a.bearing - b.bearing);
-
-  const midBearing = items.reduce((s, it) => s + it.bearing, 0) / items.length;
-  let perp = [Math.cos(midBearing), -Math.sin(midBearing)];
-  const proj = items.map((it) => (it.E[0] - RALLY_XY[0]) * perp[0] + (it.E[1] - RALLY_XY[1]) * perp[1]);
-  if (proj[0] > proj[proj.length - 1]) perp = [-perp[0], -perp[1]];
-
-  return items.map((it, i) => {
-    const off = (i - (items.length - 1) / 2) * 900;
-    const S = [RALLY_XY[0] + perp[0] * off, RALLY_XY[1] + perp[1] * off];
-    const E = it.E;
-    const mx = (S[0] + E[0]) / 2, my = (S[1] + E[1]) / 2;
-    const dx = E[0] - S[0], dy = E[1] - S[1];
-    const L = Math.hypot(dx, dy) || 1;
-    let nx = -dy / L, ny = dx / L;                 // 法线统一朝任务区外侧 → 外弧
-    if (nx * mx + ny * my < 0) { nx = -nx; ny = -ny; }
-    const C = [mx + nx * k * L, my + ny * k * L];
-    const raw = [];
-    for (let s = 0; s <= 48; s++) {
-      const t = s / 48, a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, c = t * t;
-      raw.push([a * S[0] + b * C[0] + c * E[0], a * S[1] + b * C[1] + c * E[1]]);
-    }
-    return { id: it.id, name: it.name, group: it.group, color: COLOR[it.group], lenKm: lenKm(raw), mid: midOf(raw.map(([x, y]) => ll(x, y))), pts: raw.map(([x, y]) => ll(x, y)), _xy: raw };
-  });
-}
-const midOf = (pts) => pts[Math.floor(pts.length / 2)];
-
-let TRANSIT_K = 0;
-const transit = (function () {
-  let picked = null;
-  for (const k of [0.28, 0.24, 0.2, 0.15, 0.1, 0.05, 0]) {
-    const cand = buildTransit(k);
-    let ok = true;
-    for (let i = 0; i < cand.length && ok; i++)
-      for (let j = i + 1; j < cand.length; j++)
-        if (polylinesCross(cand[i]._xy, cand[j]._xy)) { ok = false; break; }
-    for (const r of cand) for (let i = 0; i < r._xy.length - 1 && ok; i++) if (insideArea(r._xy[i])) ok = false;
-    if (ok) { picked = cand; TRANSIT_K = k; break; }
+/* 从集结区沿方向 to 指到任务区边界的交点（走廊末端正好落在边界上） */
+function boundaryAlong(from, to) {
+  const dx = to[0] - from[0], dy = to[1] - from[1];
+  let t = Infinity;
+  /* 集结区在任务区外，取“第一个正交点”（从外面进入任务区的那一点） */
+  if (Math.abs(dx) > 1e-9) {
+    for (const x of [HALF_X, -HALF_X]) { const tt = (x - from[0]) / dx; if (tt > 1e-6 && tt < t) t = tt; }
   }
-  if (!picked) throw new Error("编组航线无法构造互不交叉的曲线");
-  return picked.map((r) => ({ id: r.id, name: r.name, group: r.group, color: r.color, lenKm: r.lenKm, mid: r.mid, pts: r.pts }));
-})();
+  if (Math.abs(dy) > 1e-9) {
+    for (const y of [HALF_Y, -HALF_Y]) { const tt = (y - from[1]) / dy; if (tt > 1e-6 && tt < t) t = tt; }
+  }
+  const p = [from[0] + dx * t, from[1] + dy * t];
+  p[0] = Math.max(-HALF_X, Math.min(HALF_X, p[0]));
+  p[1] = Math.max(-HALF_Y, Math.min(HALF_Y, p[1]));
+  return p;
+}
+
+let transit = [];
 
 /* ---------- 光电：每格一条“之字/蛇形”（南北竖腿 + 东西折返），格子由西北向东南收窄 ---------- */
 const photoRoutes = [];
@@ -242,7 +208,7 @@ function raceTrackEW(cx, cy, legM, rM, n = 12) {
 
 /* 雷达 GMTI（2 架）：东南山地区一条东西向跑道，两架半圈错开 */
 const gmtiRoutes = Array.from({ length: GMTI_BUDGET }, (_, i) => {
-  const raw = raceTrackEW(9000, -9000, 16000, 1200, 12);
+  const raw = raceTrackEW(8000, 12000, 16000, 1200, 12);
   return {
     id: "M-" + String(i + 1).padStart(2, "0"),
     group: "gmti", kind: "racetrack", zone: "east",
@@ -251,7 +217,7 @@ const gmtiRoutes = Array.from({ length: GMTI_BUDGET }, (_, i) => {
 });
 
 const ewarRoutes = [1, 2].map((i) => {
-  const raw = raceTrack(3000, -3000, 3000, 1200, 12);
+  const raw = raceTrack(4000, 4000, 3000, 1200, 12);
   return { id: "E-" + String(i).padStart(2, "0"), group: "ewar", kind: "racetrack", zone: "east",
     color: COLOR.ewar, lenKm: lenKm(raw), pts: raw.map(([x, y]) => ll(x, y)) };
 });
@@ -271,6 +237,56 @@ const commRoutes = (function () {
 })();
 
 const area = photoRoutes.concat(sarRoutes, gmtiRoutes, ewarRoutes, commRoutes);
+
+/* ---------- 进场：4 条编组航线（按类型）；每架从“最近端”进场后直飞 ---------- */
+(function buildCorridors() {
+  const R = RALLY_XY;
+  const distR = (p) => Math.hypot(p[0] - R[0], p[1] - R[1]);
+  const TYPE = { photo: "G1", sar: "G2", gmti: "G2", ewar: "G3", comm: "G4" };
+  const NAME = { G1: "编组1（光电）", G2: "编组2（雷达）", G3: "编组3（电子）", G4: "编组4（通信）" };
+  const TCOLOR = { G1: COLOR.photo, G2: COLOR.sar, G3: COLOR.ewar, G4: COLOR.comm };
+  const LANE_GAP = 2000;                 /* 车道间距 2 km */
+  const MAX_LANES = 6;                   /* 每条航线最多 6 条车道，避免铺得过宽 */
+  const groups = {};
+  area.forEach((r) => {
+    const P = r.pts.map((p) => xy(p[0], p[1]));
+    const closed = r.kind === "loop" || r.kind === "racetrack";
+    if (closed) {
+      let best = 0, bd = Infinity;
+      for (let i = 0; i < r.pts.length - 1; i++) { const d = distR(P[i]); if (d < bd) { bd = d; best = i; } }
+      if (best > 0) {
+        const base = r.pts.slice(0, r.pts.length - 1);
+        r.pts = base.slice(best).concat(base.slice(0, best));
+        r.pts.push(r.pts[0]);
+      }
+    } else if (distR(P[P.length - 1]) < distR(P[0])) {
+      r.pts = r.pts.slice().reverse();
+    }
+    const key = TYPE[r.group];
+    const e = xy(r.pts[0][0], r.pts[0][1]);
+    (groups[key] = groups[key] || { cx: 0, cy: 0, n: 0, list: [] });
+    const g = groups[key];
+    g.cx += e[0]; g.cy += e[1]; g.n += 1; g.list.push(r);
+  });
+  /* 四组按“平均进场点偏东→偏西”排序，沿任务区北边等距铺开 4 个入口，避免挤在一起 */
+  const order = Object.keys(groups).sort((a, b) => (groups[b].cx / groups[b].n) - (groups[a].cx / groups[a].n));
+  order.forEach((key, gi) => {
+    const g = groups[key];
+    const mx = g.cx / g.n, my = g.cy / g.n;
+    const gate = [HALF_X - (gi + 1) * (2 * HALF_X) / (order.length + 1), HALF_Y];
+    const lanes = Math.min(MAX_LANES, g.list.length);
+    g.list.forEach((r, i) => {
+      r.corr = key;
+      r.lan = Math.round(((i % lanes) - (lanes - 1) / 2) * LANE_GAP);
+    });
+    transit.push({
+      id: key, name: NAME[key], group: "mixed", color: TCOLOR[key],
+      lenKm: +(Math.hypot(gate[0] - R[0], gate[1] - R[1]) / 1000).toFixed(1),
+      mid: ll((R[0] + gate[0]) / 2, (R[1] + gate[1]) / 2),
+      pts: [ll(R[0], R[1]), ll(gate[0], gate[1])]
+    });
+  });
+})();
 
 /* ---------- 覆盖判定 ---------- */
 function distToSeg(px, py, a, b) {
@@ -479,7 +495,6 @@ function verify() {
   const dens = (arr) => (arr.length / quadArea * 100).toFixed(2);
   const gapAvg = (arr) => arr.length ? (arr.reduce((s, r) => s + gapStat(r), 0) / arr.length / 1000).toFixed(2) : "-";
 
-  console.log("[verify] 编组航线曲率系数 k=" + TRANSIT_K + "（0 = 直线）");
   console.log("[verify] 编组航线:", D.transit.map((r) => r.id + " " + r.lenKm + "km").join(" / "));
   console.log("[verify] 计数:", JSON.stringify({ photo: count("photo"), photoWest: D.area.filter((r) => r.group === "photo" && r.zone === "west").length, sar: count("sar"), gmti: count("gmti"), ewar: count("ewar"), comm: count("comm") }));
   console.log("[verify] SAR 蛇形腿数:", D.area.filter((r) => r.group === "sar").map((r) => {
@@ -510,6 +525,8 @@ function serialize() {
       '"group": ' + JSON.stringify(r.group),
       r.kind ? '"kind": ' + JSON.stringify(r.kind) : null,
       r.zone ? '"zone": ' + JSON.stringify(r.zone) : null,
+      r.corr ? '"corr": ' + JSON.stringify(r.corr) : null,
+      r.lan != null ? '"lan": ' + r.lan : null,
       '"color": ' + JSON.stringify(r.color),
       '"lenKm": ' + r.lenKm,
       r.mid ? '"mid": [' + r.mid[0] + ", " + r.mid[1] + "]" : null
