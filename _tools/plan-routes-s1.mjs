@@ -106,7 +106,10 @@ const PHOTO_CITY = ["3-0", "1-1", "3-1", "1-2", "2-2", "0-3"];
     const step = width / n;
     const ya = yBot + PHOTO_G.edge, yb = yTop - PHOTO_G.edge;
     /* 奇偶行错开半个腿距，避免上下两格共线 */
-    const phase = (rowIdx % 2 === 0) ? 0.5 : 0.0;
+    let phase = (rowIdx % 2 === 0) ? 0.5 : 0.0;
+    /* 贴任务区东/西边界：最外一条腿放到距边界 1.5km，边界窄条才落进 2–2.8km 前向环带 */
+    if (Math.abs(x1 - HALF_X) < 1) phase = (((HALF_X - 1300 - x0) / step - (n - 1)) % 1 + 1) % 1;
+    else if (Math.abs(x0 + HALF_X) < 1) phase = ((1300 / step) % 1 + 1) % 1;
     const raw = [];
     for (let i = 0; i < n; i++) {
       const x = x0 + step * (i + phase);
