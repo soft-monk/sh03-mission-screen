@@ -28,7 +28,7 @@ window.FLIGHT_S1 = (function () {
 
   /* 扫描 / 扇区 / 条带 / 覆盖格（参数与场景二 SH-06 一致） */
   var SCAN = { r0: 2000, r1: 2800, half: Math.PI / 6, seg: 10, rate: 10, fade: 0.6 };
-  var FAN = { radar: { r0: 2000, r1: 35000 }, jam: { r0: 1000, r1: 30000 }, half: Math.PI / 4, seg: 28, fade: 0.6 };
+  var FAN = { radar: { r0: 2000, r1: 35000 }, jam: { r0: 1000, r1: 34000 }, half: Math.PI / 4, seg: 28, fade: 0.6 };
   var SARB = { near: 8000, far: 10000, width: 100, fade: 0.6 };  // 西侧侧视（同场景二：地距 8~10km）
   var COV = { cell: 500, step: 10 };
 
@@ -383,7 +383,7 @@ window.FLIGHT_S1 = (function () {
               var dx = cells[ci].mx - px, dy = cells[ci].my - py;
               if (k === "sar") {
                 /* 固定朝西的侧视条带：西侧 8–10km、沿航向 ±1.1km */
-                if (dx > -SARB.near || dx < -SARB.far) continue;
+                if (dx > -(SARB.near - 120) || dx < -(SARB.far + 120)) continue;   /* 条带边界各留 120m 抗缝 */
                 if (Math.abs(dy) > 1100) continue;
               } else {
                 var dist = Math.sqrt(dx * dx + dy * dy);

@@ -600,8 +600,8 @@ window.S06_SHELL = (function () {
       if (FL.sarScans) mv.beam("sbeam", FL.sarScans(st.t));
       if (FL.fans) {
         var fans = FL.fans(st.t);
-        mv.fan("rfan", fans.radar);
-        mv.fan("jfan", fans.jam);
+        mv.fan("rfan", fans.radar.map(function (x) { x.color = "#f59e0b"; return x; }));
+        mv.fan("jfan", fans.jam.map(function (x) { x.color = "#f87171"; return x; }));
       }
       renderCover(force);
       s1UpdateBase(mv, s1acc, st.t);
