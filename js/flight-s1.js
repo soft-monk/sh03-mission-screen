@@ -239,6 +239,8 @@ window.FLIGHT_S1 = (function () {
      GMTI 2–35km ±45°、电子 1–30km ±45°；覆盖格 500m。 */
   var cells = null, covFirst = null, NX = 0, NY = 0, CW = 0, CH = 0;
 
+  /* 该机“到位”时刻：飞到规划航路第一个点才开机扫描 */
+  function tOnOf(d) { return T_LIFT + d.leadLen / V; }
   function inAreaM(p, margin) {
     return Math.abs((p.lon - ACX) * M_LON) <= AHX + margin &&
            Math.abs((p.lat - ACY) * M_LAT) <= AHY + margin;
@@ -264,10 +266,11 @@ window.FLIGHT_S1 = (function () {
     for (var i = 0; i < drones.length; i++) {
       var d = drones[i];
       if (d.group !== "photo") continue;
+      if (t < tOnOf(d)) continue;                 /* 未到位不开机 */
       var p = posOf(d, t);
       if (!inAreaM(p, 3000)) continue;
       var hd = headingOfPos(p);
-      var el = Math.max(0, t - T_LIFT);
+      var el = Math.max(0, t - tOnOf(d));   /* 扇形/扫掠从“到位”开始走 */
       var sw = -SCAN.half + 2 * SCAN.half * (((el * SCAN.rate) / 60) % 1);
       out.push({
         quad: sectorQuad(p, hd, SCAN.r0, SCAN.r1, SCAN.half, SCAN.seg),
@@ -284,12 +287,13 @@ window.FLIGHT_S1 = (function () {
     for (var i = 0; i < drones.length; i++) {
       var d = drones[i];
       if (d.group !== "sar") continue;
+      if (t < tOnOf(d)) continue;                 /* 未到位不开机 */
       var p = posOf(d, t);
       if (!inAreaM(p, 14000)) continue;
       /* 侧视只在南北向航段成立（同场景二） */
       if (Math.abs(Math.cos(headingOfPos(p))) < 0.5) continue;
       var side = -Math.PI / 2;                    /* 固定朝西（与覆盖判定一致） */
-      var el = Math.max(0, t - T_LIFT);
+      var el = Math.max(0, t - tOnOf(d));   /* 扇形/扫掠从“到位”开始走 */
       out.push({
         band: [ptAlong(p, side, SARB.near, 0), ptAlong(p, side, SARB.far, 0)],
         rays: [[[p.lon, p.lat], ptAlong(p, side, SARB.near, -SARB.width / 2)],
@@ -307,9 +311,10 @@ window.FLIGHT_S1 = (function () {
       var d = drones[i];
       var pr = d.group === "gmti" ? FAN.radar : (d.group === "ewar" ? FAN.jam : null);
       if (!pr) continue;
+      if (t < tOnOf(d)) continue;                 /* 未到位不开机 */
       var p = posOf(d, t);
       if (!inAreaM(p, 3000)) continue;
-      var el = Math.max(0, t - T_LIFT);
+      var el = Math.max(0, t - tOnOf(d));   /* 扇形/扫掠从“到位”开始走 */
       var item = {
         quad: sectorQuad(p, headingOfPos(p), pr.r0, pr.r1, FAN.half, FAN.seg),
         k: Math.max(0, Math.min(1, el / FAN.fade))
@@ -362,6 +367,7 @@ window.FLIGHT_S1 = (function () {
         var r0e = Math.max(0, pr.r0 - 50), r1e = pr.r1 + 50;
         for (var di = 0; di < ds.length; di++) {
           var p = posOf(ds[di], tt);
+          if (tt < tOnOf(ds[di])) continue;        /* 只算到位之后的扫描 */
           if (!inAreaM(p, k === "sar" ? 14000 : 3000)) continue;
           var hd = headingOfPos(p);
           var fx = Math.sin(hd), fy = Math.cos(hd);
