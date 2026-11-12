@@ -203,7 +203,38 @@ window.S06_SHELL = (function () {
       ".s6-map-empty-t{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:16px;",
       "  letter-spacing:4px;color:#4c6480;border:1px dashed rgba(56,189,248,.25);padding:10px 22px;",
       "  border-radius:8px;background:rgba(8,18,32,.5)}",
-      ".s6-tb-empty{padding:14px 4px;font-size:13px;color:#4c6480;letter-spacing:1px}"
+      ".s6-tb-empty{padding:14px 4px;font-size:13px;color:#4c6480;letter-spacing:1px}",
+      /* 目标卡片（同场景二 SH-06）：头部可点开/收起 */
+      ".s6-toolbox{position:relative;z-index:1;border-radius:10px;overflow:hidden;",
+      "  background:linear-gradient(180deg,rgba(6,18,32,.97),rgba(4,12,22,.98));border:1px solid rgba(56,189,248,.28);",
+      "  box-shadow:0 12px 32px rgba(0,0,0,.5),0 0 0 1px rgba(56,189,248,.08) inset}",
+      ".s6-toolbox-h{display:flex;align-items:center;justify-content:space-between;padding:10px 13px;",
+      "  font-size:15px;letter-spacing:1px;color:#e8f4ff;border-bottom:1px solid rgba(56,189,248,.2);",
+      "  background:linear-gradient(180deg,rgba(56,189,248,.12),rgba(56,189,248,.02))}",
+      ".s6-toolbox-h b{font-family:var(--num);font-size:12px;color:#7dd3fc;border:1px solid rgba(56,189,248,.38);",
+      "  background:rgba(56,189,248,.1);border-radius:4px;padding:1px 7px;font-weight:500}",
+      ".s6-tb{border-top:1px solid rgba(56,189,248,.14);background:rgba(6,20,36,.72)}",
+      ".s6-tb:first-of-type{border-top:0}",
+      ".s6-tb-head{display:flex;align-items:center;gap:9px;padding:9px 12px;cursor:pointer;user-select:none;",
+      "  color:#bcd6f0;font-size:13.5px;transition:background .16s}",
+      ".s6-tb-head:hover{background:rgba(20,48,78,.85)}",
+      ".s6-tb.open .s6-tb-head{background:rgba(18,48,80,.92);color:#eaf6ff}",
+      ".s6-tb-no{font-family:var(--num);font-size:12px;color:#7dd3fc;min-width:26px}",
+      ".s6-tb-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".s6-tb-sus{font-style:normal;font-size:11px;color:#fbbf24;border:1px solid rgba(251,191,36,.5);",
+      "  border-radius:4px;padding:0 5px}",
+      ".s6-tb-arrow{width:6px;height:6px;border-right:1.5px solid #6f8aa8;border-bottom:1.5px solid #6f8aa8;",
+      "  transform:rotate(-45deg);transition:transform .16s}",
+      ".s6-tb.open .s6-tb-arrow{transform:rotate(45deg);border-color:#7dd3fc}",
+      ".s6-tb-body{display:none;padding:9px 12px 11px 57px;background:rgba(4,12,22,.5)}",
+      ".s6-tb.open .s6-tb-body{display:block}",
+      ".s6-tb-row{display:flex;gap:10px;font-size:12.5px;line-height:1.75;color:#8fb0d0}",
+      ".s6-tb-row span{color:#6f8aa8;min-width:42px}",
+      ".s6-tb-row b{font-weight:500;color:#dbeafe}",
+      ".s6-tb-row b.sus{color:#fbbf24}",
+      ".s6-tb-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}",
+      ".s6-tb-tags i{font-style:normal;font-size:11px;color:#7dd3fc;background:rgba(56,189,248,.1);",
+      "  border:1px solid rgba(56,189,248,.25);border-radius:4px;padding:1px 6px}"
     ].join("\n");
     document.head.appendChild(st);
   }
@@ -780,6 +811,13 @@ window.S06_SHELL = (function () {
         if (ev.target && ev.target.tagName === "INPUT") return;
         var grp = h.parentNode;
         if (grp && grp.classList) grp.classList.toggle("on");
+      });
+    });
+    /* 目标卡片：点头部展开/收起（同场景二） */
+    [].slice.call(root.querySelectorAll(".s6-tb-head")).forEach(function (head) {
+      head.addEventListener("click", function () {
+        var item = head.parentNode;
+        if (item && item.classList) item.classList.toggle("open");
       });
     });
     if (tbEl) {
