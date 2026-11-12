@@ -67,11 +67,45 @@ window.S06_SHELL = (function () {
       "<div class=\"s6-tb-body\">" + rows + "<div class=\"s6-tb-tags\">" + tags + "</div></div>" +
     "</div>";
   }
+  /* 右侧目标卡片（同场景 2-06）：6 个疑似目标，20:03 后显示 */
+  function s1TargetCards() {
+    if (!S1_BASE) return [];
+    return S1_BASE.targets.map(function (o, i) {
+      return {
+        no: o.no,
+        name: o.name,
+        sus: "疑似",
+        rows: [
+          ["类型", o.kind === "radar" ? "雷达目标" : o.kind === "jet" ? "空中目标" : "地面目标"],
+          ["判定", "疑似（未经确认）", "sus"],
+          ["来源", "雷达 SAR-01"],
+          ["区域", "岸基机场"]
+        ],
+        tags: ["疑似目标", "待复核"]
+      };
+    });
+  }
+  function s1UpdateTargetPanel(root, t) {
+    if (!root) return;
+    var items = root.querySelectorAll(".s6-target-item");
+    var cnt = root.querySelector(".s6-target-count");
+    var on = t >= S1_TGT_T0;
+    var n = 0;
+    [].forEach.call(items, function (el) {
+      var show = on && el.getAttribute("data-target") !== "0";
+      el.style.display = show ? "" : "none";
+      if (show) n++;
+    });
+    if (cnt) cnt.textContent = String(n);
+    var empty = root.querySelector(".s6-tb-empty");
+    if (empty) empty.style.display = on ? "none" : "";
+  }
   function htmlRight(targets) {
     return "<section class=\"s6-right\">" +
       "<div class=\"s6-toolbox\">" +
         "<div class=\"s6-toolbox-h\"><span>目标</span><b class=\"s6-target-count\">0</b></div>" +
-        ((targets && targets.length) ? targets.map(htmlTargetItem).join("") : "<div class=\"s6-tb-empty\">暂无目标</div>") +
+        ((targets && targets.length) ? targets.map(htmlTargetItem).join("") : "") +
+        "<div class=\"s6-tb-empty\">暂无目标</div>" +
       "</div>" +
       "<section class=\"s6-ai\">" +
         "<div class=\"s6-ai-h\">" + ic("mic", 16, "", 1.6) + "<span>AI决策助手</span></div>" +
@@ -231,72 +265,12 @@ window.S06_SHELL = (function () {
     return inside;
   }
 
-  /* 目标出现：跑道/机库=光电扇形、雷达站=电子干扰扇区、战机=GMTI 扇区，
-     且对应传感器已“到位”（到达自己规划航路起点）；确认=光电扇形离开后再扫到 */
+  /* 目标出现：固定 20:03（SAR 扫到机场）后，6 个疑似目标一起标绘；确认逻辑后续再做 */
+  var S1_TGT_T0 = 20 * 60 + 3;
   function s1BaseTimes() {
-    if (S1_BASE_TIMES || !S1_BASE || !window.FLIGHT_S1 || !window.ROUTES_S1) return S1_BASE_TIMES || {};
-    var FL = window.FLIGHT_S1, RS = window.ROUTES_S1, TA = RS.meta.taskArea;
-    var ML = 111030, MN = 111320 * Math.cos(((TA.s + TA.n) / 2) * Math.PI / 180);
-    var CX = (TA.w + TA.e) / 2, CY = (TA.s + TA.n) / 2;
-    var arr = FL.arrivals ? FL.arrivals() : [];
-    function minArr(g) {
-      var m = Infinity;
-      for (var i = 0; i < arr.length; i++) if (arr[i].group === g && arr[i].arrive < m) m = arr[i].arrive;
-      return m === Infinity ? FL.T_IN : m;
-    }
-    /* 目标所在光电格的无人机到位时刻 */
-    function photoArriveAt(pos) {
-      var best = Infinity;
-      for (var i = 0; i < RS.area.length; i++) {
-        var r = RS.area[i];
-        if (r.group !== "photo") continue;
-        var minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
-        for (var k = 0; k < r.pts.length; k++) {
-          minx = Math.min(minx, r.pts[k][0]); maxx = Math.max(maxx, r.pts[k][0]);
-          miny = Math.min(miny, r.pts[k][1]); maxy = Math.max(maxy, r.pts[k][1]);
-        }
-        if (pos[0] < minx - 1e-6 || pos[0] > maxx + 1e-6 || pos[1] < miny - 1e-6 || pos[1] > maxy + 1e-6) continue;
-        if (arr[i] && arr[i].arrive < best) best = arr[i].arrive;
-      }
-      return best === Infinity ? minArr("photo") : best;
-    }
-    var NEED_EW = minArr("ewar"), NEED_GM = minArr("gmti");
-    var pend = S1_BASE.targets.map(function (o) {
-      var src = o.kind === "radar" ? "ew" : o.kind === "jet" ? "gmti" : "photo";
-      var need = src === "photo" ? photoArriveAt(o.pos) : src === "ew" ? NEED_EW : NEED_GM;
-      return { o: o, src: src, need: need, sus: 0, conf: 0, gap: false };
-    });
-    var T0 = Math.floor(Math.min.apply(null, pend.map(function (q) { return q.need; })));
-    for (var t = T0; t <= FL.TOTAL; t += 10) {
-      var sc = null, fa = null, left = 0;
-      for (var i2 = 0; i2 < pend.length; i2++) {
-        var q = pend[i2];
-        if (q.conf) continue;
-        left++;
-        if (!q.sus) {
-          if (t < q.need) continue;
-          var hit = false;
-          if (q.src === "photo") {
-            if (!sc) sc = FL.scans(t);
-            for (var k1 = 0; k1 < sc.length && !hit; k1++) if (s1InPoly(q.o.pos, sc[k1].quad)) hit = true;
-          } else {
-            if (!fa) fa = FL.fans(t);
-            var list = q.src === "ew" ? fa.jam : fa.radar;
-            for (var k2 = 0; k2 < list.length && !hit; k2++) if (s1InPoly(q.o.pos, list[k2].quad)) hit = true;
-          }
-          if (hit) q.sus = t;
-          continue;
-        }
-        if (!sc) sc = FL.scans(t);
-        var cov = false;
-        for (var k3 = 0; k3 < sc.length && !cov; k3++) if (s1InPoly(q.o.pos, sc[k3].quad)) cov = true;
-        if (!cov) { q.gap = true; continue; }
-        if (q.gap) q.conf = t;
-      }
-      if (!left) break;
-    }
+    if (S1_BASE_TIMES) return S1_BASE_TIMES;
     var out = {};
-    pend.forEach(function (q) { out[q.o.id] = { sus: q.sus, conf: q.conf || q.sus }; });
+    if (S1_BASE) S1_BASE.targets.forEach(function (o) { out[o.id] = { sus: S1_TGT_T0, conf: 0 }; });
     S1_BASE_TIMES = out;
     return out;
   }
@@ -314,6 +288,7 @@ window.S06_SHELL = (function () {
     } catch (e) {}
     try { mv.path("base-runway", [B.runway.a, B.runway.b], { color: "#94a3b8", width: 14, opacity: 0.95 }); } catch (e) {}
     try { mv.path("base-taxiway", [B.taxiway.a, B.taxiway.b], { color: "#64748b", width: 5, opacity: 0.9 }); } catch (e) {}
+    if (B.link) { try { mv.path("base-link", [B.link.a, B.link.b], { color: "#64748b", width: 5, opacity: 0.9 }); } catch (e) {} }
     try { mv.path("base-centerline", [B.runway.a, B.runway.b], { color: "#f8fafc", width: 1.6, dash: [7, 6], opacity: 0.95 }); } catch (e) {}
     var feats = B.targets.filter(function (o) { return o._st >= 1; }).map(function (o) {
       return { icon: "base-" + o.kind + (o._st >= 2 ? "-r" : "-y"), lon: o.pos[0], lat: o.pos[1], r: B.runway.bearing };
@@ -383,7 +358,7 @@ window.S06_SHELL = (function () {
       } catch (e) {}
     });
     try { mv.symbols("base-targets", [], {}); } catch (e) {}
-    ["base-runway-l", "base-taxiway-l", "base-centerline-l"].forEach(function (id) {
+    ["base-runway-l", "base-taxiway-l", "base-link-l", "base-centerline-l"].forEach(function (id) {
       try { if (raw && raw.getLayer(id)) raw.setLayoutProperty(id, "visibility", "none"); } catch (e) {}
     });
     acc.base = false;
@@ -522,7 +497,7 @@ window.S06_SHELL = (function () {
       "<section class=\"s3-side\"></section>" +
       "<div class=\"s3-scale\"><b></b><span>2 km</span></div>" +
       "<div class=\"s3-coord\">" + ((cfg && cfg.coordText) || "--") + "</div>" +
-      htmlRight([]) +
+      htmlRight(s1TargetCards()) +
       htmlVideo(EMPTY_VIDEO_CARDS, []) +
       "<button class=\"s3-mic\">" + ic("mic", 26, "", 1.7) + "</button>" +
       "<footer class=\"s3-status\"></footer>" +
@@ -605,6 +580,7 @@ window.S06_SHELL = (function () {
       }
       renderCover(force);
       s1UpdateBase(mv, s1acc, st.t);
+      s1UpdateTargetPanel(root, st.t);
     }
     var lastCovBucket = -1, lastCovAt = 0;
     /* 覆盖小格：每 30 仿真秒才重建一次；拖拽时先跳过，松手补一次；
