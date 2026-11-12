@@ -100,6 +100,25 @@ window.S06_SHELL = (function () {
     var empty = root.querySelector(".s6-tb-empty");
     if (empty) empty.style.display = on ? "none" : "";
   }
+  /* SH-06：只继承前面 SH-04/05 的共享 AI 对话，本屏不新增消息 */
+  function s1SharedAiMessages() {
+    window.APP_STATE = window.APP_STATE || {};
+    if (!window.APP_STATE.aiMessages) window.APP_STATE.aiMessages = [];
+    return window.APP_STATE.aiMessages;
+  }
+  function s1RenderSharedAi(el) {
+    if (!el) return;
+    var arr = s1SharedAiMessages();
+    var html = "";
+    for (var i = 0; i < arr.length; i++) {
+      var who = arr[i].who || "ai";
+      html += '<div class="s6-msg ' + who + '"><div class="s6-avatar">' + (who === "user" ? "用户" : "AI") +
+        '</div><div class="s6-bubble">' + arr[i].text + '</div></div>';
+    }
+    el.innerHTML = html;
+    var sc = el.closest ? el.closest(".s6-chat-scroll") : null;
+    if (sc) sc.scrollTop = sc.scrollHeight;
+  }
   function htmlRight(targets) {
     return "<section class=\"s6-right\">" +
       "<div class=\"s6-toolbox\">" +
@@ -234,7 +253,31 @@ window.S06_SHELL = (function () {
       ".s6-tb-row b.sus{color:#fbbf24}",
       ".s6-tb-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}",
       ".s6-tb-tags i{font-style:normal;font-size:11px;color:#7dd3fc;background:rgba(56,189,248,.1);",
-      "  border:1px solid rgba(56,189,248,.25);border-radius:4px;padding:1px 6px}"
+      "  border:1px solid rgba(56,189,248,.25);border-radius:4px;padding:1px 6px}",
+      /* AI 对话面板（同场景二） */
+      ".s6-ai{border-radius:12px;padding:12px 14px;background:linear-gradient(180deg,rgba(6,18,32,.97),rgba(4,12,22,.98));",
+      "  border:1px solid rgba(56,189,248,.24);box-shadow:0 12px 32px rgba(0,0,0,.45)}",
+      ".s6-ai-h{display:flex;align-items:center;gap:7px;font-size:14px;letter-spacing:1px;color:#bfe9ff;",
+      "  padding-bottom:9px;border-bottom:1px solid rgba(56,189,248,.14)}",
+      ".s6-ai-h svg{color:#38bdf8}",
+      ".s6-chat{margin-top:10px;display:flex;flex-direction:column;gap:10px}",
+      ".s6-chat-scroll{max-height:236px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;",
+      "  scrollbar-width:thin;scrollbar-color:rgba(56,189,248,.35) transparent}",
+      ".s6-chat-scroll::-webkit-scrollbar{width:5px}",
+      ".s6-chat-scroll::-webkit-scrollbar-thumb{background:rgba(56,189,248,.35);border-radius:3px}",
+      ".s6-chat-scroll::-webkit-scrollbar-track{background:transparent}",
+      ".s6-ai-log{display:flex;flex-direction:column;gap:10px}",
+      ".s6-msg{display:flex;align-items:flex-start;gap:8px}",
+      ".s6-msg.user{flex-direction:row-reverse}",
+      ".s6-avatar{width:32px;height:32px;flex:0 0 32px;min-width:32px;border-radius:50%;display:grid;place-items:center;white-space:nowrap;",
+      "  font-size:10px;line-height:1;letter-spacing:0;font-weight:700;color:#eaf6ff;background:linear-gradient(180deg,#2563eb,#0b2a63);border:1px solid rgba(96,165,250,.5)}",
+      ".s6-msg.user .s6-avatar{background:linear-gradient(180deg,#15803d,#0a3d22);border-color:rgba(74,222,128,.5);font-weight:500}",
+      ".s6-bubble{position:relative;max-width:236px;padding:9px 11px;border-radius:9px;font-size:13px;line-height:1.6;",
+      "  background:rgba(12,34,58,.95);border:1px solid rgba(56,189,248,.25);color:#cfe6ff}",
+      ".s6-bubble:before{content:'';position:absolute;left:-5px;top:10px;border-top:5px solid transparent;",
+      "  border-bottom:5px solid transparent;border-right:5px solid rgba(12,34,58,.95)}",
+      ".s6-msg.user .s6-bubble{background:rgba(22,101,52,.88);border-color:rgba(74,222,128,.45);color:#dcfce7}",
+      ".s6-msg.user .s6-bubble:before{left:auto;right:-5px;border-right:0;border-left:5px solid rgba(22,101,52,.88)}"
     ].join("\n");
     document.head.appendChild(st);
   }
@@ -496,6 +539,13 @@ window.S06_SHELL = (function () {
     var hasMap = !!(cfg && cfg.mapBounds);   /* 场景一有自己的一套瓦片与边界 */
     var mapHost = null;
     var s1acc = { ids: [], labels: [], plan: false, planIds: [], base: false, grid: false, showRoutes: true };
+    var s1AiLog = null, s1AiLen = -1;
+    function s1SyncAi() {
+      var arr = s1SharedAiMessages();
+      if (arr.length === s1AiLen) return;
+      s1AiLen = arr.length;
+      s1RenderSharedAi(s1AiLog);
+    }
     var FL = (hasMap && window.FLIGHT_S1) ? window.FLIGHT_S1 : null;
     var total = FL ? FL.TOTAL : ((window.FLIGHT06 && window.FLIGHT06.TOTAL) || 9000);
     var CH = { MENU: MENU, TOOLS: TOOLS, STATUS: STATUS };
@@ -550,6 +600,8 @@ window.S06_SHELL = (function () {
     [].slice.call(root.querySelectorAll(".s3-mi, .s3-toolbar, .s3-side, .s3-scale, .s3-coord, .s3-mic, .s3-st")).forEach(function (n) {
       n.style.opacity = "1";
     });
+    s1AiLog = root.querySelector(".s6-ai-log");
+    s1SyncAi();
     if (hasMap && window.MapViewShared) {
       if (window.MapViewSetBounds) window.MapViewSetBounds(cfg.mapBounds);
       mapHost = root.querySelector(".s3-map");
@@ -612,6 +664,7 @@ window.S06_SHELL = (function () {
       renderCover(force);
       s1UpdateBase(mv, s1acc, st.t);
       s1UpdateTargetPanel(root, st.t);
+      s1SyncAi();
     }
     var lastCovBucket = -1, lastCovAt = 0;
     /* 覆盖小格：每 30 仿真秒才重建一次；拖拽时先跳过，松手补一次；

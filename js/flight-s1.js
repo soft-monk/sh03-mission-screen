@@ -159,12 +159,78 @@ window.FLIGHT_S1 = (function () {
         b.slowT0 = t0b;
       }
     });
+    /* ---------- 机场绕飞：20:08 起，离机场最近的两架光电脱离航路，绕机场 2.5km 圆逆时针盘旋，再回原航路 ---------- */
+    var AIR = { lon: 120.939578, lat: 24.818188, r: 2500 };
+    var DETOUR_T0 = 20 * 60 + 8;
+    (function airportOrbit() {
+      var photo = drones.filter(function (d) { return d.group === "photo"; });
+      if (photo.length < 2) return;
+      var cand = [];
+      photo.forEach(function (d) {
+        if (DETOUR_T0 <= T_LIFT + d.leadLen / V) return;      /* 20:08 前还没到位的不选 */
+        var p = posOf(d, DETOUR_T0);
+        var dx = (p.lon - AIR.lon) * M_LON, dy = (p.lat - AIR.lat) * M_LAT;
+        cand.push({ d: d, p: p, dist: Math.hypot(dx, dy) });
+      });
+      cand.sort(function (a, b) { return a.dist - b.dist; });
+      if (cand.length < 2) return;
+      var A = cand[0], B = cand[1];
+      var CIRC = 2 * Math.PI * AIR.r;
+      var LAPS = 3;                                           /* 3 圈 ≈ 47 km ≈ 15.7 min + 转场 ≈ 20 min */
+      var angA = Math.atan2((A.p.lat - AIR.lat) * M_LAT, (A.p.lon - AIR.lon) * M_LON);
+      function circlePt(a) {
+        return [AIR.lon + Math.cos(a) * AIR.r / M_LON, AIR.lat + Math.sin(a) * AIR.r / M_LAT];
+      }
+      var E = circlePt(angA);                                 /* 两架都飞向圆上同一点 */
+      function buildDetour(from) {
+        var pts = [[from.lon, from.lat], E];
+        var N = 72 * LAPS;
+        for (var i = 1; i <= N; i++) pts.push(circlePt(angA + (i / 72) * 2 * Math.PI));  /* 逆时针 */
+        pts.push([from.lon, from.lat]);                       /* 回到离开航路的那一点 */
+        return makePath(pts);
+      }
+      function legOf(from, to) { return Math.hypot((to[0] - from.lon) * M_LON, (to[1] - from.lat) * M_LAT); }
+      function install(c, slowWant) {
+        var d = c.d;
+        var path = buildDetour(c.p);
+        var entryT = DETOUR_T0 + legOf(c.p, E) / V;
+        var extra = slowWant ? slowWant / V : 0;
+        d.detour = {
+          path: path, t0: DETOUR_T0, dur: path.len / V + extra,
+          slow: false
+        };
+        d.detour.t1 = DETOUR_T0 + d.detour.dur;
+        if (slowWant) {
+          d.detour.slow = true;
+          d.detour.slowDist = slowWant;
+          d.detour.slowDur = 2 * slowWant / V;
+          d.detour.slowT0 = entryT;
+        }
+        return entryT;
+      }
+      var entryA = install(A, 0);
+      var entryB = install(B, 0);
+      /* 第二架从进入圆起减速，直到落后半圈；want 里已扣掉两架进场时间差带来的相位 */
+      var want = (CIRC / 2 - V * (entryB - entryA)) % CIRC;
+      want = (want + CIRC) % CIRC;
+      if (want > 200) {
+        B.d.detour.slow = true;
+        B.d.detour.slowDist = want;
+        B.d.detour.slowDur = 2 * want / V;
+        B.d.detour.slowT0 = entryB;
+        B.d.detour.dur += want / V;
+        B.d.detour.t1 = DETOUR_T0 + B.d.detour.dur;
+      }
+    })();
+
     T_IN = Math.ceil(T_IN);
     MAX_ORBIT = Math.ceil(MAX_ORBIT);
-    /* 最晚“跑完一圈”的时刻：减速段多花 2×want/V 的时间 */
+    /* 最晚“跑完一圈”的时刻：减速段/绕飞段都要算进去 */
     var lastDone = 0;
     drones.forEach(function (d) {
-      var done = T_LIFT + d.leadLen / V + (d.orbitLen + 2 * (d.slow ? d.slowDist : 0)) / V;
+      var done;
+      if (d.detour) done = d.detour.t1 + d.orbitLen / V;
+      else done = T_LIFT + d.leadLen / V + (d.orbitLen + 2 * (d.slow ? d.slowDist : 0)) / V;
       if (done > lastDone) lastDone = done;
     });
     MAX_LOOP = lastDone;
@@ -175,7 +241,22 @@ window.FLIGHT_S1 = (function () {
 
   function posOf(d, t) {
     if (t <= T_LIFT) return { lon: d.park[0], lat: d.park[1], dx: 0, dy: 0 };
-    var dist = V * (t - T_LIFT);
+    var tt = t;
+    if (d.detour) {
+      if (t >= d.detour.t0 && t < d.detour.t1) {
+        var du = V * (t - d.detour.t0);
+        if (d.detour.slow) {
+          var dk = (t - d.detour.slowT0) / d.detour.slowDur;
+          if (dk > 1) dk = 1;
+          if (dk > 0) du -= dk * d.detour.slowDist;
+        }
+        if (du < 0) du = 0;
+        if (du > d.detour.path.len) du = d.detour.path.len;
+        return pointAt(d.detour.path, du);
+      }
+      if (t >= d.detour.t1) tt = t - d.detour.dur;      /* 回航路：整体时移 */
+    }
+    var dist = V * (tt - T_LIFT);
     var p;
     if (dist <= d.leadLen) {
       p = pointAt(d.lead, dist);
