@@ -87,6 +87,8 @@ let transit = [];
 
 /* ---------- 光电：方案 G —— 4×4 大格（10km）；城区大格切 2×2（5km），每格一条蛇形 ---------- */
 const photoRoutes = [];
+const photoCells = [];
+const sarCells = [];
 const PHOTO_G = { cols: 4, rows: 4, legGap: 2200, edge: 250 };
 /* 与卫星截图判读一致的 6 个“城区”大格：[列 i, 行 j]，i 自西向东、j 自北向南 */
 const PHOTO_CITY = ["3-0", "1-1", "3-1", "1-2", "2-2", "0-3"];
@@ -96,6 +98,10 @@ const PHOTO_CITY = ["3-0", "1-1", "3-1", "1-2", "2-2", "0-3"];
   let idx = 0;
   function addCell(x0, x1, yTop, yBot, width, rowIdx) {
     idx += 1;
+    photoCells.push({
+      kind: width > 9000 ? "photo-big" : "photo-city",
+      ring: [[x0, yBot], [x1, yBot], [x1, yTop], [x0, yTop]]
+    });
     const n = Math.max(2, Math.ceil(width / PHOTO_G.legGap));
     const step = width / n;
     const ya = yBot + PHOTO_G.edge, yb = yTop - PHOTO_G.edge;
@@ -144,6 +150,10 @@ const sarRoutes = [];
       idx += 1;
       const x0 = -HALF_X + bc * bw, x1 = x0 + bw;
       const y0 = -HALF_Y + br * bh, y1 = y0 + bh;
+      sarCells.push({
+        kind: "sar",
+        ring: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+      });
       const ya = y0 + EDGE, yb = y1 - EDGE;
       /* 腿从块西侧 +0.5km 起，按测绘带铺到块东侧外 0.5km（西侧视才能盖住块东缘） */
       const legs = [];
@@ -562,7 +572,13 @@ function serialize() {
     }, null, 2).replace(/\n/g, "\n  ") + ","
   ].join("\n");
 
-  return head + '\n  "transit": [\n' + emit(transit) + '\n  ],\n  "area": [\n' + emit(area) + "\n  ]\n};\n";
+  const cells = photoCells.concat(sarCells).map((c) => ({
+    kind: c.kind,
+    ring: c.ring.map(([x, y]) => ll(x, y))
+  }));
+  const cellsJson = JSON.stringify(cells, null, 2).replace(/\n/g, "\n  ");
+  return head + '\n  "transit": [\n' + emit(transit) + '\n  ],\n  "area": [\n' + emit(area) + '\n  ],\n  "cells": ' +
+    cellsJson + "\n};\n";
 }
 
 if (process.argv.includes("--verify")) {

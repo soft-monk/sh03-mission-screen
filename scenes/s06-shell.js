@@ -389,9 +389,31 @@ window.S06_SHELL = (function () {
     acc.base = false;
   }
 
+  /* 侦察格网：光电 34 格（大格 + 城区小格）与 SAR 6 块，仅作辅助线显示 */
+  function s1DrawGrid(mv, acc) {
+    var RS = window.ROUTES_S1;
+    if (!mv || !RS || !RS.cells || !RS.cells.length) return;
+    var photo = [], sar = [];
+    RS.cells.forEach(function (c) { (c.kind === "sar" ? sar : photo).push(c.ring); });
+    try { if (photo.length) mv.polygons("s1-grid-photo", photo, { fill: "#38bdf8", fillOpacity: 0.015, line: "#38bdf8", width: 1.1, dash: [4, 4] }); } catch (e) {}
+    try { if (sar.length) mv.polygons("s1-grid-sar", sar, { fill: "#facc15", fillOpacity: 0.02, line: "#facc15", width: 1.3, dash: [7, 4] }); } catch (e) {}
+    acc.grid = true;
+  }
+  function s1SetGridVisible(mv, on, which) {
+    var raw = null;
+    try { raw = mv && mv.map && mv.map(); } catch (e) {}
+    if (!raw) return;
+    var ids = [];
+    if (!which || which === "all" || which === "photo") ids.push("s1-grid-photo-f", "s1-grid-photo-l");
+    if (!which || which === "all" || which === "sar") ids.push("s1-grid-sar-f", "s1-grid-sar-l");
+    ids.forEach(function (id) {
+      try { if (raw.getLayer(id)) raw.setLayoutProperty(id, "visibility", on ? "visible" : "none"); } catch (e) {}
+    });
+  }
   function s1Draw(mv, acc) {
     var RS = window.ROUTES_S1;
     if (!mv || !RS) return;
+    s1DrawGrid(mv, acc);
     acc.ids.length = 0;
     acc.labels.length = 0;
     acc.planIds.length = 0;
@@ -456,6 +478,8 @@ window.S06_SHELL = (function () {
     acc.labels.length = 0;
     acc.plan = false;
     s1ClearBase(mv, acc);
+    s1SetGridVisible(mv, false);
+    acc.grid = false;
   }
 
   /* 空地图层装配：完整外壳 + 无地图、无目标、无视频源、无 AI 事件 */
@@ -465,7 +489,7 @@ window.S06_SHELL = (function () {
     var uavs = (cfg && cfg.uavs) || [];
     var hasMap = !!(cfg && cfg.mapBounds);   /* 场景一有自己的一套瓦片与边界 */
     var mapHost = null;
-    var s1acc = { ids: [], labels: [], plan: false, planIds: [], base: false, showRoutes: true };
+    var s1acc = { ids: [], labels: [], plan: false, planIds: [], base: false, grid: false, showRoutes: true };
     var FL = (hasMap && window.FLIGHT_S1) ? window.FLIGHT_S1 : null;
     var total = FL ? FL.TOTAL : ((window.FLIGHT06 && window.FLIGHT06.TOTAL) || 9000);
     var CH = { MENU: MENU, TOOLS: TOOLS, STATUS: STATUS };
@@ -484,7 +508,12 @@ window.S06_SHELL = (function () {
           ] });
         } else shellLayers.push(o);
       });
-      shellLayers = [{ k: "s1routes", label: "编组航线" }].concat(shellLayers);
+      shellLayers = [{ k: "s1routes", label: "编组航线" }, {
+        k: "s1grid", label: "侦察格网", children: [
+          { k: "s1grid-photo", label: "光电格网" },
+          { k: "s1grid-sar", label: "雷达 SAR 格网" }
+        ]
+      }].concat(shellLayers);
     }
     root.innerHTML =
       (hasMap ? "<div class=\"s3-map\"></div>" : htmlEmptyMap("地图数据待接入")) +
@@ -708,11 +737,22 @@ window.S06_SHELL = (function () {
       PLAN_KEYS.forEach(function (g) { var c = planSub(g); if (c && c.checked) any = true; });
       master.checked = any;
     }
+    /* 格网总开关只反映“至少一个子项开着” */
+    function syncGridMaster() {
+      var master = lyrPanel.querySelector('input[data-k="s1grid"]');
+      if (!master) return;
+      var a = lyrPanel.querySelector('input[data-k="s1grid-photo"]');
+      var b = lyrPanel.querySelector('input[data-k="s1grid-sar"]');
+      master.checked = !!((a && a.checked) || (b && b.checked));
+    }
     function applyLayerToggle(k, on) {
       if (!hasMap) return;
       if (k === "s1routes") { s1acc.showRoutes = on; s1SetVisible(mv, s1acc, on, "routes"); }
       else if (k === "tracks") PLAN_KEYS.forEach(function (g) { setPlanLayer(g, on); });
       else if (k.indexOf("tracks-") === 0) setPlanLayer(k.slice(7), on);
+      else if (k === "s1grid") s1SetGridVisible(mv, on, "all");
+      else if (k === "s1grid-photo") s1SetGridVisible(mv, on, "photo");
+      else if (k === "s1grid-sar") s1SetGridVisible(mv, on, "sar");
       else if (k === "trails") s1SetLayers(mv, ["s1-trails-c", "s1-trails-l"], on);
       else if (S1_VIS[k]) s1SetGroupVisible(mv, k, on);
     }
@@ -723,6 +763,7 @@ window.S06_SHELL = (function () {
         if (k !== "tracks") applyLayerToggle(k, cb.checked);
       });
       syncMaster();
+      syncGridMaster();
     }
     /* 屏是缓存的：回看 SH-06 只走 onShow、不重建 → 这里按当前开关状态重画一次 */
     function redrawS1() {
@@ -746,8 +787,15 @@ window.S06_SHELL = (function () {
         if (k === "tracks") {
           PLAN_KEYS.forEach(function (g) { var sub = planSub(g); if (sub) sub.checked = cb.checked; });
         }
+        if (k === "s1grid") {
+          ["s1grid-photo", "s1grid-sar"].forEach(function (g) {
+            var sub = lyrPanel.querySelector('input[data-k="' + g + '"]');
+            if (sub) sub.checked = cb.checked;
+          });
+        }
         applyLayerToggle(k, cb.checked);
         if (k.indexOf("tracks-") === 0) syncMaster();
+        if (k === "s1grid-photo" || k === "s1grid-sar") syncGridMaster();
       });
     });
     /* 点整行标题展开/收起；点勾选框本身不触发展开 */
