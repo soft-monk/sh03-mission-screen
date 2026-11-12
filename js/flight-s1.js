@@ -29,7 +29,7 @@ window.FLIGHT_S1 = (function () {
   /* 扫描 / 扇区 / 条带 / 覆盖格（参数与场景二 SH-06 一致） */
   var SCAN = { r0: 2000, r1: 2800, half: Math.PI / 6, seg: 10, rate: 10, fade: 0.6 };
   var FAN = { radar: { r0: 2000, r1: 35000 }, jam: { r0: 1000, r1: 30000 }, half: Math.PI / 4, seg: 28, fade: 0.6 };
-  var SARB = { near: 500, far: 2500, width: 100, fade: 0.6 };   // 西侧测绘带（贴航迹）
+  var SARB = { near: 8000, far: 10000, width: 100, fade: 0.6 };  // 西侧侧视（同场景二：地距 8~10km）
   var COV = { cell: 500, step: 10 };
 
   /* ---------- 折线工具 ---------- */
@@ -285,7 +285,9 @@ window.FLIGHT_S1 = (function () {
       var d = drones[i];
       if (d.group !== "sar") continue;
       var p = posOf(d, t);
-      if (!inAreaM(p, 3000)) continue;
+      if (!inAreaM(p, 14000)) continue;
+      /* 侧视只在南北向航段成立（同场景二） */
+      if (Math.abs(Math.cos(headingOfPos(p))) < 0.5) continue;
       var side = -Math.PI / 2;                    /* 固定朝西（与覆盖判定一致） */
       var el = Math.max(0, t - T_LIFT);
       out.push({
@@ -360,7 +362,7 @@ window.FLIGHT_S1 = (function () {
         var r0e = Math.max(0, pr.r0 - 50), r1e = pr.r1 + 50;
         for (var di = 0; di < ds.length; di++) {
           var p = posOf(ds[di], tt);
-          if (!inAreaM(p, 3000)) continue;
+          if (!inAreaM(p, k === "sar" ? 14000 : 3000)) continue;
           var hd = headingOfPos(p);
           var fx = Math.sin(hd), fy = Math.cos(hd);
           var px = (p.lon - ACX) * M_LON, py = (p.lat - ACY) * M_LAT;
@@ -374,7 +376,7 @@ window.FLIGHT_S1 = (function () {
               if (arr[ci] <= tt) continue;
               var dx = cells[ci].mx - px, dy = cells[ci].my - py;
               if (k === "sar") {
-                /* 固定朝西的测绘带：西侧 0.5–2.5km、沿航向 ±1.1km（不走圆形距离判定） */
+                /* 固定朝西的侧视条带：西侧 8–10km、沿航向 ±1.1km */
                 if (dx > -SARB.near || dx < -SARB.far) continue;
                 if (Math.abs(dy) > 1100) continue;
               } else {

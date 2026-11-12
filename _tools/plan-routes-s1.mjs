@@ -142,8 +142,10 @@ const sarRoutes = [];
 (function buildSar() {
   const BC = 3, BR = 2;                       // 3 列 × 2 行
   const bw = (2 * HALF_X) / BC, bh = (2 * HALF_Y) / BR;
-  const SAR_LEG_GAP = 2000;                   // 块内腿距 = 测绘带宽度
+  const SAR_LEG_GAP = 2000;                   // 腿距 = 测绘带宽度（8–10km 侧视，2km 才能无缝）
   const EDGE = 800;                           // 腿两端离块边的余量
+  const SAR_SHIFT = 9000;                     // 侧视朝西 → 航路整体东移约 9km（条带中心）
+  const PHASE_STEP = 250;                     // 相邻块错开，让不同航线看得出间隔
   let idx = 0;
   for (let bc = 0; bc < BC; bc++) {
     for (let br = 0; br < BR; br++) {
@@ -163,8 +165,10 @@ const sarRoutes = [];
         if (x > x1 - 500) continue;                      /* 腿不出本块，避免与邻块重叠/交叉 */
         legs.push(x);
       }
+      const shift = SAR_SHIFT + ((idx - 1) % 4) * PHASE_STEP;
       const raw = [];
-      legs.forEach((x, i) => {
+      legs.forEach((x0l, i) => {
+        const x = x0l + shift;
         if (i % 2 === 0) raw.push([x, ya], [x, yb]);
         else raw.push([x, yb], [x, ya]);
       });
@@ -370,7 +374,7 @@ function sepCheck(list) {
   return { sameX, nearMerge, overlap, crossPairs, minD };
 }
 
-/* SAR 覆盖：固定西侧 0.5–2.5km 测绘带，沿航向 ±1.1km 容差（与画面一致） */
+/* SAR 覆盖：固定西侧 8–10km 侧视条带，沿航向 ±1.1km 容差（与画面一致） */
 function sarBandCoverage(routes) {
   const step = 500;
   const nx = Math.max(2, Math.round((2 * HALF_X) / step));
@@ -389,7 +393,7 @@ function sarBandCoverage(routes) {
           const y0 = Math.min(a[1], b[1]) - 1100, y1 = Math.max(a[1], b[1]) + 1100;
           if (y < y0 || y > y1) continue;
           const dx = x - a[0];
-          if (dx >= 500 && dx <= 2500) ok = true;
+          if (dx <= -8000 && dx >= -10000) ok = true;   /* 条带在航路西侧 8–10km */
         }
         if (ok) break;
       }
@@ -448,7 +452,7 @@ function verify() {
   for (const r of D.area) {
     if (seen.has(r.id)) errs.push("ID 重复: " + r.id);
     seen.add(r.id);
-    for (const p of r.pts) if (!insideArea(toXY(p))) { errs.push(r.id + " 点跑出任务区"); break; }
+    if (r.group !== "sar") for (const p of r.pts) if (!insideArea(toXY(p))) { errs.push(r.id + " 点跑出任务区"); break; }
   }
 
   /* 4) 横平竖直：光电与 SAR 的每一段必须是正南正北或正东正西；SAR 必须是多腿蛇形 */
