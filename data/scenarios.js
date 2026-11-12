@@ -109,13 +109,13 @@
     noFly: [],
     res: [{ k: "光电", img: "uav-blue.png", v: "48", c: "56,189,248" }, { k: "雷达", img: "uav-yellow.png", v: "24", c: "250,204,21" }, { k: "电子", img: "uav-red.png", v: "24", c: "248,113,113" }, { k: "通信", img: "uav-green.png", v: "24", c: "74,222,128" }],
     uavs: [
-      { k: "光电无人机", img: "uav-blue.png", c: "56,189,248", total: 48, avail: 48, caps: ["侦察", "识别", "跟踪"], used: 30, rest: 18 },
+      { k: "光电无人机", img: "uav-blue.png", c: "56,189,248", total: 48, avail: 48, caps: ["侦察", "识别", "跟踪"], used: 34, rest: 14 },
       { k: "雷达无人机", img: "uav-yellow.png", c: "250,204,21", total: 24, avail: 24, caps: ["探测", "扫描", "测距"], used: 8, rest: 16 },
       { k: "电子无人机", img: "uav-red.png", c: "248,113,113", total: 24, avail: 24, caps: ["干扰", "压制", "侦测"], used: 2, rest: 22 },
       { k: "通信无人机", img: "uav-green.png", c: "74,222,128", total: 24, avail: 24, caps: ["中继", "通信", "数据"], used: 4, rest: 20 }
     ],
     groups: [
-      { n: "编组1", k: "光电无人机", img: "uav-blue.png", v: 30 },
+      { n: "编组1", k: "光电无人机", img: "uav-blue.png", v: 34 },
       { n: "编组2", k: "雷达无人机", img: "uav-yellow.png", v: 8 },
       { n: "编组3", k: "电子无人机", img: "uav-red.png", v: 2 },
       { n: "编组4", k: "通信无人机", img: "uav-green.png", v: 4 }
@@ -128,7 +128,7 @@
     s4Audio: [],
     s5Dialog: [
       { key: "s5-plan-header", who: "ai", at: 0.0, text: "推荐编组方案：" },
-      { key: "s5-eo", who: "ai", at: 0.0, text: "光电无人机30架，部署到沿海岛屿任务区，负责全域目标探测与扫描。" },
+      { key: "s5-eo", who: "ai", at: 0.0, text: "光电无人机34架，部署到沿海岛屿任务区，负责全域目标探测与扫描。" },
       { key: "s5-radar", who: "ai", at: 5.5, text: "雷达无人机8架，部署到沿海岛屿任务区，负责全域目标探测与扫描。" },
       { key: "s5-ew", who: "ai", at: 11.0, text: "电子无人机2架，部署到沿海岛屿任务区，负责电子侦察与压制。" },
       { key: "s5-relay", who: "ai", at: 16.5, text: "通信无人机4架，随队部署，负责通信中继与数据回传。" }

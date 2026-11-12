@@ -231,32 +231,67 @@ window.S06_SHELL = (function () {
     return inside;
   }
 
-  /* 每个目标：盘旋阶段首次被光电扇形扫到 → 疑似；之后光电抵近 ≤800m → 确认 */
+  /* 目标出现：跑道/机库=光电扇形、雷达站=电子干扰扇区、战机=GMTI 扇区，
+     且对应传感器已“到位”（到达自己规划航路起点）；确认=光电扇形离开后再扫到 */
   function s1BaseTimes() {
     if (S1_BASE_TIMES || !S1_BASE || !window.FLIGHT_S1 || !window.ROUTES_S1) return S1_BASE_TIMES || {};
-    var FL = window.FLIGHT_S1, TA = window.ROUTES_S1.meta.taskArea;
+    var FL = window.FLIGHT_S1, RS = window.ROUTES_S1, TA = RS.meta.taskArea;
     var ML = 111030, MN = 111320 * Math.cos(((TA.s + TA.n) / 2) * Math.PI / 180);
     var CX = (TA.w + TA.e) / 2, CY = (TA.s + TA.n) / 2;
+    var arr = FL.arrivals ? FL.arrivals() : [];
+    function minArr(g) {
+      var m = Infinity;
+      for (var i = 0; i < arr.length; i++) if (arr[i].group === g && arr[i].arrive < m) m = arr[i].arrive;
+      return m === Infinity ? FL.T_IN : m;
+    }
+    /* 目标所在光电格的无人机到位时刻 */
+    function photoArriveAt(pos) {
+      var best = Infinity;
+      for (var i = 0; i < RS.area.length; i++) {
+        var r = RS.area[i];
+        if (r.group !== "photo") continue;
+        var minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+        for (var k = 0; k < r.pts.length; k++) {
+          minx = Math.min(minx, r.pts[k][0]); maxx = Math.max(maxx, r.pts[k][0]);
+          miny = Math.min(miny, r.pts[k][1]); maxy = Math.max(maxy, r.pts[k][1]);
+        }
+        if (pos[0] < minx - 1e-6 || pos[0] > maxx + 1e-6 || pos[1] < miny - 1e-6 || pos[1] > maxy + 1e-6) continue;
+        if (arr[i] && arr[i].arrive < best) best = arr[i].arrive;
+      }
+      return best === Infinity ? minArr("photo") : best;
+    }
+    var NEED_EW = minArr("ewar"), NEED_GM = minArr("gmti");
     var pend = S1_BASE.targets.map(function (o) {
-      return { o: o, x: (o.pos[0] - CX) * MN, y: (o.pos[1] - CY) * ML, sus: 0, conf: 0 };
+      var src = o.kind === "radar" ? "ew" : o.kind === "jet" ? "gmti" : "photo";
+      var need = src === "photo" ? photoArriveAt(o.pos) : src === "ew" ? NEED_EW : NEED_GM;
+      return { o: o, src: src, need: need, sus: 0, conf: 0, gap: false };
     });
-    for (var t = FL.T_IN; t <= FL.TOTAL; t += 10) {
-      var f = FL.simulate(t), sc = null, left = 0;
-      for (var i = 0; i < pend.length; i++) {
-        var q = pend[i];
+    var T0 = Math.floor(Math.min.apply(null, pend.map(function (q) { return q.need; })));
+    for (var t = T0; t <= FL.TOTAL; t += 10) {
+      var sc = null, fa = null, left = 0;
+      for (var i2 = 0; i2 < pend.length; i2++) {
+        var q = pend[i2];
         if (q.conf) continue;
         left++;
         if (!q.sus) {
-          if (!sc) sc = FL.scans(t);
-          for (var k = 0; k < sc.length; k++) {
-            if (s1InPoly(q.o.pos, sc[k].quad)) { q.sus = t; break; }
+          if (t < q.need) continue;
+          var hit = false;
+          if (q.src === "photo") {
+            if (!sc) sc = FL.scans(t);
+            for (var k1 = 0; k1 < sc.length && !hit; k1++) if (s1InPoly(q.o.pos, sc[k1].quad)) hit = true;
+          } else {
+            if (!fa) fa = FL.fans(t);
+            var list = q.src === "ew" ? fa.jam : fa.radar;
+            for (var k2 = 0; k2 < list.length && !hit; k2++) if (s1InPoly(q.o.pos, list[k2].quad)) hit = true;
           }
-          if (!q.sus) continue;
+          if (hit) q.sus = t;
+          continue;
         }
-        for (var j = 0; j < 30; j++) {
-          var dx = q.x - (f[j].lon - CX) * MN, dy = q.y - (f[j].lat - CY) * ML;
-          if (Math.hypot(dx, dy) <= 800) { q.conf = t; break; }
-        }
+        if (!sc) sc = FL.scans(t);
+        var cov = false;
+        for (var k3 = 0; k3 < sc.length && !cov; k3++) if (s1InPoly(q.o.pos, sc[k3].quad)) cov = true;
+        if (!cov) { q.gap = true; continue; }
+        if (q.gap) q.conf = t;
       }
       if (!left) break;
     }

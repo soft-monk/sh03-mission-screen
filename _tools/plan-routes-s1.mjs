@@ -37,11 +37,6 @@ const SCAN_R = 2800;                  // 光电扫描半径（同场景二）
 const OVERLAP = 0.85;                 // 排版系数：有效半径 = 扫描半径 × 该系数（<1 表示相邻带重叠）
 const R_EFF = Math.round(SCAN_R * OVERLAP);
 /* 光电格子（km，从西到东 / 从北到南），合计 40km；西北大、东南小 */
-const COLS_KM = [9.7, 8.4, 7.1, 5.7, 4.9, 4.1];
-const ROWS_KM = [9.9, 8.9, 7.9, 6.9, 6.4];
-const GAP_WEST = 3200;                // 光电腿距（西侧 / 海岸）：稀疏
-const GAP_EAST = 800;                 // 光电腿距（东侧 / 山地）：密集（= 环形扇区厚度）
-const PHOTO_EDGE = 400;               // 光电腿端离格子上下边的留白（行间留出间隔）
 const GMTI_BUDGET = 2;                // 雷达 GMTI：2 架，同一条东西向跑道环
 const LEG_MIN = 800, LEG_MAX = 4400;
 
@@ -90,49 +85,48 @@ function boundaryAlong(from, to) {
 
 let transit = [];
 
-/* ---------- 光电：每格一条“之字/蛇形”（南北竖腿 + 东西折返），格子由西北向东南收窄 ---------- */
+/* ---------- 光电：方案 G —— 4×4 大格（10km）；城区大格切 2×2（5km），每格一条蛇形 ---------- */
 const photoRoutes = [];
+const PHOTO_G = { cols: 4, rows: 4, legGap: 2200, edge: 250 };
+/* 与卫星截图判读一致的 6 个“城区”大格：[列 i, 行 j]，i 自西向东、j 自北向南 */
+const PHOTO_CITY = ["3-0", "1-1", "3-1", "1-2", "2-2", "0-3"];
 (function buildPhoto() {
-  /* 列边界（西 → 东）与行边界（北 → 南）；按比例缩放到正好铺满任务区 */
-  const scaleC = (2 * HALF_X) / (COLS_KM.reduce((a, b) => a + b, 0) * 1000);
-  const scaleR = (2 * HALF_Y) / (ROWS_KM.reduce((a, b) => a + b, 0) * 1000);
-  const colEdges = [];
-  let acc = -HALF_X;
-  for (const w of COLS_KM) { colEdges.push(acc); acc += w * 1000 * scaleC; }
-  colEdges.push(acc);
-  const rowEdges = [];
-  acc = HALF_Y;
-  for (const h of ROWS_KM) { rowEdges.push(acc); acc -= h * 1000 * scaleR; }
-  rowEdges.push(acc);
-
+  const bw = (2 * HALF_X) / PHOTO_G.cols;
+  const bh = (2 * HALF_Y) / PHOTO_G.rows;
   let idx = 0;
-  for (let c = 0; c < COLS_KM.length; c++) {
-    const x0 = colEdges[c], x1 = colEdges[c + 1];
-    const cx = (x0 + x1) / 2;
-    for (let r = 0; r < ROWS_KM.length; r++) {
-      idx += 1;
-      const yTop = rowEdges[r], yBot = rowEdges[r + 1];
-      /* 蛇形：竖腿贯穿格高，腿距 = 扫描带宽度（环形扇区厚度 0.8km），铺满格宽 */
-      /* 腿距按格心位置在“西 3.2km（疏）→ 东 0.8km（密）”之间渐变 */
-      const tCol = (cx + HALF_X) / (2 * HALF_X);
-      const gapCol = GAP_WEST + (GAP_EAST - GAP_WEST) * tCol;
-      const n = Math.max(2, Math.ceil((x1 - x0) / gapCol));
-      const step = (x1 - x0) / n;
-      const ya = yBot + PHOTO_EDGE, yb = yTop - PHOTO_EDGE;
-      /* 奇偶行错开半个腿距：1/3/5 行腿在子带中点，2/4 行腿左移半格，避免上下两架共线 */
-      const phase = (r % 2 === 0) ? 0.5 : 0.0;
-      const raw = [];
-      for (let i = 0; i < n; i++) {
-        const x = x0 + step * (i + phase);
-        if (i % 2 === 0) raw.push([x, ya], [x, yb]);
-        else raw.push([x, yb], [x, ya]);
+  function addCell(x0, x1, yTop, yBot, width, rowIdx) {
+    idx += 1;
+    const n = Math.max(2, Math.ceil(width / PHOTO_G.legGap));
+    const step = width / n;
+    const ya = yBot + PHOTO_G.edge, yb = yTop - PHOTO_G.edge;
+    /* 奇偶行错开半个腿距，避免上下两格共线 */
+    const phase = (rowIdx % 2 === 0) ? 0.5 : 0.0;
+    const raw = [];
+    for (let i = 0; i < n; i++) {
+      const x = x0 + step * (i + phase);
+      if (i % 2 === 0) raw.push([x, ya], [x, yb]);
+      else raw.push([x, yb], [x, ya]);
+    }
+    photoRoutes.push({
+      id: "P-" + String(idx).padStart(2, "0"),
+      group: "photo", kind: "serpentine",
+      zone: width > 9000 ? "big" : "city",
+      color: COLOR.photo, lenKm: lenKm(raw), pts: raw.map(([x, y]) => ll(x, y))
+    });
+  }
+  for (let j = 0; j < PHOTO_G.rows; j++) {
+    const yTop = HALF_Y - j * bh, yBot = yTop - bh;
+    for (let i = 0; i < PHOTO_G.cols; i++) {
+      const x0 = -HALF_X + i * bw, x1 = x0 + bw;
+      if (PHOTO_CITY.indexOf(i + "-" + j) >= 0) {
+        const hw = bw / 2, hh = bh / 2;
+        addCell(x0, x0 + hw, yTop, yTop - hh, hw, j * 2);
+        addCell(x0 + hw, x1, yTop, yTop - hh, hw, j * 2);
+        addCell(x0, x0 + hw, yTop - hh, yBot, hw, j * 2 + 1);
+        addCell(x0 + hw, x1, yTop - hh, yBot, hw, j * 2 + 1);
+      } else {
+        addCell(x0, x1, yTop, yBot, bw, j);
       }
-      photoRoutes.push({
-        id: "P-" + String(idx).padStart(2, "0"),
-        group: "photo", kind: "serpentine",
-        zone: cx < 0 ? "west" : "east",
-        color: COLOR.photo, lenKm: lenKm(raw), pts: raw.map(([x, y]) => ll(x, y))
-      });
     }
   }
 })();
@@ -268,12 +262,29 @@ const area = photoRoutes.concat(sarRoutes, gmtiRoutes, ewarRoutes, commRoutes);
     const g = groups[key];
     g.cx += e[0]; g.cy += e[1]; g.n += 1; g.list.push(r);
   });
-  /* 四组按“平均进场点偏东→偏西”排序，沿任务区北边等距铺开 4 个入口，避免挤在一起 */
-  const order = Object.keys(groups).sort((a, b) => (groups[b].cx / groups[b].n) - (groups[a].cx / groups[a].n));
-  order.forEach((key, gi) => {
+  /* 4 个入口沿北边等距；用 4! 枚举选“集结区→入口→进场点”总距离最小的分配 */
+  const keys = Object.keys(groups);
+  const gates = [];
+  for (let k = 1; k <= keys.length; k++) gates.push([HALF_X - k * (2 * HALF_X) / (keys.length + 1), HALF_Y]);
+  let bestOrder = keys, bestCost = Infinity;
+  (function permute(rest, cur) {
+    if (!rest.length) {
+      let cost = 0;
+      cur.forEach(function (key, gi) {
+        const g = groups[key], gate = gates[gi];
+        for (const r of g.list) {
+          const e = xy(r.pts[0][0], r.pts[0][1]);
+          cost += Math.hypot(gate[0] - R[0], gate[1] - R[1]) + Math.hypot(e[0] - gate[0], e[1] - gate[1]);
+        }
+      });
+      if (cost < bestCost) { bestCost = cost; bestOrder = cur.slice(); }
+      return;
+    }
+    for (let i = 0; i < rest.length; i++) permute(rest.slice(0, i).concat(rest.slice(i + 1)), cur.concat([rest[i]]));
+  })(keys, []);
+  bestOrder.forEach((key, gi) => {
     const g = groups[key];
-    const mx = g.cx / g.n, my = g.cy / g.n;
-    const gate = [HALF_X - (gi + 1) * (2 * HALF_X) / (order.length + 1), HALF_Y];
+    const gate = gates[gi];
     const lanes = Math.min(MAX_LANES, g.list.length);
     g.list.forEach((r, i) => {
       r.corr = key;
@@ -452,7 +463,8 @@ function verify() {
 
   /* 5) 计数 */
   const count = (g) => D.area.filter((r) => r.group === g).length;
-  const want = { photo: 30, sar: 6, gmti: 2, ewar: 2, comm: 4 };
+  const wantPhoto = PHOTO_G.cols * PHOTO_G.rows - PHOTO_CITY.length + PHOTO_CITY.length * 4;
+  const want = { photo: wantPhoto, sar: 6, gmti: 2, ewar: 2, comm: 4 };
   for (const g of Object.keys(want)) if (count(g) !== want[g]) errs.push("数量不符: " + g + "=" + count(g) + " 期望 " + want[g]);
 
   /* 6) 覆盖 */
@@ -472,8 +484,8 @@ function verify() {
   if (sarSep.crossPairs > 0) errs.push("SAR 两两交叉 " + sarSep.crossPairs + " 处");
   const covPhoto = coverage(photoXY, SCAN_R);
   const covSar = sarBandCoverage(sarXY);
-  const covPhotoNW = coverage(photoXY, SCAN_R, (x, y) => x < 0 && y > 0);
-  const covPhotoSE = coverage(photoXY, SCAN_R, (x, y) => x > 0 && y < 0);
+  const covPhotoBig = coverage(photoXY.filter((r) => r.zone === "big"), SCAN_R);
+  const covPhotoCity = coverage(photoXY.filter((r) => r.zone === "city"), SCAN_R);
 
   /* 7) 疏密可量化：西北 / 东南 1/4 区的“每 100km² 闭环数”与平均腿距 */
   const q = (pred) => photoXY.filter((r) => pred(r));
@@ -490,13 +502,14 @@ function verify() {
     for (let i = 1; i < xs.length; i++) sum += xs[i] - xs[i - 1];
     return sum / (xs.length - 1);
   };
-  const nw = q((r) => centerOf(r)[0] < 0 && centerOf(r)[1] > 0);
-  const se = q((r) => centerOf(r)[0] > 0 && centerOf(r)[1] < 0);
-  const dens = (arr) => (arr.length / quadArea * 100).toFixed(2);
+  const nw = q((r) => r.zone === "big");
+  const se = q((r) => r.zone === "city");
+  const dens = (arr) => (arr.length / (quadArea * 2) * 100).toFixed(2);
   const gapAvg = (arr) => arr.length ? (arr.reduce((s, r) => s + gapStat(r), 0) / arr.length / 1000).toFixed(2) : "-";
 
   console.log("[verify] 编组航线:", D.transit.map((r) => r.id + " " + r.lenKm + "km").join(" / "));
-  console.log("[verify] 计数:", JSON.stringify({ photo: count("photo"), photoWest: D.area.filter((r) => r.group === "photo" && r.zone === "west").length, sar: count("sar"), gmti: count("gmti"), ewar: count("ewar"), comm: count("comm") }));
+  console.log("[verify] 计数:", JSON.stringify({ photo: count("photo"), photoBig: D.area.filter((r) => r.group === "photo" && r.zone === "big").length,
+    photoCity: D.area.filter((r) => r.group === "photo" && r.zone === "city").length, sar: count("sar"), gmti: count("gmti"), ewar: count("ewar"), comm: count("comm") }));
   console.log("[verify] SAR 蛇形腿数:", D.area.filter((r) => r.group === "sar").map((r) => {
     let n = 0;
     for (let i = 1; i < r.pts.length; i++) {
@@ -507,11 +520,11 @@ function verify() {
   }).join(" "));
   console.log("[verify] GMTI:", D.area.filter((r) => r.group === "gmti").map((r) => r.id + " " + r.lenKm + "km").join(" / "));
   console.log("[verify] 光电分离: 共线重叠 " + Math.round(photoSep.overlap) + "m | 交叉 " + photoSep.crossPairs + " 处 | 同x竖腿 " + photoSep.sameX + " | 最小间距 " + Math.round(photoSep.minD) + "m");
-  console.log("[verify] 光电覆盖 全区 " + covPhoto + "%（西北 " + covPhotoNW + "% / 东南 " + covPhotoSE + "%）");
+  console.log("[verify] 光电覆盖 全区 " + covPhoto + "%（大格机 " + covPhotoBig + "% / 城区机 " + covPhotoCity + "%）");
   console.log("[verify] SAR 分离: 共线重叠 " + Math.round(sarSep.overlap) + "m | 交叉 " + sarSep.crossPairs + " 处 | 最小间距 " + Math.round(sarSep.minD) + "m");
   console.log("[verify] SAR 覆盖  全区 " + covSar + "%");
-  console.log("[verify] 疏密对比 西北: " + nw.length + " 环 / " + dens(nw) + " 环每100km² / 平均腿距 " + gapAvg(nw) + "km");
-  console.log("[verify] 疏密对比 东南: " + se.length + " 环 / " + dens(se) + " 环每100km² / 平均腿距 " + gapAvg(se) + "km");
+  console.log("[verify] 光电分区 大格: " + nw.length + " 架 / 平均腿距 " + gapAvg(nw) + "km");
+  console.log("[verify] 光电分区 城区: " + se.length + " 架 / 平均腿距 " + gapAvg(se) + "km");
   if (errs.length) { console.error("[verify] 失败:\n - " + errs.join("\n - ")); process.exit(1); }
   console.log("[verify] 通过");
 }
@@ -544,9 +557,8 @@ function serialize() {
       taskArea: AREA,
       rallyArea: RALLY,
       scanRadius: SCAN_R,
-      colsKm: COLS_KM,
-      rowsKm: ROWS_KM,
-      gaps: { photoWest: GAP_WEST, photoEast: GAP_EAST, sarBand: [500, 2500], sarBlocks: "3x2" }
+      photoGrid: { cols: PHOTO_G.cols, rows: PHOTO_G.rows, bigKm: 10, cityKm: 5, legGap: PHOTO_G.legGap, cityBlocks: PHOTO_CITY },
+      sarBand: [500, 2500], sarBlocks: "3x2"
     }, null, 2).replace(/\n/g, "\n  ") + ","
   ].join("\n");
 

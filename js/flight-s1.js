@@ -403,6 +403,10 @@ window.FLIGHT_S1 = (function () {
   return {
     TOTAL: TOTAL, V: V, T_LIFT: T_LIFT, T_FORM: T_FORM, T_IN: T_IN,
     phase: phase, simulate: simulate, count: function () { return drones.length; },
-    scans: scans, sarScans: sarScans, fans: fans, coverage: coverage
+    scans: scans, sarScans: sarScans, fans: fans, coverage: coverage,
+    /* 每架“到位”时刻（到达自己规划航路起点）与分组，供外壳判断目标揭示时机 */
+    arrivals: function () {
+      return drones.map(function (d) { return { group: d.group, arrive: T_LIFT + d.leadLen / V }; });
+    }
   };
 })();
