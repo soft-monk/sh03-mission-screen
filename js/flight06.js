@@ -101,16 +101,20 @@ window.FLIGHT06 = (function () {
   var Z_HALF_LON = 10000 / M_LON, Z_HALF_LAT = 10000 / M_LAT;   /* deployed zone half size 10 km */
   /* SAR: serpentine east of zone-1, 4.3 km clear of its east edge, bbox 20 x 20 km */
   /* SAR：侧视成像，测绘带宽 2km（地距 8~10km）=> 20km 宽的疑似区需要 10 条平行腿、间距 2km */
-  var SAR_LEGS = 10, SAR_STEP = 2000, SAR_LEGLEN = 22000;
+  /* SAR：条带 4 km（8~12 km）× 200 m；5 条腿、间距 4 km、起点 +2 km，正好铺满 20 km */
+  var SAR_LEGS = 5, SAR_STEP = 4000, SAR_X0 = 2000, SAR_LEGLEN = 22000;
   var SAR_TRACK = (function () {
     var y0 = POT1[1] - SAR_LEGLEN / 2 / M_LAT, y1 = POT1[1] + SAR_LEGLEN / 2 / M_LAT;
-    var pts = [], i, x;
+    var x0 = POT1[0] + SAR_X0 / M_LON;
+    var pts = [], i, x, lastX = x0;
     for (i = 0; i < SAR_LEGS; i++) {
-      x = POT1[0] + (i * SAR_STEP) / M_LON;          /* 从疑似区中心向东排到 +18km */
-      if (i % 2 === 0) { pts.push([x, y0]); pts.push([x, y1]); }
-      else             { pts.push([x, y1]); pts.push([x, y0]); }
+      x = POT1[0] + (SAR_X0 + i * SAR_STEP) / M_LON;   /* +2 / +6 / +10 / +14 / +18 km */
+      lastX = x;
+      if (i % 2 === 0) { pts.push([x, y0]); pts.push([x, y1]); }   /* 偶数腿由南向北 */
+      else             { pts.push([x, y1]); pts.push([x, y0]); }   /* 奇数腿由北向南 */
     }
-    pts.push([POT1[0], y0]);                          /* 南侧回程，闭合 */
+    if (SAR_LEGS % 2 === 1) pts.push([lastX, y0]);     /* 奇数腿：先沿最后一条腿回南端 */
+    pts.push([x0, y0]);                                /* 南侧回程，回到起点闭合 */
     return poly(pts);
   })();
   /* GMTI: E-W race track south of zone-1, 20 km wide x 10 km tall, 4.4 km clear of its south edge */
@@ -942,7 +946,7 @@ window.FLIGHT06 = (function () {
     return 0;
   })();
   /* ---------- SAR：始终指向疑似区中心的地面扫描条带（地距 8~10km，条带宽 100m） ---------- */
-  var SARB = { near: 8000, far: 10000, width: 100, fade: 0.6 };
+  var SARB = { near: 8000, far: 12000, width: 200, fade: 0.6 };   /* 长 4 km、宽 200 m */
   function sarBeamOf(p, t, tOn) {
     var hd = (p.r || 0) * Math.PI / 180;
     if (Math.abs(Math.cos(hd)) < 0.5) return null;   /* 东西向的连接段/回程：侧视不成立，不画 */
@@ -1004,7 +1008,7 @@ window.FLIGHT06 = (function () {
       photo: { r0: 2000, r1: 2800, cos: Math.cos(Math.PI / 6 + 0.35) },
       gmti:  { r0: 2000, r1: 35000, cos: Math.cos(Math.PI / 4 + 0.2) },
       ewar:  { r0: 1000, r1: 30000, cos: Math.cos(Math.PI / 4 + 0.2) },
-      sar:   { r0: 8000, r1: 10000, cos: 0 }
+      sar:   { r0: 8000, r1: 12000, cos: 0 }
     };
     for (var tt = TJOIN; tt <= TOTAL; tt += COV.step) {
       Object.keys(kinds).forEach(function (k) {
@@ -1027,7 +1031,7 @@ window.FLIGHT06 = (function () {
             var dist = Math.sqrt(dx * dx + dy * dy);
             if (dist < r0e || dist > r1e) continue;
             if (k === "sar") {
-              if (dx >= 0 || Math.abs(dx) < dist * 0.80 || Math.abs(dy) > 1100) continue;
+              if (dx >= 0 || Math.abs(dx) < dist * 0.80 || Math.abs(dy) > 2200) continue;
             } else if ((dx * fx + dy * fy) / dist < pr.cos) continue;
             arr[ci] = tt;
           }

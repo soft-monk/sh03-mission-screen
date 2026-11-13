@@ -131,11 +131,11 @@ function make(variant) {
     window.APP_STATE = window.APP_STATE || {};
     if (window.APP_STATE.scenarioAudioPreload) return window.APP_STATE.scenarioAudioPreload;
     var preMap = {};
-    for (var i = 1; i <= 63; i++) {
+    for (var i = 1; i <= 66; i++) {
       var src = "assets/audio/" + ("00" + i).slice(-3) + ".wav";
       var a = new Audio(audioSrc(src)); a.preload = "auto"; a.load(); preMap[src] = a;
     }
-    window.APP_STATE.scenarioAudioPreload = { map: preMap, count: 63 };
+    window.APP_STATE.scenarioAudioPreload = { map: preMap, count: 66 };
     return window.APP_STATE.scenarioAudioPreload;
   };
   function scheduleStTask(st, delay, fn) {
@@ -822,9 +822,9 @@ function make(variant) {
         { key: "003-attack", group: "003", video: videoE, at: 41, silent: true }
       ];
       var timelineRules = [
-        { key: "002-destroy", group: "002", at: 4295.80, audio: ["assets/audio/047.wav", "assets/audio/048.wav"], text: "根据打击前后图像比对评估，目标002火控雷达已被摧毁" },
-        { key: "001-destroy", group: "001", at: 4330.13, audio: ["assets/audio/042.wav", "assets/audio/043.wav"], text: "根据打击前后图像比对评估，目标001预警雷达已被摧毁" },
-        { key: "003-destroy", group: "003", at: 4820.00, audio: ["assets/audio/062.wav", "assets/audio/063.wav"], text: "根据打击前后图像比对评估，目标003已被摧毁。" }
+        { key: "002-destroy", group: "002", at: 4295.80, audio: ["assets/audio/050.wav", "assets/audio/051.wav"], text: "根据打击前后图像比对评估，目标002火控雷达已被摧毁" },
+        { key: "001-destroy", group: "001", at: 4330.13, audio: ["assets/audio/045.wav", "assets/audio/046.wav"], text: "根据打击前后图像比对评估，目标001预警雷达已被摧毁" },
+        { key: "003-destroy", group: "003", at: 4820.00, audio: ["assets/audio/065.wav", "assets/audio/066.wav"], text: "根据打击前后图像比对评估，目标003已被摧毁。" }
       ];
       var timelineFired = {};
       var videoAiFired = {};
@@ -870,7 +870,7 @@ function make(variant) {
           var title = card.querySelector(".s6-video-title");
           if (title) title.textContent = k === "E" ? VIDEO_TITLES.E : VIDEO_TITLES.F;
         });
-        AI_EVENTS.push({ t: T003_ASSIGN, who: "ai", audio: ["assets/audio/055.wav", "assets/audio/056.wav"], text: "已分配「" + a + "号、" + r + "号」光电察打机<br>对目标003进行抵近侦察。" });
+        AI_EVENTS.push({ t: T003_ASSIGN, who: "ai", audio: ["assets/audio/058.wav", "assets/audio/059.wav"], text: "已分配「" + a + "号、" + r + "号」光电察打机<br>对目标003进行抵近侦察。" });
         AI_EVENTS.forEach(function (ev) {
           if (ev.t === T003_CONFIRM) ev.text = "接收目标003图像，识别确认为敌远程火箭发射车<br>由" + a + "号光电察打机执行攻击。";
         });
@@ -1198,8 +1198,8 @@ function make(variant) {
           if (timelineFired[rule.key]) return;
           if (!st.started || st.t + 1e-6 < rule.at) return;
           timelineFired[rule.key] = true;
-          AI_EVENTS.push({ t: rule.at, who: "ai", text: rule.text, timelineAi: true, group: rule.group });
-          if (rule.audio && rule.audio.length) playS6EventAudio(rule.audio);
+          AI_EVENTS.push({ t: rule.at, who: "ai", text: rule.text, audio: rule.audio || null, timelineAi: true, group: rule.group });
+
           if (rule.key === "002-destroy") { applyDestroyed("002", "A"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(17, rule.at); }
           if (rule.key === "001-destroy") { applyDestroyed("001", "C"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(14, rule.at); }
           if (rule.key === "003-destroy") { applyDestroyed("003", "E"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(assigned003 ? assigned003.attack : 9, rule.at); }
@@ -1312,13 +1312,15 @@ function make(variant) {
       }
       var aiChatEl = root.querySelector(".s6-chat-scroll");
       var aiLogEl = root.querySelector(".s6-ai-log");
-      var lastS6N = 0, s6EventQueue = [], s6EventBusy = false;
-      function startS6EventList(srcs) {
+      var lastS6N = 0, s6EventQueue = [], s6EventBusy = false, s6Sent = {};
+      /* item = { srcs, onStart }：onStart 在这一段真正开始播放时调用 → 气泡与语音同时出现 */
+      function startS6EventList(item) {
         var st = window.APP_STATE && window.APP_STATE.aiAudio && window.APP_STATE.aiAudio.s6;
         if (!st) return;
         var pre = window.APP_STATE.s6AudioPreload;
-        var idx = 0;
+        var srcs = item.srcs, idx = 0;
         s6EventBusy = true;
+        if (item.onStart) { try { item.onStart(); } catch (e) {} }
         function next() {
           if (idx >= srcs.length) {
             s6EventBusy = false;
@@ -1335,30 +1337,31 @@ function make(variant) {
         }
         next();
       }
-      function playS6EventAudio(srcs) {
-        if (!srcs) return;
-        var list = Array.isArray(srcs) ? srcs : [srcs];
-        if (s6EventBusy) s6EventQueue.push(list);
-        else startS6EventList(list);
+      function playS6EventAudio(srcs, onStart) {
+        var list = Array.isArray(srcs) ? srcs.slice() : (srcs ? [srcs] : []);
+        if (!list.length) { if (onStart) { try { onStart(); } catch (e) {} } return; }
+        var item = { srcs: list, onStart: onStart || null };
+        if (s6EventBusy) s6EventQueue.push(item);
+        else startS6EventList(item);
       }
       var T_JOIN = FL.T_LIFT + 90;
       var T_ARRIVE = Math.min.apply(null, FL.T_ARR || [T_JOIN]);
       var AI_EVENTS = [
-        { t: T_ARRIVE, who: "ai", audio: ["assets/audio/028.wav"], text: "各编组已经抵达任务区，开始执行侦察任务。" },
-        { t: T_SCAN, who: "ai", audio: ["assets/audio/029.wav", "assets/audio/030.wav"], text: "在“潜在目标部署区-2”扫描发现2个疑似雷达目标，已加入目标列表。" },
+        { t: T_ARRIVE, who: "ai", audio: ["assets/audio/030.wav"], text: "各编组已经抵达任务区，开始执行侦察任务。" },
+        { t: T_SCAN, who: "ai", audio: ["assets/audio/033.wav", "assets/audio/034.wav", "assets/audio/035.wav"], text: "在“潜在目标部署区-2”扫描发现2个疑似雷达目标，已加入目标列表。" },
         { t: T_SCAN, who: "ai", audio: ["assets/audio/031.wav", "assets/audio/032.wav"], text: "推荐行动方案：<br>向目标001预警雷达、目标002火控雷达<br>各派出两架光电察打机执行侦察和打击任务。" },
         { t: T_SCAN + 2, who: "user", text: "方案确认。" },
-        { t: FL.T_REASSIGN || 0, who: "ai", audio: ["assets/audio/033.wav", "assets/audio/034.wav"], text: "已分配14号、15号光电察打机<br>进行001预警雷达察打任务。" },
-        { t: FL.T_REASSIGN || 0, who: "ai", audio: ["assets/audio/035.wav", "assets/audio/036.wav"], text: "已分配17号、18号光电察打机<br>进行002火控雷达察打任务。" },
-        { t: FL.T_REPLAN || 0, who: "ai", audio: ["assets/audio/037.wav", "assets/audio/038.wav"], text: "对“潜在目标部署区-2”重新进行区域划分<br>6架光电察打机预计遍历时间9分钟。" },
-        { t: T_CONFIRM_002, who: "ai", audio: ["assets/audio/039.wav", "assets/audio/040.wav", "assets/audio/041.wav"], text: "接收目标002图像，识别确认为火控雷达<br>由14号光电察打机执行攻击，15号光电察打机进行毁伤评估" },
-        { t: T_CONFIRM_001, who: "ai", audio: ["assets/audio/044.wav", "assets/audio/045.wav", "assets/audio/046.wav"], text: "接收目标001图像，识别确认为预警雷达<br>由17号光电察打机执行攻击，18号光电察打机进行毁伤评估" },
-        { t: 4392.33, who: "ai", audio: ["assets/audio/049.wav", "assets/audio/050.wav"], text: "对“潜在目标部署区-2”重新进行区域划分<br>8架光电察打机预计遍历时间7分钟。" },
-        { t: 4500.00, who: "ai", audio: ["assets/audio/051.wav", "assets/audio/052.wav"], text: "雷达侦察机在“潜在目标部署区-1”GMTI模式搜索发现1个运动目标，已加入目标列表。" },
-        { t: 4500.00, who: "ai", audio: ["assets/audio/053.wav", "assets/audio/054.wav"], text: "推荐行动方案：<br>派出两架光电察打机对目标003进行侦察<br>目标确认后直接打击。" },
+        { t: FL.T_REASSIGN || 0, who: "ai", audio: ["assets/audio/036.wav", "assets/audio/037.wav"], text: "已分配14号、15号光电察打机<br>进行001预警雷达察打任务。" },
+        { t: FL.T_REASSIGN || 0, who: "ai", audio: ["assets/audio/038.wav", "assets/audio/039.wav"], text: "已分配17号、18号光电察打机<br>进行002火控雷达察打任务。" },
+        { t: FL.T_REPLAN || 0, who: "ai", audio: ["assets/audio/040.wav", "assets/audio/041.wav"], text: "对“潜在目标部署区-2”重新进行区域划分<br>6架光电察打机预计遍历时间9分钟。" },
+        { t: T_CONFIRM_002, who: "ai", audio: ["assets/audio/042.wav", "assets/audio/043.wav", "assets/audio/044.wav"], text: "接收目标002图像，识别确认为火控雷达<br>由14号光电察打机执行攻击，15号光电察打机进行毁伤评估" },
+        { t: T_CONFIRM_001, who: "ai", audio: ["assets/audio/047.wav", "assets/audio/048.wav", "assets/audio/049.wav"], text: "接收目标001图像，识别确认为预警雷达<br>由17号光电察打机执行攻击，18号光电察打机进行毁伤评估" },
+        { t: 4392.33, who: "ai", audio: ["assets/audio/052.wav", "assets/audio/053.wav"], text: "对“潜在目标部署区-2”重新进行区域划分<br>8架光电察打机预计遍历时间7分钟。" },
+        { t: 4500.00, who: "ai", audio: ["assets/audio/054.wav", "assets/audio/055.wav"], text: "雷达侦察机在“潜在目标部署区-1”GMTI模式搜索发现1个运动目标，已加入目标列表。" },
+        { t: 4500.00, who: "ai", audio: ["assets/audio/056.wav", "assets/audio/057.wav"], text: "推荐行动方案：<br>派出两架光电察打机对目标003进行侦察<br>目标确认后直接打击。" },
         { t: 4502.00, who: "user", text: "方案确认。" },
-        { t: 4508.00, who: "ai", audio: ["assets/audio/057.wav", "assets/audio/058.wav"], text: "对“潜在目标部署区-1”重新进行区域划分<br>8架光电察打机预计遍历时间7分钟。" },
-        { t: T003_CONFIRM, who: "ai", audio: ["assets/audio/059.wav", "assets/audio/060.wav", "assets/audio/061.wav"], text: "接收目标003图像，识别确认为敌远程火箭发射车<br>由9号光电察打机执行攻击。" }
+        { t: 4508.00, who: "ai", audio: ["assets/audio/060.wav", "assets/audio/061.wav"], text: "对“潜在目标部署区-1”重新进行区域划分<br>8架光电察打机预计遍历时间7分钟。" },
+        { t: T003_CONFIRM, who: "ai", audio: ["assets/audio/062.wav", "assets/audio/063.wav", "assets/audio/064.wav"], text: "接收目标003图像，识别确认为敌远程火箭发射车<br>由9号光电察打机执行攻击。" }
       ].filter(function (ev) { return ev.t > 0; }).sort(function (a, b) { return a.t - b.t; });
       function renderAiLog(t) {
         if (!aiLogEl) return;
@@ -1368,9 +1371,19 @@ function make(variant) {
         var sig = String(n) + ":" + String(sharedN);
         if (aiLogEl.getAttribute("data-n") === sig) return;
         aiLogEl.setAttribute("data-n", sig);
-        for (var j = lastS6N; j < n; j++) {
-          pushSharedAi("s6-" + j, AI_EVENTS[j].who, AI_EVENTS[j].text);
-          if (AI_EVENTS[j].audio) playS6EventAudio(AI_EVENTS[j].audio);
+        for (var j = 0; j < n; j++) {
+          var ev = AI_EVENTS[j];
+          var key = "s6-" + j + "@" + Math.round(ev.t * 100);
+          if (s6Sent[key]) continue;
+          s6Sent[key] = true;
+          if (ev.audio && ev.audio.length) {
+            (function (k, e) {
+              /* 气泡在“这段语音开始播放”的瞬间出现 */
+              playS6EventAudio(e.audio, function () { pushSharedAi(k, e.who, e.text); });
+            })(key, ev);
+          } else {
+            pushSharedAi(key, ev.who, ev.text);
+          }
         }
         lastS6N = Math.max(lastS6N, n);
         renderSharedAi(aiLogEl);
