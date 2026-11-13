@@ -71,7 +71,7 @@ function makeServer() {
           res.writeHead(404, { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" }); return res.end("404");
       }
       const ext = path.extname(f).toLowerCase();
-      const fresh = [".html", ".js", ".mjs", ".css", ".json"].indexOf(ext) >= 0;
+      const fresh = [".html", ".js", ".mjs", ".css", ".json", ".wav"].indexOf(ext) >= 0;  /* wav 也会被替换，不能缓存 */
       let body = buf;
       if (ext === ".html") body = Buffer.from(buf.toString("utf8").replace(/__V__/g, BUILD), "utf8");
       res.writeHead(200, {

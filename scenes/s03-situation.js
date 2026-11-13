@@ -121,15 +121,21 @@ function make(variant) {
     window.APP_STATE.s6DialogStarted = false;
   }
   window.resetScenarioAudio = resetScenarioAudio;
+  /* 音频 URL 加构建号：文件名不变时也能强制刷新，避免浏览器用旧缓存 */
+  function audioSrc(src) {
+    var v = window.__BUILD__;
+    if (!v) return src;
+    return src + (src.indexOf("?") < 0 ? "?" : "&") + "v=" + v;
+  }
   window.ensureScenarioAudioPreload = function () {
     window.APP_STATE = window.APP_STATE || {};
     if (window.APP_STATE.scenarioAudioPreload) return window.APP_STATE.scenarioAudioPreload;
     var preMap = {};
-    for (var i = 1; i <= 47; i++) {
+    for (var i = 1; i <= 63; i++) {
       var src = "assets/audio/" + ("00" + i).slice(-3) + ".wav";
-      var a = new Audio(src); a.preload = "auto"; a.load(); preMap[src] = a;
+      var a = new Audio(audioSrc(src)); a.preload = "auto"; a.load(); preMap[src] = a;
     }
-    window.APP_STATE.scenarioAudioPreload = { map: preMap, count: 47 };
+    window.APP_STATE.scenarioAudioPreload = { map: preMap, count: 63 };
     return window.APP_STATE.scenarioAudioPreload;
   };
   function scheduleStTask(st, delay, fn) {
@@ -187,36 +193,58 @@ function make(variant) {
         if (i >= dialogs.length) return;
         var it = dialogs[i];
         pushSharedAi(it.key, it.who, it.text);
-        if (!it.audio) { playNext(i + 1); return; }
-        var audio = preMap[it.audio] || new Audio(it.audio);
-        st.audios.push(audio);
-        audio.onended = function () { playNext(i + 1); };
-        var pr = audio.play(); if (pr && pr.catch) pr.catch(function () {});
+        var list = it.audio ? (Array.isArray(it.audio) ? it.audio.slice() : [it.audio]) : [];
+        (function step() {
+          if (!list.length) { playNext(i + 1); return; }
+          var src = list.shift();
+          var audio = preMap[src] || new Audio(audioSrc(src));
+          st.audios.push(audio);
+          audio.onended = step;
+          try { audio.currentTime = 0; } catch (e) {}
+          var pr = audio.play(); if (pr && pr.catch) pr.catch(function () { step(); });
+        })();
       };
       playNext(0);
       return;
     }
-    dialogs.forEach(function (it) {
-      scheduleStTask(st, Math.max(0, (it.at || 0) * 1000), function () { pushSharedAi(it.key, it.who, it.text); });
+    var pre = window.APP_STATE.scenarioAudioPreload;
+    var preMap = pre ? pre.map : {};
+    /* 队列播放：一句 = 一个气泡 + 它的音频（可能多段），上一段播完再出下一句，绝不叠音 */
+    var queue = dialogs.map(function (it) {
+      var raw = it.audio;
+      return { it: it, list: raw ? (Array.isArray(raw) ? raw.slice() : [raw]) : [] };
     });
-    audios.forEach(function (au) {
-      var srcs = au.srcs || [au.src];
-      var pre = window.APP_STATE.scenarioAudioPreload;
-      var preMap = pre ? pre.map : {};
-      scheduleStTask(st, Math.max(0, (au.at || 0) * 1000), function () {
-        var idx = 0;
-        function next() {
-          if (idx >= srcs.length) return;
-          var src = srcs[idx++];
-          var audio = preMap[src] || new Audio(src);
-          st.audios.push(audio);
-          audio.onended = function () { next(); };
-          audio.currentTime = 0;
-          var pr = audio.play(); if (pr && pr.catch) pr.catch(function () { next(); });
-        }
-        next();
+    function playItem(i) {
+      if (i >= queue.length) return;
+      var item = queue[i];
+      pushSharedAi(item.it.key, item.it.who, item.it.text);
+      (function step() {
+        if (!item.list.length) { playItem(i + 1); return; }
+        var src = item.list.shift();
+        var audio = preMap[src] || new Audio(audioSrc(src));
+        st.audios.push(audio);
+        try { audio.currentTime = 0; } catch (e) {}
+        audio.onended = step;
+        var pr = audio.play(); if (pr && pr.catch) pr.catch(function () { step(); });
+      })();
+    }
+    scheduleStTask(st, Math.max(0, (dialogs[0] && dialogs[0].at || 0) * 1000), function () { playItem(0); });
+    /* 没有逐条语音的配置：退回原来的整段顺序播放 */
+    if (!dialogs.some(function (d) { return d.audio; })) {
+      audios.forEach(function (au) {
+        var srcs = (au.srcs || [au.src]).slice();
+        scheduleStTask(st, Math.max(0, (au.at || 0) * 1000), function () {
+          (function next() {
+            if (!srcs.length) return;
+            var s0 = srcs.shift(); var audio = preMap[s0] || new Audio(audioSrc(s0));
+            st.audios.push(audio);
+            try { audio.currentTime = 0; } catch (e) {}
+            audio.onended = next;
+            var pr = audio.play(); if (pr && pr.catch) pr.catch(function () { next(); });
+          })();
+        });
       });
-    });
+    }
   }
   /* 区域（真实经纬度）—— 只服务平面版
      任务区：80 x 80 km（用户给定四角），中心 114.098 / 39.883
@@ -786,14 +814,19 @@ function make(variant) {
       var assigned003 = null;
       var mirrorGen = 0;
       var VIDEO_TITLES = { A: "17光电-攻击｜002火控雷达", B: "18光电-侦察｜002火控雷达", C: "14光电-攻击｜001预警雷达", D: "15光电-侦察｜001预警雷达", E: "09光电-攻击｜003运动目标", F: "10光电-侦察｜003运动目标" };
+      /* 攻击动画仍按视频进度（41 s）触发，但不再产生 AI 消息；
+         三条「已被摧毁」改为飞行时间轴触发（timelineRules）。 */
       var videoAiRules = [
-        { key: "002-attack", group: "002", video: videoA, at: 41, text: "17光电开始攻击" },
-        { key: "002-destroy", group: "002", video: videoB, at: 83, text: "智能毁伤评估，002火控雷达已被摧毁" },
-        { key: "001-attack", group: "001", video: videoC, at: 41, text: "14光电开始攻击" },
-        { key: "001-destroy", group: "001", video: videoD, at: 83, text: "智能毁伤评估，001预警雷达已被摧毁" },
-        { key: "003-attack", group: "003", video: videoE, at: 41, text: "09光电开始攻击" },
-        { key: "003-destroy", group: "003", video: videoF, at: 83, text: "智能毁伤评估，003运动目标已被摧毁。" }
+        { key: "002-attack", group: "002", video: videoA, at: 41, silent: true },
+        { key: "001-attack", group: "001", video: videoC, at: 41, silent: true },
+        { key: "003-attack", group: "003", video: videoE, at: 41, silent: true }
       ];
+      var timelineRules = [
+        { key: "002-destroy", group: "002", at: 4295.80, audio: ["assets/audio/047.wav", "assets/audio/048.wav"], text: "根据打击前后图像比对评估，目标002火控雷达已被摧毁" },
+        { key: "001-destroy", group: "001", at: 4330.13, audio: ["assets/audio/042.wav", "assets/audio/043.wav"], text: "根据打击前后图像比对评估，目标001预警雷达已被摧毁" },
+        { key: "003-destroy", group: "003", at: 4820.00, audio: ["assets/audio/062.wav", "assets/audio/063.wav"], text: "根据打击前后图像比对评估，目标003已被摧毁。" }
+      ];
+      var timelineFired = {};
       var videoAiFired = {};
       var photoResCol = root.querySelector(".s6-col");
       var opticalLost = 0;
@@ -837,12 +870,12 @@ function make(variant) {
           var title = card.querySelector(".s6-video-title");
           if (title) title.textContent = k === "E" ? VIDEO_TITLES.E : VIDEO_TITLES.F;
         });
-        videoAiRules.forEach(function (rule) {
-          if (rule.key === "003-attack") rule.text = a + "光电开始攻击";
+        AI_EVENTS.push({ t: T003_ASSIGN, who: "ai", audio: ["assets/audio/055.wav", "assets/audio/056.wav"], text: "已分配「" + a + "号、" + r + "号」光电察打机<br>对目标003进行抵近侦察。" });
+        AI_EVENTS.forEach(function (ev) {
+          if (ev.t === T003_CONFIRM) ev.text = "接收目标003图像，识别确认为敌远程火箭发射车<br>由" + a + "号光电察打机执行攻击。";
         });
-        AI_EVENTS.push({ t: T003_ASSIGN, who: "ai", text: "已分配" + a + "号、" + r + "号光电无人机进行003运动目标察打任务。" });
-        AI_EVENTS.push({ t: FL.T003_TRACK_ARRIVE, who: "系统", t003: true, text: a + "号、" + r + "号光电无人机到达目标后方，开始跟踪。" });
-        AI_EVENTS.push({ t: FL.T003_ORBIT_START + 6, who: "系统", t003: true, text: "打击完成，" + r + "号光电无人机转入盘旋确认。" });
+        AI_EVENTS.push({ t: FL.T003_TRACK_ARRIVE, who: "系统", t003: true, text: "「" + a + "号、" + r + "号」光电无人机到达目标后方，开始跟踪。" });
+        AI_EVENTS.push({ t: FL.T003_ORBIT_START + 6, who: "系统", t003: true, text: a + "号光电察打机打击完成，" + r + "号光电察打机转入盘旋进行毁伤评估。" });
         AI_EVENTS.sort(function (x, y) { return x.t - y.t; });
         renderAiLog(t);
       }
@@ -927,8 +960,8 @@ function make(variant) {
       function resetExtraVideos() {
         extraStarted = false;
         delete videoAiFired["001-attack"];
-        delete videoAiFired["001-destroy"];
-        AI_EVENTS = AI_EVENTS.filter(function (ev) { return !(ev.videoAi && ev.group === "001"); });
+        delete timelineFired["001-destroy"];
+        AI_EVENTS = AI_EVENTS.filter(function (ev) { return !(ev.videoAi && ev.group === "001") && !(ev.timelineAi && ev.group === "001"); });
         if (destroyedState["001"]) { destroyedState["001"] = false; opticalLost = Math.max(0, opticalLost - 1); updateOpticalResources(); }
         removedChannels.C = false;
         removedChannels.D = false;
@@ -944,8 +977,8 @@ function make(variant) {
       function resetThirdVideos() {
         thirdStarted = false;
         delete videoAiFired["003-attack"];
-        delete videoAiFired["003-destroy"];
-        AI_EVENTS = AI_EVENTS.filter(function (ev) { return !(ev.videoAi && ev.group === "003"); });
+        delete timelineFired["003-destroy"];
+        AI_EVENTS = AI_EVENTS.filter(function (ev) { return !(ev.videoAi && ev.group === "003") && !(ev.timelineAi && ev.group === "003"); });
         if (destroyedState["003"]) { destroyedState["003"] = false; opticalLost = Math.max(0, opticalLost - 1); updateOpticalResources(); }
         removedChannels.E = false;
         removedChannels.F = false;
@@ -964,7 +997,8 @@ function make(variant) {
         assigned003 = null;
         if (window.FLIGHT06 && FLIGHT06.resetTracking) FLIGHT06.resetTracking();
         videoAiFired = {};
-        AI_EVENTS = AI_EVENTS.filter(function (ev) { return !ev.videoAi && !ev.t003; });
+        timelineFired = {};
+        AI_EVENTS = AI_EVENTS.filter(function (ev) { return !ev.videoAi && !ev.t003 && !ev.timelineAi; });
         mirrorGen++;
         pauseVideos();
         trackerA.stop();
@@ -982,7 +1016,6 @@ function make(variant) {
           card.style.display = (k === "A" || k === "B") ? "" : "none";
         });
         VIDEO_TITLES.E = "09光电-攻击｜003运动目标"; VIDEO_TITLES.F = "10光电-侦察｜003运动目标";
-        videoAiRules.forEach(function (rule) { if (rule.key === "003-attack") rule.text = "09光电开始攻击"; });
         resetDestroyedState();
         if (window.FLIGHT06 && FLIGHT06.resetAttacks) FLIGHT06.resetAttacks();
         expanded = [];
@@ -1158,19 +1191,35 @@ function make(variant) {
         if (!v) return;
         v.addEventListener("ended", function () { blackenAttack(key); });
       });
+      /* 三条毁伤消息：按飞行时间轴触发（不再看视频进度） */
+      function checkTimelineRules() {
+        var changed = false;
+        timelineRules.forEach(function (rule) {
+          if (timelineFired[rule.key]) return;
+          if (!st.started || st.t + 1e-6 < rule.at) return;
+          timelineFired[rule.key] = true;
+          AI_EVENTS.push({ t: rule.at, who: "ai", text: rule.text, timelineAi: true, group: rule.group });
+          if (rule.audio && rule.audio.length) playS6EventAudio(rule.audio);
+          if (rule.key === "002-destroy") { applyDestroyed("002", "A"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(17, rule.at); }
+          if (rule.key === "001-destroy") { applyDestroyed("001", "C"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(14, rule.at); }
+          if (rule.key === "003-destroy") { applyDestroyed("003", "E"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(assigned003 ? assigned003.attack : 9, rule.at); }
+          changed = true;
+        });
+        if (changed) {
+          AI_EVENTS.sort(function (a, b) { return a.t - b.t; });
+          renderAiLog(st.t);
+        }
+      }
       function checkVideoAi() {
         var changed = false;
         videoAiRules.forEach(function (rule) {
           if (videoAiFired[rule.key]) return;
           if (rule.video && (rule.video.currentTime >= rule.at || rule.video.ended)) {
             videoAiFired[rule.key] = true;
-            AI_EVENTS.push({ t: st.t, who: "ai", text: rule.text, videoAi: true, group: rule.group });
+            if (!rule.silent) AI_EVENTS.push({ t: st.t, who: "ai", text: rule.text, videoAi: true, group: rule.group });
             if (rule.key === "002-attack" && window.FLIGHT06 && FLIGHT06.startAttack) FLIGHT06.startAttack(17, st.t);
             if (rule.key === "001-attack" && window.FLIGHT06 && FLIGHT06.startAttack) FLIGHT06.startAttack(14, st.t);
-            if (rule.key === "002-destroy") { applyDestroyed("002", "A"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(17, st.t); }
-            if (rule.key === "001-destroy") { applyDestroyed("001", "C"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(14, st.t); }
             if (rule.key === "003-attack" && window.FLIGHT06 && FLIGHT06.startAttack) FLIGHT06.startAttack(assigned003 ? assigned003.attack : 9, st.t, movingTargetPos(SUSPECTS[2], st.t + 27));
-            if (rule.key === "003-destroy") { applyDestroyed("003", "E"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(assigned003 ? assigned003.attack : 9, st.t); }
             changed = true;
           }
         });
@@ -1239,6 +1288,7 @@ function make(variant) {
           resetThirdVideos();
         }
         updateSmallBarVisibility();
+        checkTimelineRules();
         checkVideoAi();
         if (videoA && videoA.ended && !removedChannels.A && !videoA.__black) blackenAttack("A");
         if (videoB && videoB.ended && !removedChannels.B) closeVideoChannel("B");
@@ -1276,7 +1326,7 @@ function make(variant) {
             return;
           }
           var src = srcs[idx++];
-          var audio = pre && pre.map && pre.map[src] ? pre.map[src] : new Audio(src);
+          var audio = pre && pre.map && pre.map[src] ? pre.map[src] : new Audio(audioSrc(src));
           st.audios.push(audio);
           audio.onended = next;
           audio.currentTime = 0;
@@ -1294,22 +1344,21 @@ function make(variant) {
       var T_JOIN = FL.T_LIFT + 90;
       var T_ARRIVE = Math.min.apply(null, FL.T_ARR || [T_JOIN]);
       var AI_EVENTS = [
-        { t: T_ARRIVE, who: "ai", audio: ["assets/audio/026.wav"], text: "机群抵达任务区，开始分区侦察。" },
-        { t: T_SCAN, who: "ai", audio: ["assets/audio/027.wav","assets/audio/028.wav"], text: "在“潜在目标部署区-2”扫描发现2个疑似雷达目标，已加入目标档案。" },
-        { t: T_SCAN, who: "ai", audio: ["assets/audio/029.wav","assets/audio/030.wav"], text: "建议采用方案：为001预警雷达、002火控雷达两个疑似目标各派出两架光电无人机执行侦察和打击任务。" },
+        { t: T_ARRIVE, who: "ai", audio: ["assets/audio/028.wav"], text: "各编组已经抵达任务区，开始执行侦察任务。" },
+        { t: T_SCAN, who: "ai", audio: ["assets/audio/029.wav", "assets/audio/030.wav"], text: "在“潜在目标部署区-2”扫描发现2个疑似雷达目标，已加入目标列表。" },
+        { t: T_SCAN, who: "ai", audio: ["assets/audio/031.wav", "assets/audio/032.wav"], text: "推荐行动方案：<br>向目标001预警雷达、目标002火控雷达<br>各派出两架光电察打机执行侦察和打击任务。" },
         { t: T_SCAN + 2, who: "user", text: "方案确认。" },
-        { t: FL.T_REASSIGN || 0, who: "ai", audio: ["assets/audio/031.wav","assets/audio/032.wav"], text: "已分配14号、15号光电无人机进行001预警雷达察打任务。" },
-        { t: FL.T_REASSIGN || 0, who: "ai", audio: ["assets/audio/033.wav","assets/audio/034.wav"], text: "已分配17号、18号光电无人机进行002火控雷达察打任务。" },
-        { t: FL.T_REPLAN || 0, who: "ai", audio: ["assets/audio/035.wav"], text: "重新规划“潜在目标部署区-2”剩余的6架光电无人机侦察方式。" },
-        { t: T_CONFIRM_002, who: "ai", audio: ["assets/audio/036.wav"], text: "智能评估对照，确认002火控雷达" },
-        { t: T_CONFIRM_001, who: "ai", audio: ["assets/audio/037.wav"], text: "智能评估对照，确认001预警雷达" },
-        { t: 4392.33, who: "ai", audio: ["assets/audio/038.wav"], text: "重新规划“潜在目标部署区-2”剩余的8架光电无人机侦察方式。" },
-        { t: 4508.00, who: "ai", audio: ["assets/audio/043.wav"], text: "重新规划“潜在目标部署区-1”剩余的8架光电无人机侦察方式。" },
-        { t: 4825.20, who: "ai", audio: ["assets/audio/045.wav","assets/audio/046.wav","assets/audio/047.wav"], text: "003运动目标已确认摧毁，02号光电无人机返回“潜在目标部署区-1”，重新规划9架光电无人机侦察方式。" },
-        { t: 4500.00, who: "ai", audio: ["assets/audio/039.wav","assets/audio/040.wav"], text: "在“潜在目标部署区-1”GMTI扫描发现1个运动目标，已加入目标档案。" },
-        { t: 4500.00, who: "ai", audio: ["assets/audio/041.wav","assets/audio/042.wav"], text: "建议采用方案：为003运动目标派出两架光电无人机执行侦察和打击任务。" },
+        { t: FL.T_REASSIGN || 0, who: "ai", audio: ["assets/audio/033.wav", "assets/audio/034.wav"], text: "已分配14号、15号光电察打机<br>进行001预警雷达察打任务。" },
+        { t: FL.T_REASSIGN || 0, who: "ai", audio: ["assets/audio/035.wav", "assets/audio/036.wav"], text: "已分配17号、18号光电察打机<br>进行002火控雷达察打任务。" },
+        { t: FL.T_REPLAN || 0, who: "ai", audio: ["assets/audio/037.wav", "assets/audio/038.wav"], text: "对“潜在目标部署区-2”重新进行区域划分<br>6架光电察打机预计遍历时间9分钟。" },
+        { t: T_CONFIRM_002, who: "ai", audio: ["assets/audio/039.wav", "assets/audio/040.wav", "assets/audio/041.wav"], text: "接收目标002图像，识别确认为火控雷达<br>由14号光电察打机执行攻击，15号光电察打机进行毁伤评估" },
+        { t: T_CONFIRM_001, who: "ai", audio: ["assets/audio/044.wav", "assets/audio/045.wav", "assets/audio/046.wav"], text: "接收目标001图像，识别确认为预警雷达<br>由17号光电察打机执行攻击，18号光电察打机进行毁伤评估" },
+        { t: 4392.33, who: "ai", audio: ["assets/audio/049.wav", "assets/audio/050.wav"], text: "对“潜在目标部署区-2”重新进行区域划分<br>8架光电察打机预计遍历时间7分钟。" },
+        { t: 4500.00, who: "ai", audio: ["assets/audio/051.wav", "assets/audio/052.wav"], text: "雷达侦察机在“潜在目标部署区-1”GMTI模式搜索发现1个运动目标，已加入目标列表。" },
+        { t: 4500.00, who: "ai", audio: ["assets/audio/053.wav", "assets/audio/054.wav"], text: "推荐行动方案：<br>派出两架光电察打机对目标003进行侦察<br>目标确认后直接打击。" },
         { t: 4502.00, who: "user", text: "方案确认。" },
-        { t: T003_CONFIRM, who: "ai", audio: ["assets/audio/044.wav"], text: "智能评估对照，确认003雷达目标" }
+        { t: 4508.00, who: "ai", audio: ["assets/audio/057.wav", "assets/audio/058.wav"], text: "对“潜在目标部署区-1”重新进行区域划分<br>8架光电察打机预计遍历时间7分钟。" },
+        { t: T003_CONFIRM, who: "ai", audio: ["assets/audio/059.wav", "assets/audio/060.wav", "assets/audio/061.wav"], text: "接收目标003图像，识别确认为敌远程火箭发射车<br>由9号光电察打机执行攻击。" }
       ].filter(function (ev) { return ev.t > 0; }).sort(function (a, b) { return a.t - b.t; });
       function renderAiLog(t) {
         if (!aiLogEl) return;
