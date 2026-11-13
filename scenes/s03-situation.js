@@ -175,6 +175,27 @@ function make(variant) {
       });
     }
   };
+  /* 离开本屏：停掉该屏所有语音（正在播的 + 还没轮到的排队任务），之后不再重播 */
+  function stopScenarioDialog(phase) {
+    window.APP_STATE = window.APP_STATE || {};
+    var st = window.APP_STATE.aiAudio && window.APP_STATE.aiAudio[phase];
+    if (!st) return;
+    (st.tasks || []).forEach(function (t) {
+      if (t.id) { clearTimeout(t.id); t.id = null; }
+      t.done = true;
+    });
+    st.tasks = [];
+    (st.audios || []).forEach(function (a) {
+      try { a.onended = null; a.pause(); a.currentTime = 0; } catch (e) {}
+    });
+    st.audios = [];
+    st.paused = true;
+    st.started = true;          /* 再次进入该屏也不重播 */
+  }
+  window.stopScenarioDialog = stopScenarioDialog;
+
+  var s6DialogGen = 0;
+  window.__s6DialogAbort = function () { s6DialogGen++; };
   function startScenarioDialog(phase) {
     var cfg = window.getSelectedScenario ? window.getSelectedScenario() : null;
     if (!cfg) return;
@@ -189,7 +210,9 @@ function make(variant) {
     if (phase === "s6" && dialogs.length) {
       var pre = window.APP_STATE.s6AudioPreload;
       var preMap = pre && pre.id === cfg.id ? pre.map : {};
+      var gen = s6DialogGen;
       var playNext = function (i) {
+        if (gen !== s6DialogGen) return;      /* 已跳转：旧的开场语音链作废 */
         if (i >= dialogs.length) return;
         var it = dialogs[i];
         pushSharedAi(it.key, it.who, it.text);
@@ -718,8 +741,39 @@ function make(variant) {
         return [s.move.start[0] + (dist * Math.sin(a)) / MAP_M_LON,
                 s.move.start[1] + (dist * Math.cos(a)) / MAP_M_LAT];
       }
+      /* 三条毁伤的时刻（与 AI 事件同一时间），目标颜色/视频窗口/资源数都按它重算 */
+      var DESTROY_T = { "002": 4295.80, "001": 4330.13, "003": 4820.00 };
+      var DESTROY_CHANNEL = { "002": "A", "001": "C", "003": "E" };
+      function syncDestroyedToTime(t) {
+        var lost = 0;
+        ["001", "002", "003"].forEach(function (no) {
+          var d = t + 1e-6 >= DESTROY_T[no];
+          destroyedState[no] = d;
+          if (d) lost++;
+          var key = DESTROY_CHANNEL[no];
+          if (d) {
+            if (!removedChannels[key]) {
+              removedChannels[key] = true;
+              var v = channelOf(key);
+              if (v) { v.__dead = true; try { v.pause(); } catch (e) {} }
+              var card = cardOf(key);
+              if (card) card.style.display = "none";
+              updateSmallBarVisibility();
+            }
+          } else if (removedChannels[key]) {
+            removedChannels[key] = false;
+            var v2 = channelOf(key);
+            if (v2) v2.__dead = false;
+            var card2 = cardOf(key);
+            if (card2) card2.style.display = "";
+            updateSmallBarVisibility();
+          }
+        });
+        if (lost !== opticalLost) { opticalLost = lost; updateOpticalResources(); }
+      }
       function renderTargetState(t) {
         var on = st.started && t >= T_SCAN;
+        if (on) syncDestroyedToTime(t);
         if (!on) {
           targetOn = false;
           targetItems.forEach(function (el) { el.style.display = "none"; });
@@ -757,7 +811,7 @@ function make(variant) {
           }
           visibleCount++;
           var confirmed = t >= s.confirmAt;
-          var destroyed = !!destroyedState[s.no];
+          var destroyed = t + 1e-6 >= DESTROY_T[s.no];
           var col = (confirmed || destroyed) ? "#ef4444" : "#fbbf24";
           var mp = null;
           if (s.move && s.targetLabel) {
@@ -1193,22 +1247,23 @@ function make(variant) {
       });
       /* 三条毁伤消息：按飞行时间轴触发（不再看视频进度） */
       function checkTimelineRules() {
-        var changed = false;
+        if (!st.started) return;
         timelineRules.forEach(function (rule) {
-          if (timelineFired[rule.key]) return;
-          if (!st.started || st.t + 1e-6 < rule.at) return;
-          timelineFired[rule.key] = true;
-          AI_EVENTS.push({ t: rule.at, who: "ai", text: rule.text, audio: rule.audio || null, timelineAi: true, group: rule.group });
-
-          if (rule.key === "002-destroy") { applyDestroyed("002", "A"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(17, rule.at); }
-          if (rule.key === "001-destroy") { applyDestroyed("001", "C"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(14, rule.at); }
-          if (rule.key === "003-destroy") { applyDestroyed("003", "E"); if (window.FLIGHT06 && FLIGHT06.endAttack) FLIGHT06.endAttack(assigned003 ? assigned003.attack : 9, rule.at); }
-          changed = true;
+          var crossed = st.t + 1e-6 >= rule.at;
+          if (crossed && !timelineFired[rule.key]) {
+            timelineFired[rule.key] = true;
+            if (window.FLIGHT06 && FLIGHT06.endAttack) {
+              var drone = rule.group === "002" ? 17 : rule.group === "001" ? 14 : (assigned003 ? assigned003.attack : 9);
+              FLIGHT06.endAttack(drone, rule.at);
+            }
+          } else if (!crossed && timelineFired[rule.key]) {
+            timelineFired[rule.key] = false;
+            if (window.FLIGHT06 && FLIGHT06.resetAttack) {
+              var drone2 = rule.group === "002" ? 17 : rule.group === "001" ? 14 : (assigned003 ? assigned003.attack : 9);
+              FLIGHT06.resetAttack(drone2);
+            }
+          }
         });
-        if (changed) {
-          AI_EVENTS.sort(function (a, b) { return a.t - b.t; });
-          renderAiLog(st.t);
-        }
       }
       function checkVideoAi() {
         var changed = false;
@@ -1227,6 +1282,33 @@ function make(variant) {
           AI_EVENTS.sort(function (a, b) { return a.t - b.t; });
           renderAiLog(st.t);
         }
+      }
+      function videoStartOf(k) {
+        return (k === "A" || k === "B") ? T_VIDEO_002 : (k === "C" || k === "D") ? T_EXTRA_VIDEO : T003_VIDEO;
+      }
+      function reopenChannelCard(k) {
+        removedChannels[k] = false;
+        var v = channelOf(k);
+        if (v) { v.__dead = false; v.__black = false; }
+        var card = cardOf(k);
+        if (card) card.style.display = "";
+        try { paintKey(k); } catch (e) {}
+      }
+      function seekVideosTo(t, play) {
+        [["A", videoA], ["B", videoB], ["C", videoC], ["D", videoD], ["E", videoE], ["F", videoF]].forEach(function (pair) {
+          var k = pair[0], v = pair[1];
+          if (!v) return;
+          var s0 = videoStartOf(k);
+          if (t + 1e-6 < s0) { try { v.pause(); v.currentTime = 0; } catch (e) {} return; }
+          var mt = Math.max(0, t - s0), dur = isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
+          if (dur) mt = Math.min(mt, Math.max(0, dur - 0.05));
+          var destroyedKey = (k === "A" && t + 1e-6 >= DESTROY_T["002"]) || (k === "C" && t + 1e-6 >= DESTROY_T["001"]) || (k === "E" && t + 1e-6 >= DESTROY_T["003"]);
+          if (!destroyedKey && removedChannels[k]) reopenChannelCard(k);
+          try { v.currentTime = mt; } catch (e) {}
+          v.__frozen = false;
+          v.__black = false;
+          if (play && !destroyedKey) { var pr = v.play(); if (pr && pr.catch) pr.catch(function () {}); } else { try { v.pause(); } catch (e2) {} }
+        });
       }
       function renderVideos(t) {
         if (!smallBar) return;
@@ -1361,32 +1443,60 @@ function make(variant) {
         { t: 4500.00, who: "ai", audio: ["assets/audio/056.wav", "assets/audio/057.wav"], text: "推荐行动方案：<br>派出两架光电察打机对目标003进行侦察<br>目标确认后直接打击。" },
         { t: 4502.00, who: "user", text: "方案确认。" },
         { t: 4508.00, who: "ai", audio: ["assets/audio/060.wav", "assets/audio/061.wav"], text: "对“潜在目标部署区-1”重新进行区域划分<br>8架光电察打机预计遍历时间7分钟。" },
-        { t: T003_CONFIRM, who: "ai", audio: ["assets/audio/062.wav", "assets/audio/063.wav", "assets/audio/064.wav"], text: "接收目标003图像，识别确认为敌远程火箭发射车<br>由9号光电察打机执行攻击。" }
+        { t: T003_CONFIRM, who: "ai", audio: ["assets/audio/062.wav", "assets/audio/063.wav", "assets/audio/064.wav"], text: "接收目标003图像，识别确认为敌远程火箭发射车<br>由9号光电察打机执行攻击。" },
+        { t: 4295.80, who: "ai", audio: ["assets/audio/050.wav", "assets/audio/051.wav"], text: "根据打击前后图像比对评估，目标002火控雷达已被摧毁" },
+        { t: 4330.13, who: "ai", audio: ["assets/audio/045.wav", "assets/audio/046.wav"], text: "根据打击前后图像比对评估，目标001预警雷达已被摧毁" },
+        { t: 4820.00, who: "ai", audio: ["assets/audio/065.wav", "assets/audio/066.wav"], text: "根据打击前后图像比对评估，目标003已被摧毁。" }
       ].filter(function (ev) { return ev.t > 0; }).sort(function (a, b) { return a.t - b.t; });
+      function aiMsgHtml(who, text) {
+        who = who || "ai";
+        return '<div class="s6-msg ' + who + '"><div class="s6-avatar">' + (who === "user" ? "用户" : "AI") + '</div><div class="s6-bubble">' + text + '</div></div>';
+      }
+      var prevLogT = -1;
+      /* 向前播放跨过事件时刻时才起播该事件的语音；回退/跳转不补播 */
+      function pumpEventAudio(t, prevT) {
+        if (prevT < 0 || t <= prevT + 1e-6) return;
+        AI_EVENTS.forEach(function (ev, i) {
+          if (!ev.audio || !ev.audio.length) return;
+          if (!(prevT + 1e-6 < ev.t && t + 1e-6 >= ev.t)) return;
+          var key = "s6a-" + i + "@" + Math.round(ev.t * 100);
+          if (s6Sent[key]) return;
+          s6Sent[key] = true;
+          playS6EventAudio(ev.audio, null);
+        });
+      }
+      function pauseEventAudio() {
+        var st6 = window.APP_STATE && window.APP_STATE.aiAudio && window.APP_STATE.aiAudio.s6;
+        if (st6) (st6.audios || []).forEach(function (a) { try { a.pause(); } catch (e) {} });
+      }
+      /* 跳到 t：清空旧语音队列与正在播的音频；≤t 的事件标记为已处理（不补播），>t 的重新可播 */
+      function stopEventAudio(t) {
+        var st6 = window.APP_STATE && window.APP_STATE.aiAudio && window.APP_STATE.aiAudio.s6;
+        if (st6) {
+          (st6.audios || []).forEach(function (a) { try { a.pause(); a.currentTime = 0; } catch (e) {} });
+          st6.audios = [];
+        }
+        s6EventQueue = []; s6EventBusy = false;
+        if (window.__s6DialogAbort) window.__s6DialogAbort();
+        AI_EVENTS.forEach(function (ev, i) {
+          var key = "s6a-" + i + "@" + Math.round(ev.t * 100);
+          if (t + 1e-6 >= ev.t) s6Sent[key] = true; else delete s6Sent[key];
+        });
+      }
       function renderAiLog(t) {
         if (!aiLogEl) return;
-        var n = 0;
-        for (var i = 0; i < AI_EVENTS.length; i++) if (t + 1e-6 >= AI_EVENTS[i].t) n++;
-        var sharedN = sharedAiMessages().length;
-        var sig = String(n) + ":" + String(sharedN);
+        var inherited = sharedAiMessages();   /* SH-04/05 + 本屏开场（开场按语音顺序入场，不随进度条回退） */
+        var html = "", n = 0, i;
+        for (i = 0; i < inherited.length; i++) html += aiMsgHtml(inherited[i].who, inherited[i].text);
+        for (i = 0; i < AI_EVENTS.length; i++) {
+          if (t + 1e-6 >= AI_EVENTS[i].t) { html += aiMsgHtml(AI_EVENTS[i].who, AI_EVENTS[i].text); n++; }
+        }
+        var sig = n + ":" + inherited.length;
         if (aiLogEl.getAttribute("data-n") === sig) return;
         aiLogEl.setAttribute("data-n", sig);
-        for (var j = 0; j < n; j++) {
-          var ev = AI_EVENTS[j];
-          var key = "s6-" + j + "@" + Math.round(ev.t * 100);
-          if (s6Sent[key]) continue;
-          s6Sent[key] = true;
-          if (ev.audio && ev.audio.length) {
-            (function (k, e) {
-              /* 气泡在“这段语音开始播放”的瞬间出现 */
-              playS6EventAudio(e.audio, function () { pushSharedAi(k, e.who, e.text); });
-            })(key, ev);
-          } else {
-            pushSharedAi(key, ev.who, ev.text);
-          }
-        }
-        lastS6N = Math.max(lastS6N, n);
-        renderSharedAi(aiLogEl);
+        aiLogEl.innerHTML = html;
+        var sc = aiLogEl.closest(".s6-chat-scroll");
+        if (sc) sc.scrollTop = (n + inherited.length) <= 1 ? 0 : sc.scrollHeight;
       }
 
       function fmt(s) { var m = Math.floor(s / 60), ss = Math.floor(s % 60); var mm = m < 10 ? "0" + m : String(m); return mm + ":" + ("0" + ss).slice(-2); }
@@ -1425,15 +1535,18 @@ function make(variant) {
         videoJump.className = "s6-jump";
         videoJump.style.left = (((T_VIDEO_002 - 10) / FL.TOTAL) * 100).toFixed(4) + "%";
         videoJump.innerHTML = "<b class=\"s6-lb-text\">光电察打</b>";
-        videoJump.addEventListener("click", function () { st.t = Math.max(0, T_VIDEO_002 - 10); push(); });
+        videoJump.addEventListener("click", function () { st.t = Math.max(0, T_VIDEO_002 - 10); prevLogT = st.t; push(); syncMediaToTime(st.t); });
         segLbls.appendChild(videoJump);
       })();
 
       function push() {
         if (!st.started) { renderAiLog(-1); renderTargetState(-1); renderVideos(-1); map.fleet("fleet", []); map.trails("trails", []); if (map.tracks && FL.tracks) map.tracks("tracks", FL.tracks(FL.T_TRACKS).map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.pts }; })); if (map.scan) map.scan("scan", []); if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); } if (map.beam) map.beam("sbeam", []); if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); } paint(); return; }
+        var pT = prevLogT;
+        prevLogT = st.t;
         renderAiLog(st.t);
+        if (!dragging) pumpEventAudio(st.t, pT);
         renderTargetState(st.t);
-        renderVideos(st.t);
+        if (!dragging) renderVideos(st.t);
         if (map.fan && FL.fans) {
           var fs0 = FL.fans(st.t);
           map.fan("rfan", fs0.filter(function (f) { return f.kind === "radar"; }).map(function (s) {
@@ -1501,15 +1614,44 @@ function make(variant) {
         push();
       }
       var dragging = false;
-      bar.addEventListener("pointerdown", function (ev) { dragging = true; try { bar.setPointerCapture(ev.pointerId); } catch (e) {} seekFromEvent(ev); });
+      function flushOpeningBubbles() {
+        var cfg = window.getSelectedScenario && window.getSelectedScenario();
+        if (!cfg || !cfg.s6Dialog) return;
+        cfg.s6Dialog.forEach(function (it) { pushSharedAi(it.key, it.who, it.text); });
+      }
+      function syncMediaToTime(t) {
+        flushOpeningBubbles();        /* 跳转后开场台词直接补齐（不补播语音） */
+        renderVideos(t);              /* 显隐/reset（含 < 视频起点时隐藏） */
+        seekVideosTo(t, !!st.run);    /* 视频跳到对应画面 */
+        renderTargetState(t);         /* 目标颜色/窗口/资源数按时间重算 */
+        stopEventAudio(t);            /* 语音：清队列，等下一个事件 */
+        prevLogT = t;
+        renderAiLog(t);
+      }
+      function beginDragMedia() {
+        [videoA, videoB, videoC, videoD, videoE, videoF].forEach(function (v) { if (v) { try { v.pause(); } catch (e) {} } });
+        pauseEventAudio();
+      }
+      bar.addEventListener("pointerdown", function (ev) {
+        if (!st.started) st.started = true;     /* 还没点“开始”也能直接拖动预览 */
+        dragging = true;
+        try { bar.setPointerCapture(ev.pointerId); } catch (e) {}
+        beginDragMedia();
+        seekFromEvent(ev);
+      });
       bar.addEventListener("pointermove", function (ev) { if (dragging) seekFromEvent(ev); });
-      bar.addEventListener("pointerup", function () { dragging = false; });
-      bar.addEventListener("pointercancel", function () { dragging = false; });
+      function endDrag() {
+        if (!dragging) return;
+        dragging = false;
+        syncMediaToTime(st.t);
+      }
+      bar.addEventListener("pointerup", endDrag);
+      bar.addEventListener("pointercancel", endDrag);
 
       function loop(now) {
         if (st.dead) return;                  /* 已退场：不再续命 */
         requestAnimationFrame(loop);
-        if (!st.run || !root.classList.contains("on")) { st.last = now; return; }
+        if (dragging || !st.run || !root.classList.contains("on")) { st.last = now; return; }
         if (!st.last) { st.last = now; return; }
         var dt = Math.min(0.25, (now - st.last) / 1000);
         st.last = now;
@@ -2217,7 +2359,14 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
 
   return {
     build: build, render: render, onShow: onShow, usesMap: true,
-    onHide: function (e) { if (hideHook) { try { hideHook(); } catch (err) {} } clearAreaGraphics(e); }
+    onHide: function (e) {
+      if (hideHook) { try { hideHook(); } catch (err) {} }
+      clearAreaGraphics(e);
+      var v = e && e.variant;
+      if (v === "mission") stopScenarioDialog("s4");
+      else if (v === "plan") stopScenarioDialog("s5");
+      else if (v === "frame") stopScenarioDialog("s6");
+    }
   };
 }
 
