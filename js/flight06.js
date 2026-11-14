@@ -8,7 +8,7 @@
    - ewar (4): 2 south race tracks outside zone-2, 2 each, half-lap apart
    - comm: 1 relay between the two zones, other 3 evenly split on assembly->mid corridor */
 window.FLIGHT06 = (function () {
-  var TOTAL = 9000, V = 50, T_LIFT = 20, TOFF = 90;
+  var TOTAL = 4980, V = 50, T_LIFT = 20, TOFF = 90;   /* 83:00：末条事件 4824（80:24），之后留 2.6 分钟收尾 */
   var TJOIN = T_LIFT + TOFF;                    /* park -> route start handover */
   var HIST_DT = 5, HIST_N = 60;                 /* 300 秒历史，5 秒一点 */
   var M_LAT = 111030, M_LON = 111320 * Math.cos(39.85 * Math.PI / 180);
