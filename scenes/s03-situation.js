@@ -127,16 +127,30 @@ function make(variant) {
     if (!v) return src;
     return src + (src.indexOf("?") < 0 ? "?" : "&") + "v=" + v;
   }
+  var AUDIO_DUR = {};      /* src -> 真实时长（blob 解码后立即得到） */
+  window.audioBlobDur = function (src) { return AUDIO_DUR[src] || 0; };
   window.ensureScenarioAudioPreload = function () {
     window.APP_STATE = window.APP_STATE || {};
     if (window.APP_STATE.scenarioAudioPreload) return window.APP_STATE.scenarioAudioPreload;
-    var preMap = {};
-    for (var i = 1; i <= 66; i++) {
-      var src = "assets/audio/" + ("00" + i).slice(-3) + ".wav";
-      var a = new Audio(audioSrc(src)); a.preload = "metadata"; a.load(); preMap[src] = a;   /* 66 个文件同时 auto 会抢带宽/解码，改成元数据 + 播放时按需加载 */
-      a.addEventListener("loadedmetadata", function () { try { a.__dur = a.duration; } catch (e) {} if (window.__s6Rebuild) window.__s6Rebuild(); });
+    var preMap = {}, count = 66;
+    window.APP_STATE.scenarioAudioPreload = { map: preMap, count: count };
+    /* 方案 A：把 66 个 wav 直接取成 Blob 缓存成对象 URL。
+       播放时不再走网络，起播几乎零延迟；同时拿到真实时长，播放表可以精确排。 */
+    for (var i = 1; i <= count; i++) {
+      (function (src) {
+        fetch(audioSrc(src)).then(function (r) { return r.blob(); }).then(function (blob) {
+          var url = URL.createObjectURL(blob);
+          var a = new Audio(url);
+          a.preload = "auto";
+          a.addEventListener("loadedmetadata", function () {
+            try { AUDIO_DUR[src] = a.duration; } catch (e) {}
+            preMap[src] = a;                      /* 之后所有播放都走 blob，不再联网 */
+            if (window.__s6Rebuild) window.__s6Rebuild();
+          }, { once: true });
+          a.load();
+        }).catch(function () {});
+      })("assets/audio/" + ("00" + i).slice(-3) + ".wav");
     }
-    window.APP_STATE.scenarioAudioPreload = { map: preMap, count: 66 };
     return window.APP_STATE.scenarioAudioPreload;
   };
   function scheduleStTask(st, delay, fn) {
@@ -916,8 +930,7 @@ function make(variant) {
         var atk = picks[0], rec = picks[1] || picks[0];
         assigned003 = { attack: atk, recon: rec };
         FLIGHT06.assign003(atk, rec, T003_ASSIGN);
-        var a = atk < 10 ? "0" + atk : String(atk);
-        var r = rec < 10 ? "0" + rec : String(rec);
+        var a = "09", r = "10";        /* 气泡与视频标题统一显示 09、10（实际执行仍用 atk/rec） */
         VIDEO_TITLES.E = a + "光电-攻击｜003运动目标";
         VIDEO_TITLES.F = r + "光电-侦察｜003运动目标";
         thirdCards.forEach(function (card) {
@@ -1456,7 +1469,8 @@ function make(variant) {
         { t: T003_CONFIRM, who: "ai", audio: ["assets/audio/062.wav", "assets/audio/063.wav", "assets/audio/064.wav"], text: "接收目标003图像，识别确认为敌远程火箭发射车<br>由9号光电察打机执行攻击。" },
         { t: 4295.80, who: "ai", audio: ["assets/audio/050.wav", "assets/audio/051.wav"], text: "根据打击前后图像比对评估，目标002火控雷达已被摧毁" },
         { t: 4330.13, who: "ai", audio: ["assets/audio/045.wav", "assets/audio/046.wav"], text: "根据打击前后图像比对评估，目标001预警雷达已被摧毁" },
-        { t: 4820.00, who: "ai", audio: ["assets/audio/065.wav", "assets/audio/066.wav"], text: "根据打击前后图像比对评估，目标003已被摧毁。" }
+        { t: 4820.00, who: "ai", audio: ["assets/audio/065.wav", "assets/audio/066.wav"], text: "根据打击前后图像比对评估，目标003已被摧毁。" },
+        { t: 4824.00, who: "ai", text: "对“潜在目标部署区-1”重新进行区域划分<br>9架光电察打机预计遍历时间6分钟。" }
       ].filter(function (ev) { return ev.t >= 0; }).sort(function (a, b) { return a.t - b.t; });
       function aiMsgHtml(who, text) {
         who = who || "ai";
@@ -1476,6 +1490,10 @@ function make(variant) {
         return window.APP_STATE.aiAudio.s6;
       }
       function clipDur(src) {
+        if (window.audioBlobDur) {
+          var bd = window.audioBlobDur(src);
+          if (bd > 0) return bd;
+        }
         var pre = window.APP_STATE && window.APP_STATE.s6AudioPreload;
         var a = pre && pre.map && pre.map[src];
         if (a && isFinite(a.duration) && a.duration > 0) return a.duration;
