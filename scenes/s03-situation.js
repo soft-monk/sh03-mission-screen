@@ -133,7 +133,8 @@ function make(variant) {
     var preMap = {};
     for (var i = 1; i <= 66; i++) {
       var src = "assets/audio/" + ("00" + i).slice(-3) + ".wav";
-      var a = new Audio(audioSrc(src)); a.preload = "auto"; a.load(); preMap[src] = a;
+      var a = new Audio(audioSrc(src)); a.preload = "metadata"; a.load(); preMap[src] = a;   /* 66 个文件同时 auto 会抢带宽/解码，改成元数据 + 播放时按需加载 */
+      a.addEventListener("loadedmetadata", function () { try { a.__dur = a.duration; } catch (e) {} if (window.__s6Rebuild) window.__s6Rebuild(); });
     }
     window.APP_STATE.scenarioAudioPreload = { map: preMap, count: 66 };
     return window.APP_STATE.scenarioAudioPreload;
@@ -931,7 +932,8 @@ function make(variant) {
         AI_EVENTS.push({ t: FL.T003_TRACK_ARRIVE, who: "系统", t003: true, text: "「" + a + "号、" + r + "号」光电无人机到达目标后方，开始跟踪。" });
         AI_EVENTS.push({ t: FL.T003_ORBIT_START + 6, who: "系统", t003: true, text: a + "号光电察打机打击完成，" + r + "号光电察打机转入盘旋进行毁伤评估。" });
         AI_EVENTS.sort(function (x, y) { return x.t - y.t; });
-        renderAiLog(t);
+        buildSchedule();
+        renderLogAt(t);
       }
       function closeVideoChannel(key) {
         removedChannels[key] = true;
@@ -1280,7 +1282,8 @@ function make(variant) {
         });
         if (changed) {
           AI_EVENTS.sort(function (a, b) { return a.t - b.t; });
-          renderAiLog(st.t);
+          buildSchedule();
+          renderLogAt(st.t);
         }
       }
       function videoStartOf(k) {
@@ -1429,9 +1432,16 @@ function make(variant) {
       var T_JOIN = FL.T_LIFT + 90;
       var T_ARRIVE = Math.min.apply(null, FL.T_ARR || [T_JOIN]);
       var AI_EVENTS = [
+        /* 开场 6 句：也走 SH-06 时间轴（可回退、可按序重播） */
+        { t: 0.0, who: "ai", audio: ["assets/audio/019.wav"], text: "根据任务需求和编组方案，已生成蜂群作战方案。" },
+        { t: 0.0, who: "ai", audio: ["assets/audio/020.wav", "assets/audio/021.wav"], text: "光电察打机10架<br>对于潜在目标区1网格化侦察<br>5分钟可完成区域遍历。" },
+        { t: 0.0, who: "ai", audio: ["assets/audio/022.wav", "assets/audio/023.wav"], text: "雷达侦察机2架<br>使用GMTI模式<br>对于潜在目标区1，4分钟可完成区域遍历。" },
+        { t: 0.0, who: "ai", audio: ["assets/audio/024.wav", "assets/audio/025.wav"], text: "雷达侦察机1架<br>使用SAR模式<br>对于潜在目标区1，40分钟可完成区域遍历。" },
+        { t: 0.0, who: "ai", audio: ["assets/audio/026.wav", "assets/audio/027.wav"], text: "光电察打机10架<br>对于潜在目标区2网格化侦察<br>5分钟可完成区域遍历。" },
+        { t: 0.0, who: "ai", audio: ["assets/audio/028.wav", "assets/audio/029.wav"], text: "电子侦察机6架<br>对于潜在目标区2广域协同搜索<br>6分钟可完成区域遍历。" },
         { t: T_ARRIVE, who: "ai", audio: ["assets/audio/030.wav"], text: "各编组已经抵达任务区，开始执行侦察任务。" },
-        { t: T_SCAN, who: "ai", audio: ["assets/audio/033.wav", "assets/audio/034.wav", "assets/audio/035.wav"], text: "在“潜在目标部署区-2”扫描发现2个疑似雷达目标，已加入目标列表。" },
-        { t: T_SCAN, who: "ai", audio: ["assets/audio/031.wav", "assets/audio/032.wav"], text: "推荐行动方案：<br>向目标001预警雷达、目标002火控雷达<br>各派出两架光电察打机执行侦察和打击任务。" },
+        { t: T_SCAN, who: "ai", audio: ["assets/audio/031.wav", "assets/audio/032.wav"], text: "在“潜在目标部署区-2”扫描发现2个疑似雷达目标，已加入目标列表。" },
+        { t: T_SCAN, who: "ai", audio: ["assets/audio/033.wav", "assets/audio/034.wav", "assets/audio/035.wav"], text: "推荐行动方案：<br>向目标001预警雷达、目标002火控雷达<br>各派出两架光电察打机执行侦察和打击任务。" },
         { t: T_SCAN + 2, who: "user", text: "方案确认。" },
         { t: FL.T_REASSIGN || 0, who: "ai", audio: ["assets/audio/036.wav", "assets/audio/037.wav"], text: "已分配14号、15号光电察打机<br>进行001预警雷达察打任务。" },
         { t: FL.T_REASSIGN || 0, who: "ai", audio: ["assets/audio/038.wav", "assets/audio/039.wav"], text: "已分配17号、18号光电察打机<br>进行002火控雷达察打任务。" },
@@ -1447,49 +1457,137 @@ function make(variant) {
         { t: 4295.80, who: "ai", audio: ["assets/audio/050.wav", "assets/audio/051.wav"], text: "根据打击前后图像比对评估，目标002火控雷达已被摧毁" },
         { t: 4330.13, who: "ai", audio: ["assets/audio/045.wav", "assets/audio/046.wav"], text: "根据打击前后图像比对评估，目标001预警雷达已被摧毁" },
         { t: 4820.00, who: "ai", audio: ["assets/audio/065.wav", "assets/audio/066.wav"], text: "根据打击前后图像比对评估，目标003已被摧毁。" }
-      ].filter(function (ev) { return ev.t > 0; }).sort(function (a, b) { return a.t - b.t; });
+      ].filter(function (ev) { return ev.t >= 0; }).sort(function (a, b) { return a.t - b.t; });
       function aiMsgHtml(who, text) {
         who = who || "ai";
         return '<div class="s6-msg ' + who + '"><div class="s6-avatar">' + (who === "user" ? "用户" : "AI") + '</div><div class="s6-bubble">' + text + '</div></div>';
       }
-      var prevLogT = -1;
-      /* 向前播放跨过事件时刻时才起播该事件的语音；回退/跳转不补播 */
-      function pumpEventAudio(t, prevT) {
-        if (prevT < 0 || t <= prevT + 1e-6) return;
-        AI_EVENTS.forEach(function (ev, i) {
-          if (!ev.audio || !ev.audio.length) return;
-          if (!(prevT + 1e-6 < ev.t && t + 1e-6 >= ev.t)) return;
-          var key = "s6a-" + i + "@" + Math.round(ev.t * 100);
-          if (s6Sent[key]) return;
-          s6Sent[key] = true;
-          playS6EventAudio(ev.audio, null);
+      /* ---------- SH-06 时间轴：气泡 / 语音 / 进度条共用一张播放表 ---------- */
+      var SCHED = [];                 /* [{ev, start, end}] 按顺序串好的播放表 */
+      var logAudioIdx = -1;           /* 当前正在播的条目下标 */
+      var logAudioOn = false;         /* 是否正在出声 */
+      var logAudioGen = 0;            /* 播放代际：停止/跳转后旧回调作废 */
+      var logFailAt = 0;              /* 上次播放失败时间（节流重试） */
+
+      function logAudioState() {
+        window.APP_STATE = window.APP_STATE || {};
+        window.APP_STATE.aiAudio = window.APP_STATE.aiAudio || {};
+        if (!window.APP_STATE.aiAudio.s6) window.APP_STATE.aiAudio.s6 = { started: true, audios: [], tasks: [], paused: false };
+        return window.APP_STATE.aiAudio.s6;
+      }
+      function clipDur(src) {
+        var pre = window.APP_STATE && window.APP_STATE.s6AudioPreload;
+        var a = pre && pre.map && pre.map[src];
+        if (a && isFinite(a.duration) && a.duration > 0) return a.duration;
+        if (a && isFinite(a.__dur) && a.__dur > 0) return a.__dur;
+        return 3.0;                   /* 时长未就绪：先估算，metadata 到了会重算 */
+      }
+      /* 把事件排成一张“顺序播放表”：start 取 max(标称时刻, 上一条结束) */
+      function buildSchedule() {
+        var out = [], prev = -1e9;
+        AI_EVENTS.forEach(function (ev) {
+          var st0 = Math.max(ev.t, prev);
+          var dur = 0.55;             /* 无语音条目占 0.55 s，保持“一条一条” */
+          if (ev.audio && ev.audio.length) {
+            dur = 0;
+            ev.audio.forEach(function (x) { dur += clipDur(x); });
+          }
+          out.push({ ev: ev, start: st0, end: st0 + dur });
+          prev = st0 + dur;
         });
+        SCHED = out;
       }
-      function pauseEventAudio() {
-        var st6 = window.APP_STATE && window.APP_STATE.aiAudio && window.APP_STATE.aiAudio.s6;
-        if (st6) (st6.audios || []).forEach(function (a) { try { a.pause(); } catch (e) {} });
+      /* 播放失败（被浏览器策略拦截/被暂停打断）：标记失败，等下次 syncAudio 或用户手势重试 */
+      function failPlay() {
+        logFailAt = Date.now();
+        logAudioOn = false;
+        logAudioIdx = -1;
+        if (window.__s6ResumeArmed) return;
+        window.__s6ResumeArmed = true;
+        var h = function () {
+          document.removeEventListener("pointerdown", h, true);
+          window.__s6ResumeArmed = false;
+          logFailAt = 0;
+          try { syncAudio(st.t); } catch (e) {}
+        };
+        document.addEventListener("pointerdown", h, true);
       }
-      /* 跳到 t：清空旧语音队列与正在播的音频；≤t 的事件标记为已处理（不补播），>t 的重新可播 */
-      function stopEventAudio(t) {
-        var st6 = window.APP_STATE && window.APP_STATE.aiAudio && window.APP_STATE.aiAudio.s6;
-        if (st6) {
-          (st6.audios || []).forEach(function (a) { try { a.pause(); a.currentTime = 0; } catch (e) {} });
-          st6.audios = [];
+      function stopLogAudio() {
+        logAudioGen++;
+        var st6 = logAudioState();
+        (st6.audios || []).forEach(function (a) { try { a.onended = null; a.pause(); } catch (e) {} });
+        st6.audios = [];
+        logAudioOn = false;
+        logAudioIdx = -1;
+      }
+      /* 从某条的中间开始播：offset 是该条已经过去的秒数 */
+      function startLogAudio(idx, offset) {
+        stopLogAudio();
+        var it = SCHED[idx];
+        if (!it || !it.ev.audio || !it.ev.audio.length) return;
+        var list = it.ev.audio.slice();
+        var acc = 0, k0 = 0, seek0 = 0;
+        for (var i = 0; i < list.length; i++) {
+          var d = clipDur(list[i]);
+          if (offset < acc + d - 0.05 || i === list.length - 1) { k0 = i; seek0 = Math.max(0, offset - acc); break; }
+          acc += d;
         }
-        s6EventQueue = []; s6EventBusy = false;
-        if (window.__s6DialogAbort) window.__s6DialogAbort();
-        AI_EVENTS.forEach(function (ev, i) {
-          var key = "s6a-" + i + "@" + Math.round(ev.t * 100);
-          if (t + 1e-6 >= ev.t) s6Sent[key] = true; else delete s6Sent[key];
-        });
+        var st6 = logAudioState();
+        var pre = window.APP_STATE && window.APP_STATE.s6AudioPreload;
+        var map = (pre && pre.map) || {};
+        logAudioIdx = idx;
+        logAudioOn = true;
+        var gen = logAudioGen;
+        (function step(k) {
+          if (gen !== logAudioGen) return;      /* 已停止/已跳转：旧链作废 */
+          if (k >= list.length) { logAudioOn = false; return; }
+          var src = list[k];
+          var audio = map[src] || new Audio(audioSrc(src));
+          st6.audios.push(audio);
+          audio.onended = function () { step(k + 1); };
+          try { audio.currentTime = (k === k0 ? seek0 : 0); } catch (e) {}
+          function go() {
+            if (gen !== logAudioGen) return;
+            var pr = null;
+            try { pr = audio.play(); } catch (e) { pr = null; }
+            if (pr && pr.catch) pr.catch(function () { failPlay(); });
+            else if (!pr) failPlay();
+          }
+          var sk = (k === k0 ? seek0 : 0);
+          if (sk > 0.05) { try { audio.currentTime = sk; } catch (e3) {} }
+          go();                                   /* 立即尝试（浏览器会自己等缓冲） */
+          if (audio.readyState < 2) {
+            audio.addEventListener("canplay", function () {
+              if (gen !== logAudioGen) return;
+              if (audio.paused && !audio.ended) go();
+            }, { once: true });
+          }
+        })(k0);
       }
-      function renderAiLog(t) {
+      /* 任意时刻：t 落在哪一条的窗口里，就播哪一条（从对应偏移） */
+      function syncAudio(t) {
+        if (!st.started || !st.run || dragging) return;
+        if (logFailAt && Date.now() - logFailAt < 600) return;   /* 失败后 0.6s 内不重试 */
+        if (!SCHED.length) buildSchedule();
+        var idx = -1, i;
+        for (i = 0; i < SCHED.length; i++) { if (SCHED[i].start <= t + 1e-6) idx = i; else break; }
+        if (idx < 0) { if (logAudioOn) stopLogAudio(); return; }
+        var it = SCHED[idx];
+        if (logAudioIdx === idx) { if (!logAudioOn) return; return; }   /* 播过/在播，不重启 */
+        if (t + 1e-6 >= it.end) { if (logAudioOn) stopLogAudio(); return; }   /* 两条之间：静音 */
+        if (!it.ev.audio || !it.ev.audio.length) { if (logAudioOn) stopLogAudio(); return; }
+        startLogAudio(idx, Math.max(0, t - it.start));
+      }
+      /* 气泡：显示所有 start ≤ t 的条目（往回拖自动消失） */
+      function renderLogAt(t) {
         if (!aiLogEl) return;
-        var inherited = sharedAiMessages();   /* SH-04/05 + 本屏开场（开场按语音顺序入场，不随进度条回退） */
-        var html = "", n = 0, i;
+        var inherited = sharedAiMessages();   /* SH-04/05 继承：直接显示 */
+        var html = "", i, n = 0;
         for (i = 0; i < inherited.length; i++) html += aiMsgHtml(inherited[i].who, inherited[i].text);
-        for (i = 0; i < AI_EVENTS.length; i++) {
-          if (t + 1e-6 >= AI_EVENTS[i].t) { html += aiMsgHtml(AI_EVENTS[i].who, AI_EVENTS[i].text); n++; }
+        for (i = 0; i < SCHED.length; i++) {
+          if (t + 1e-6 < SCHED[i].start) break;
+          html += aiMsgHtml(SCHED[i].ev.who, SCHED[i].ev.text);
+          n++;
         }
         var sig = n + ":" + inherited.length;
         if (aiLogEl.getAttribute("data-n") === sig) return;
@@ -1498,6 +1596,9 @@ function make(variant) {
         var sc = aiLogEl.closest(".s6-chat-scroll");
         if (sc) sc.scrollTop = (n + inherited.length) <= 1 ? 0 : sc.scrollHeight;
       }
+      function renderAiLog(t) { renderLogAt(t); }
+      window.__s6Rebuild = function () { if (logAudioOn) return; buildSchedule(); };   /* 播放中不重算，避免跳音 */
+      buildSchedule();
 
       function fmt(s) { var m = Math.floor(s / 60), ss = Math.floor(s % 60); var mm = m < 10 ? "0" + m : String(m); return mm + ":" + ("0" + ss).slice(-2); }
       function paint() {
@@ -1535,16 +1636,14 @@ function make(variant) {
         videoJump.className = "s6-jump";
         videoJump.style.left = (((T_VIDEO_002 - 10) / FL.TOTAL) * 100).toFixed(4) + "%";
         videoJump.innerHTML = "<b class=\"s6-lb-text\">光电察打</b>";
-        videoJump.addEventListener("click", function () { st.t = Math.max(0, T_VIDEO_002 - 10); prevLogT = st.t; push(); syncMediaToTime(st.t); });
+        videoJump.addEventListener("click", function () { st.t = Math.max(0, T_VIDEO_002 - 10); push(); syncMediaToTime(st.t); });
         segLbls.appendChild(videoJump);
       })();
 
       function push() {
         if (!st.started) { renderAiLog(-1); renderTargetState(-1); renderVideos(-1); map.fleet("fleet", []); map.trails("trails", []); if (map.tracks && FL.tracks) map.tracks("tracks", FL.tracks(FL.T_TRACKS).map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.pts }; })); if (map.scan) map.scan("scan", []); if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); } if (map.beam) map.beam("sbeam", []); if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); } paint(); return; }
-        var pT = prevLogT;
-        prevLogT = st.t;
-        renderAiLog(st.t);
-        if (!dragging) pumpEventAudio(st.t, pT);
+        renderLogAt(st.t);                    /* 气泡随进度条走 */
+        if (!dragging) syncAudio(st.t);       /* 语音跟着当前时刻走 */
         renderTargetState(st.t);
         if (!dragging) renderVideos(st.t);
         if (map.fan && FL.fans) {
@@ -1597,12 +1696,7 @@ function make(variant) {
         st.started = true;
         if (st.t >= FL.TOTAL) { st.t = 0; st.run = true; }
         else st.run = !st.run;
-        if (st.run && !window.APP_STATE.s6DialogStarted) {
-          window.APP_STATE.s6DialogStarted = true;
-          window.APP_STATE.s6AiBlock = true;
-          startScenarioDialog("s6");
-        }
-        if (window.setS6DialogPaused) window.setS6DialogPaused(!st.run);
+        if (!st.run) stopLogAudio();
         goBtn.classList.toggle("playing", !!st.run);
         goBtn.setAttribute("aria-label", st.run ? "暂停" : "播放");
         st.last = 0; push();
@@ -1614,23 +1708,18 @@ function make(variant) {
         push();
       }
       var dragging = false;
-      function flushOpeningBubbles() {
-        var cfg = window.getSelectedScenario && window.getSelectedScenario();
-        if (!cfg || !cfg.s6Dialog) return;
-        cfg.s6Dialog.forEach(function (it) { pushSharedAi(it.key, it.who, it.text); });
-      }
       function syncMediaToTime(t) {
-        flushOpeningBubbles();        /* 跳转后开场台词直接补齐（不补播语音） */
+        buildSchedule();              /* 用最新音频时长重算一次，保证落点准确 */
         renderVideos(t);              /* 显隐/reset（含 < 视频起点时隐藏） */
         seekVideosTo(t, !!st.run);    /* 视频跳到对应画面 */
         renderTargetState(t);         /* 目标颜色/窗口/资源数按时间重算 */
-        stopEventAudio(t);            /* 语音：清队列，等下一个事件 */
-        prevLogT = t;
-        renderAiLog(t);
+        stopLogAudio();
+        renderLogAt(t);               /* 只显示 ≤t 的气泡 */
+        syncAudio(t);                 /* 语音从落点那条续播 */
       }
       function beginDragMedia() {
         [videoA, videoB, videoC, videoD, videoE, videoF].forEach(function (v) { if (v) { try { v.pause(); } catch (e) {} } });
-        pauseEventAudio();
+        stopLogAudio();
       }
       bar.addEventListener("pointerdown", function (ev) {
         if (!st.started) st.started = true;     /* 还没点“开始”也能直接拖动预览 */
@@ -1658,7 +1747,7 @@ function make(variant) {
         st.t = Math.min(FL.TOTAL, st.t + dt * st.speed);
         st.acc += dt;
         if (st.acc >= 0.08) { st.acc = 0; push(); }
-        if (st.t >= FL.TOTAL) { st.run = false; if (window.setS6DialogPaused) window.setS6DialogPaused(true); goBtn.classList.remove("playing"); goBtn.setAttribute("aria-label", "播放"); }
+        if (st.t >= FL.TOTAL) { st.run = false; stopLogAudio(); goBtn.classList.remove("playing"); goBtn.setAttribute("aria-label", "播放"); }
       }
       root.__onSpace = function () { goBtn.click(); };   /* 空格 = 开始/暂停本演示 */
       root.__s6Refresh = function () { push(); };
@@ -1749,6 +1838,8 @@ function make(variant) {
       /* 退场：停掉自驱循环，并清掉本屏画在共享地图上的动态图层 */
       hideHook = function () {
         st.dead = true;
+        stopLogAudio();
+        window.__s6Rebuild = null;
         try {
           map.fleet("fleet", []);
           map.trails("trails", []);
