@@ -447,19 +447,19 @@ function make(variant) {
         '</div>' +
         '<section class="s6-video-smallbar">' +
           '<div class="s6-video-card s6-video-small-card" data-video="A">' +
-            '<div class="s6-video-title">17光电-攻击｜002火控雷达</div>' +
+            '<div class="s6-video-title">14光电-攻击｜002火控雷达</div>' +
             '<canvas class="s6-video-small-canvas" data-video="A"></canvas>' +
           '</div>' +
           '<div class="s6-video-card s6-video-small-card" data-video="B">' +
-            '<div class="s6-video-title">18光电-侦察｜002火控雷达</div>' +
+            '<div class="s6-video-title">15光电-侦察｜002火控雷达</div>' +
             '<canvas class="s6-video-small-canvas" data-video="B"></canvas>' +
           '</div>' +
           '<div class="s6-video-card s6-video-small-card s6-video-extra" data-video="C" style="display:none">' +
-            '<div class="s6-video-title">14光电-攻击｜001预警雷达</div>' +
+            '<div class="s6-video-title">17光电-攻击｜001预警雷达</div>' +
             '<canvas class="s6-video-small-canvas" data-video="C"></canvas>' +
           '</div>' +
           '<div class="s6-video-card s6-video-small-card s6-video-extra" data-video="D" style="display:none">' +
-            '<div class="s6-video-title">15光电-侦察｜001预警雷达</div>' +
+            '<div class="s6-video-title">18光电-侦察｜001预警雷达</div>' +
             '<canvas class="s6-video-small-canvas" data-video="D"></canvas>' +
           '</div>' +
           '<div class="s6-video-card s6-video-small-card s6-video-third" data-video="E" style="display:none">' +
@@ -868,7 +868,7 @@ function make(variant) {
       var thirdStarted = false;
       var assigned003 = null;
       var mirrorGen = 0;
-      var VIDEO_TITLES = { A: "17光电-攻击｜002火控雷达", B: "18光电-侦察｜002火控雷达", C: "14光电-攻击｜001预警雷达", D: "15光电-侦察｜001预警雷达", E: "09光电-攻击｜003运动目标", F: "10光电-侦察｜003运动目标" };
+      var VIDEO_TITLES = { A: "14光电-攻击｜002火控雷达", B: "15光电-侦察｜002火控雷达", C: "17光电-攻击｜001预警雷达", D: "18光电-侦察｜001预警雷达", E: "09光电-攻击｜003运动目标", F: "10光电-侦察｜003运动目标" };
       /* 攻击动画仍按视频进度（41 s）触发，但不再产生 AI 消息；
          三条「已被摧毁」改为飞行时间轴触发（timelineRules）。 */
       var videoAiRules = [
