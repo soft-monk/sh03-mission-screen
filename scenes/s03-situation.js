@@ -1410,6 +1410,84 @@ function make(variant) {
       }
       var aiChatEl = root.querySelector(".s6-chat-scroll");
       var aiLogEl = root.querySelector(".s6-ai-log");
+
+      /* ---------- 任务总结弹窗（83:00 播放完成后出现，覆盖地图+控制条） ---------- */
+      var summaryEl = document.createElement("section");
+      summaryEl.className = "s6-summary";
+      root.appendChild(summaryEl);
+      function sumFmt(sec) {
+        var m = Math.floor(sec / 60), ss = Math.round(sec % 60);
+        if (ss === 60) { m++; ss = 0; }
+        return (m < 10 ? "0" + m : String(m)) + ":" + ("0" + ss).slice(-2);
+      }
+      function sumPct(cv, kind) {
+        var arr = cv[kind] || [];
+        if (!arr.length) return 0;
+        var z = arr[0].zone, n = 0;
+        for (var i = 0; i < arr.length; i++) if (arr[i].zone === z) n++;
+        return Math.round(n / 16);
+      }
+      /* 覆盖率固定用最初计算（无战斗扰动）的那组数：93.7 / 100 / 56.9 / 100 */
+      var covCache = { photo: 93.7, gmti: 100, sar: 56.9, ewar: 100 };
+      function buildSummaryHtml() {
+        var cnt = {};
+        FL.simulate(0).forEach(function (d) { cnt[d.type] = (cnt[d.type] || 0) + 1; });
+        var photo = cnt.blue || 0, radar = cnt.yellow || 0, ewar = cnt.red || 0, relay = cnt.green || 0;
+        var lost = 0;
+        ["001", "002", "003"].forEach(function (no) { if (st.t + 1e-6 >= DESTROY_T[no]) lost++; });
+        var rows = [
+          ["光电", "区-2", covCache.photo, "#38bdf8"],
+          ["雷达 GMTI", "区-1", covCache.gmti, "#fbbf24"],
+          ["雷达 SAR", "区-1", covCache.sar, "#fdba74"],
+          ["电子侦察", "区-2", covCache.ewar, "#c4b5fd"]
+        ];
+        var bars = rows.map(function (r) {
+          return '<div class="s6-sum-bar"><span>' + r[0] + '　' + r[1] + '</span>' +
+            '<div class="s6-sum-track"><i style="width:' + r[2] + '%;background:' + r[3] + '"></i></div>' +
+            '<b>' + r[2] + '%</b></div>';
+        }).join("");
+        var tgt = [
+          ["001", "001 预警雷达", "区-2 · 光电察打"],
+          ["002", "002 火控雷达", "区-2 · 光电察打"],
+          ["003", "003 远程火箭发射车", "区-1 · 光电察打（09/10）"]
+        ].map(function (t) {
+          return '<div class="s6-sum-tr"><i class="s6-sum-dia"></i>' +
+            '<div class="s6-sum-tn"><b>' + t[1] + '</b><small>' + t[2] + '</small></div>' +
+            '<time>' + sumFmt(DESTROY_T[t[0]]) + '</time><em>已摧毁</em></div>';
+        }).join("");
+        return '<div class="s6-sum-head"><b>任务总结</b></div>' +
+          '<div class="s6-sum-kpis">' +
+            '<div class="s6-sum-kpi"><span>目标处置</span><b>3 / 3</b><em>全部摧毁</em></div>' +
+            '<div class="s6-sum-kpi cy"><span>任务闭环</span><b>已达成</b><em>发现 → 确认 → 打击 → 评估</em></div>' +
+          '</div>' +
+          '<div class="s6-sum-main">' +
+            '<div class="s6-sum-panel"><h4>潜在目标区侦察覆盖率</h4><div class="s6-sum-bars">' + bars + '</div></div>' +
+            '<div class="s6-sum-panel"><h4>目标处置明细</h4><div class="s6-sum-rows">' + tgt + '</div></div>' +
+          '</div>' +
+          '<div class="s6-sum-panel s6-sum-res"><h4>资源使用统计</h4>' +
+            '<div class="s6-sum-grid">' +
+              '<span>光电察打无人机<b>' + photo + ' 架</b></span>' +
+              '<span>雷达侦察无人机<b>' + radar + ' 架</b></span>' +
+              '<span>电子侦察无人机<b>' + ewar + ' 架</b></span>' +
+              '<span>通信中继无人机<b>' + relay + ' 架</b></span>' +
+            '</div>' +
+            '<div class="s6-sum-loss">光电察打无人机战损<b>' + lost + ' 架</b><i>可用 ' + (photo - lost) + ' / ' + photo + '</i></div>' +
+          '</div>' +
+          '<div class="s6-sum-foot"><button class="s6-sum-back">↩ 返回场景选择</button></div>';
+      }
+      function showSummary() {
+        if (!summaryEl || summaryEl.classList.contains("on")) return;
+        summaryEl.innerHTML = buildSummaryHtml();
+        summaryEl.classList.add("on");
+      }
+      function hideSummary() { if (summaryEl) summaryEl.classList.remove("on"); }
+      summaryEl.addEventListener("click", function (ev) {
+        var b = ev.target && ev.target.closest ? ev.target.closest(".s6-sum-back") : null;
+        if (!b) return;
+        hideSummary();
+        var r = document.querySelector('[data-act="replay"]');
+        if (r) r.click();
+      });
       var lastS6N = 0, s6EventQueue = [], s6EventBusy = false, s6Sent = {};
       /* item = { srcs, onStart }：onStart 在这一段真正开始播放时调用 → 气泡与语音同时出现 */
       function startS6EventList(item) {
@@ -1660,6 +1738,7 @@ function make(variant) {
 
       function push() {
         if (!st.started) { renderAiLog(-1); renderTargetState(-1); renderVideos(-1); map.fleet("fleet", []); map.trails("trails", []); if (map.tracks && FL.tracks) map.tracks("tracks", FL.tracks(FL.T_TRACKS).map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.pts }; })); if (map.scan) map.scan("scan", []); if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); } if (map.beam) map.beam("sbeam", []); if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); } paint(); return; }
+        if (st.started && st.t + 1e-6 >= FL.TOTAL) showSummary();
         renderLogAt(st.t);                    /* 气泡随进度条走 */
         if (!dragging) syncAudio(st.t);       /* 语音跟着当前时刻走 */
         renderTargetState(st.t);
@@ -1765,7 +1844,7 @@ function make(variant) {
         st.t = Math.min(FL.TOTAL, st.t + dt * st.speed);
         st.acc += dt;
         if (st.acc >= 0.08) { st.acc = 0; push(); }
-        if (st.t >= FL.TOTAL) { st.run = false; stopLogAudio(); goBtn.classList.remove("playing"); goBtn.setAttribute("aria-label", "播放"); }
+        if (st.t >= FL.TOTAL) { st.run = false; stopLogAudio(); showSummary(); goBtn.classList.remove("playing"); goBtn.setAttribute("aria-label", "播放"); }
       }
       root.__onSpace = function () { goBtn.click(); };   /* 空格 = 开始/暂停本演示 */
       root.__s6Refresh = function () { push(); };
@@ -1856,6 +1935,7 @@ function make(variant) {
       /* 退场：停掉自驱循环，并清掉本屏画在共享地图上的动态图层 */
       hideHook = function () {
         st.dead = true;
+        hideSummary();
         stopLogAudio();
         window.__s6Rebuild = null;
         try {
@@ -2216,7 +2296,52 @@ function make(variant) {
         "  box-shadow:0 0 34px rgba(37,99,235,.55),0 0 0 7px rgba(37,99,235,.12)}",
         ".s3-mic{position:absolute;right:28px;bottom:60px;width:52px;height:52px;border-radius:50%;display:grid;place-items:center;color:#93c5fd;",
         "  background:radial-gradient(circle at 50% 35%,#1e40af,#0b1e3a 72%);border:1px solid rgba(96,165,250,.5);",
-        "  box-shadow:0 0 26px rgba(37,99,235,.5);z-index:12;opacity:0;cursor:default}"
+        "  box-shadow:0 0 26px rgba(37,99,235,.5);z-index:12;opacity:0;cursor:default}",
+        ".s6-summary{position:absolute;left:116px;top:137px;width:1404px;height:893px;display:none;z-index:40;",
+        "  flex-direction:column;gap:14px;padding:20px 24px;box-sizing:border-box;border-radius:12px;",
+        "  background:linear-gradient(180deg,rgba(6,16,30,.975),rgba(4,10,20,.99));",
+        "  border:1px solid rgba(56,189,248,.38);box-shadow:0 24px 80px rgba(0,0,0,.65)}",
+        ".s6-summary.on{display:flex}",
+        ".s6-sum-head{display:flex;align-items:baseline;gap:14px;flex:none}",
+        ".s6-sum-head b{font-size:26px;letter-spacing:2px;color:#eaf4ff;padding-left:14px;border-left:4px solid #38bdf8}",
+        ".s6-sum-head span{font-size:12px;color:#7c9bbd}",
+        ".s6-sum-kpis{display:flex;gap:16px;flex:none}",
+        ".s6-sum-kpi{flex:1;background:linear-gradient(180deg,#152741,#101d32);border:1px solid #23395a;",
+        "  border-left:4px solid #22c55e;border-radius:10px;padding:12px 18px;display:flex;flex-direction:column;gap:4px}",
+        ".s6-sum-kpi.cy{border-left-color:#38bdf8}",
+        ".s6-sum-kpi span{font-size:12px;color:#7c9bbd}",
+        ".s6-sum-kpi b{font-size:30px;color:#eaf4ff;line-height:1.1}",
+        ".s6-sum-kpi em{font-style:normal;font-size:12px;color:#4ade80}",
+        ".s6-sum-kpi.cy em{color:#7dd3fc}",
+        ".s6-sum-main{display:flex;gap:16px;flex:none;height:332px;min-height:0}",
+        ".s6-sum-panel{flex:1;min-width:0;background:rgba(12,26,44,.8);border:1px solid #1f3556;border-radius:10px;",
+        "  padding:12px 16px;display:flex;flex-direction:column;gap:10px;min-height:0}",
+        ".s6-sum-panel h4{margin:0;font-size:16px;font-weight:600;color:#e2efff;padding-left:10px;border-left:3px solid #38bdf8;line-height:1.25}",
+        ".s6-sum-bars{flex:1;display:flex;flex-direction:column;justify-content:space-around;min-height:0}",
+        ".s6-sum-rows{flex:1;display:flex;flex-direction:column;justify-content:space-around;gap:10px;min-height:0}",
+        ".s6-sum-bar{display:grid;grid-template-columns:130px 1fr 60px;align-items:center;gap:10px;font-size:13px;color:#cfe0f5}",
+        ".s6-sum-bar b{font-size:13px;color:#bfe9ff;text-align:right;font-variant-numeric:tabular-nums}",
+        ".s6-sum-track{height:10px;border-radius:5px;background:#1b2f49;overflow:hidden}",
+        ".s6-sum-track i{display:block;height:100%;border-radius:5px}",
+        ".s6-sum-tr{display:flex;align-items:center;gap:10px;background:#151f31;border:1px solid #243755;border-radius:8px;padding:8px 12px}",
+        ".s6-sum-dia{width:10px;height:10px;flex:none;transform:rotate(45deg);border:1.5px solid #ef4444;background:rgba(239,68,68,.25)}",
+        ".s6-sum-tn{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}",
+        ".s6-sum-tn b{font-size:13.5px;color:#eaf4ff}",
+        ".s6-sum-tn small{font-size:11px;color:#7c9bbd}",
+        ".s6-sum-tr time{font-size:13px;color:#cfe0f5;font-variant-numeric:tabular-nums}",
+        ".s6-sum-tr em{font-style:normal;font-size:11.5px;color:#f87171;border:1px solid #ef4444;background:#2a1218;border-radius:4px;padding:2px 8px}",
+        ".s6-sum-panel footer{margin-top:auto;text-align:right;font-size:12px;color:#4ade80;padding-top:6px}",
+        ".s6-sum-res{flex:1;min-height:220px;justify-content:flex-start;gap:14px}",
+        ".s6-sum-res .s6-sum-grid{flex:1;display:grid;grid-template-columns:1fr 1fr;align-content:space-around;gap:0 60px;font-size:14px;color:#cfe0f5}",
+        ".s6-sum-grid span{display:flex;justify-content:space-between;gap:12px;max-width:460px;white-space:nowrap}",
+        ".s6-sum-grid b{color:#7dd3fc}",
+        ".s6-sum-loss{margin-top:auto;padding-top:10px;border-top:1px solid #1f3556;font-size:14px;color:#cfe0f5}",
+        ".s6-sum-loss b{color:#f87171;margin-left:6px}",
+        ".s6-sum-loss i{font-style:normal;color:#64748b;margin-left:8px}",
+        ".s6-sum-foot{flex:none;display:flex;justify-content:center}",
+        ".s6-sum-back{width:640px;height:56px;border-radius:10px;border:1px solid #2b4a70;background:#0f1e33;",
+        "  color:#9fd0f5;font-size:17px;letter-spacing:1px;cursor:pointer;font-family:inherit}",
+        ".s6-sum-back:hover{background:#13253d;color:#eaf4ff}",
       ].join("\n");
       document.head.appendChild(sty);
     }
