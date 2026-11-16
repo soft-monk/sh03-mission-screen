@@ -84,8 +84,10 @@ window.FLIGHT_S1 = (function () {
     var PARK_COLS = 8, PARK_GAP = 350;
     var parked = 0;
 
+    var laneCache = {};
     (RS.area || []).forEach(function (r) {
-      /* 进场：先沿 4 条编组航线飞到任务区边界（车道由 r.lan 给出），再直飞自己的进场点 */
+      /* 进场：先沿 4 条编组航线飞到任务区边界，再直飞自己的进场点。
+         编队段用“同编组 5 条 400 m 并行车道”（8e81c66 起改成 ±5 km 车道，2026-11-16 改回） */
       var routes = window.ROUTES_S1.transit || [];
       var corr = null;
       for (var ri = 0; ri < routes.length; ri++) if (routes[ri].id === r.corr) { corr = routes[ri].pts; break; }
@@ -98,7 +100,13 @@ window.FLIGHT_S1 = (function () {
       var parkLon = RALLY.lon + ((col - (PARK_COLS - 1) / 2) * PARK_GAP) / M_LON;
       var parkLat = RALLY.lat - (row * PARK_GAP) / M_LAT;
 
-      var transit = makePath(offsetPath(base, r.lan || 0));
+      var lane = k % 5;
+      var laneKey = corr ? (r.corr + "|" + lane) : "";
+      var transit = laneKey && laneCache[laneKey];
+      if (!transit) {
+        transit = makePath(offsetPath(base, (lane - 2) * 400));
+        if (laneKey) laneCache[laneKey] = transit;
+      }
 
       var enter = transit.pts[transit.pts.length - 1];
       var orbitPts = r.pts;
@@ -159,17 +167,17 @@ window.FLIGHT_S1 = (function () {
         b.slowT0 = t0b;
       }
     });
-    /* ---------- 机场评估阵位：19:53 受领任务，两架光电（约 8.3km 外）2 分 46 秒飞抵，观察后返航 ---------- */
+    /* ---------- 机场评估阵位：16:32 受领任务，两架光电（约 8.3km 外）2 分 46 秒飞抵，观察后返航 ---------- */
     var AIR = { lon: 120.939578, lat: 24.818188, r: 2500 };
-    var DETOUR_T0 = 19 * 60 + 53;
+    var DETOUR_T0 = 992;
     (function airportOrbit() {
       var photo = drones.filter(function (d) { return d.group === "photo"; });
       if (photo.length < 2) return;
-      /* 目标：转场 8300m（166s），22:39 抵达评估阵位，22:55 打击（视频第 16 秒），23:03 返航 */
+      /* 目标：转场 8300m（166s），19:18 抵达评估阵位，19:34 打击（视频第 16 秒），19:46 回归 */
       var LEG = 8300, HOLD = 24;
       var cand = [];
       photo.forEach(function (d) {
-        if (DETOUR_T0 <= T_LIFT + d.leadLen / V) return;      /* 19:53 前还没到位的不选 */
+        if (DETOUR_T0 <= T_LIFT + d.leadLen / V) return;      /* 992 前还没到位的不选 */
         var p = posOf(d, DETOUR_T0);
         var dx = (p.lon - AIR.lon) * M_LON, dy = (p.lat - AIR.lat) * M_LAT;
         var D = Math.hypot(dx, dy);
