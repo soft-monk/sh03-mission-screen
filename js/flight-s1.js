@@ -15,6 +15,8 @@ window.FLIGHT_S1 = (function () {
   var M_LON = 111320 * Math.cos((24.84 * Math.PI) / 180);
 
   var RALLY = { lon: 121.3000, lat: 25.1210 };   // 集结区中心（与 scenarios.js 一致）
+  var AIRFIELD = { lon: 120.939578, lat: 24.818188, r: 2500 };   // 岸基机场（盘旋侦察中心）
+  var T_RETURN = 1240;                                          // 20:40：盘旋结束、返航（视频放完 + 毁伤评估之后）
   var HIST_DT = 5, HIST_N = 60;                  // 尾迹：5 s 一点，保留 300 s
 
   var ICON = { photo: "blue", sar: "yellow", gmti: "yellow", ewar: "red", comm: "green" };
@@ -167,46 +169,72 @@ window.FLIGHT_S1 = (function () {
         b.slowT0 = t0b;
       }
     });
-    /* ---------- 机场评估阵位：16:32 受领任务，两架光电（约 8.3km 外）2 分 46 秒飞抵，观察后返航 ---------- */
-    var AIR = { lon: 120.939578, lat: 24.818188, r: 2500 };
+    /* ---------- 机场盘旋侦察：16:32（992）受领，最近的 2 架光电飞往机场 2.5km 圆，
+       绕圈侦察到 20:40（1240，视频放完 + 毁伤评估之后）再回原航路 ---------- */
+    var AIR = AIRFIELD;
     var DETOUR_T0 = 992;
     (function airportOrbit() {
       var photo = drones.filter(function (d) { return d.group === "photo"; });
       if (photo.length < 2) return;
-      /* 目标：转场 8300m（166s），19:18 抵达评估阵位，19:34 打击（视频第 16 秒），19:46 回归 */
-      var LEG = 8300, HOLD = 24;
       var cand = [];
       photo.forEach(function (d) {
-        if (DETOUR_T0 <= T_LIFT + d.leadLen / V) return;      /* 992 前还没到位的不选 */
+        if (DETOUR_T0 <= T_LIFT + d.leadLen / V) return;      /* 992 还没到位的排除 */
         var p = posOf(d, DETOUR_T0);
         var dx = (p.lon - AIR.lon) * M_LON, dy = (p.lat - AIR.lat) * M_LAT;
         var D = Math.hypot(dx, dy);
-        if (D < LEG - AIR.r + 100) return;                    /* 太近的解不出 8.3km 的落脚点 */
-        cand.push({ d: d, p: p, dist: D, ang: Math.atan2(dy, dx) });
+        if (D <= AIR.r + 150) return;                         /* 已经在圆内，没有盘旋余量 */
+        cand.push({ d: d, p: p, dist: D });
       });
-      cand.sort(function (a, b) { return a.dist - b.dist; });
+      cand.sort(function (a, b) { return a.dist - b.dist; });  /* 只取当时最近的两架 */
       if (cand.length < 2) return;
 
-      var CIRC = 2 * Math.PI * AIR.r;
-      var NPT = Math.max(2, Math.round(HOLD / (CIRC / 72 / V)));
       function circlePt(a) {
         return [AIR.lon + Math.cos(a) * AIR.r / M_LON, AIR.lat + Math.sin(a) * AIR.r / M_LAT];
       }
-      function install(c) {
-        /* 在 2.5km 圆上找一个点，使 |p→E| = LEG（余弦定理），保证转场时间一致 */
-        var cosF = (c.dist * c.dist + AIR.r * AIR.r - LEG * LEG) / (2 * c.dist * AIR.r);
-        cosF = Math.max(-1, Math.min(1, cosF));
-        var phi = Math.acos(cosF);
-        var E = circlePt(c.ang + phi);
+      function install(c, slow) {
+        var a0 = Math.atan2((c.p.lat - AIR.lat) * M_LAT, (c.p.lon - AIR.lon) * M_LON);
+        var E = circlePt(a0);                                  /* 正对机场方向的圆上点 */
+        var tArr = DETOUR_T0 + (c.dist - AIR.r) / V;           /* 到达圆的时刻 */
+        /* 后机减速会少走 slow.dist，弧长相应减掉，保证仍在 T_RETURN 离开圆 */
+        var arcLen = V * (T_RETURN - tArr) - (slow ? slow.dist : 0);
+        var sweep = Math.max(0, arcLen / AIR.r);
         var pts = [[c.p.lon, c.p.lat], E];
-        for (var i = 1; i <= NPT; i++) pts.push(circlePt(c.ang + phi + (i / 72) * 2 * Math.PI));
-        pts.push([c.p.lon, c.p.lat]);
+        var step = 2 * Math.PI / 72, n = Math.max(1, Math.ceil(sweep / step));
+        for (var i = 1; i <= n; i++) pts.push(circlePt(a0 + Math.min(sweep, i * step)));
+        pts.push([c.p.lon, c.p.lat]);                          /* 回原航路断点 */
         var path = makePath(pts);
-        c.d.detour = { path: path, t0: DETOUR_T0, dur: path.len / V, slow: false };
+        c.d.detour = { path: path, t0: DETOUR_T0, dur: (path.len + (slow ? slow.dist : 0)) / V, slow: !!slow, tBox: tArr };
+        if (slow) {
+          c.d.detour.slowDist = slow.dist;
+          c.d.detour.slowDur = slow.dur;
+          c.d.detour.slowT0 = slow.t0;
+        }
         c.d.detour.t1 = DETOUR_T0 + c.d.detour.dur;
       }
-      install(cand[0]);
-      install(cand[1]);
+      /* 后机减速到 0.4V，直到与前沿机相差半圈，再恢复原速（沿用场景二的“差速凑半圈”） */
+      (function slowForHalfCircle() {
+        var a0s = cand.map(function (c) {
+          return Math.atan2((c.p.lat - AIR.lat) * M_LAT, (c.p.lon - AIR.lon) * M_LON);
+        });
+        var arrs = cand.map(function (c) { return DETOUR_T0 + (c.dist - AIR.r) / V; });
+        var tBoth = Math.max(arrs[0], arrs[1]);
+        var ang = [a0s[0] + (tBoth - arrs[0]) * V / AIR.r, a0s[1] + (tBoth - arrs[1]) * V / AIR.r];
+        var gap = ((ang[1] - ang[0]) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+        var rear = gap <= Math.PI ? 0 : 1;                     /* 落在后面的那架 */
+        var g = gap <= Math.PI ? gap : 2 * Math.PI - gap;      /* 两架当前夹角 */
+        var slow = null;
+        if (g < Math.PI - 0.02) {
+          var want = AIR.r * (Math.PI - g);                    /* 要落后的弧长 */
+          var dur = want / (0.6 * V);                          /* 0.4V 飞行 → 相对少走 0.6V */
+          if (arrs[rear] + dur > T_RETURN) {                   /* 时间不够就按剩余时间算 */
+            dur = Math.max(0, T_RETURN - arrs[rear]);
+            want = 0.6 * V * dur;
+          }
+          slow = { dist: want, dur: dur, t0: arrs[rear] };
+        }
+        install(cand[0], rear === 0 ? slow : null);
+        install(cand[1], rear === 1 ? slow : null);
+      })();
     })();
 
     T_IN = Math.ceil(T_IN);
@@ -326,6 +354,18 @@ window.FLIGHT_S1 = (function () {
     quad.push(quad[0]);
     return quad;
   }
+  /* 机场侦察框：沿跑道方向的方框（4.0×1.6 km，两架共用同一个框，不会互相错位），
+     外加从机到框两端的牵引线（同场景二 SH-06 的 box + links） */
+  var BOX_U = 2000, BOX_V = 800, BOX_BRG = 45.54 * Math.PI / 180;
+  function boxAround(p, c) {
+    var ux = Math.sin(BOX_BRG), uy = Math.cos(BOX_BRG);
+    var vx = Math.cos(BOX_BRG), vy = -Math.sin(BOX_BRG);
+    function pt(u, v) { return [c.lon + (ux * u + vx * v) / M_LON, c.lat + (uy * u + vy * v) / M_LAT]; }
+    return {
+      box: [pt(-BOX_U, -BOX_V), pt(BOX_U, -BOX_V), pt(BOX_U, BOX_V), pt(-BOX_U, BOX_V), pt(-BOX_U, -BOX_V)],
+      links: [[[p.lon, p.lat], pt(-BOX_U, 0)], [[p.lon, p.lat], pt(BOX_U, 0)]]
+    };
+  }
 
   function scans(t) {
     var out = [];
@@ -335,6 +375,12 @@ window.FLIGHT_S1 = (function () {
       if (d.group !== "photo") continue;
       if (t < tOnOf(d)) continue;                 /* 未到位不开机 */
       var p = posOf(d, t);
+      /* 机场盘旋侦察：扇形换成方框（到位→返航），归位后自然恢复扇形 */
+      if (d.detour && t + 1e-6 >= d.detour.tBox && t + 1e-6 < T_RETURN) {
+        var bx = boxAround(p, AIRFIELD);
+        out.push({ box: bx.box, links: bx.links, k: Math.max(0, Math.min(1, (t - d.detour.tBox) / SCAN.fade)) });
+        continue;
+      }
       if (!inAreaM(p, 3000)) continue;
       var hd = headingOfPos(p);
       var el = Math.max(0, t - tOnOf(d));   /* 扇形/扫掠从“到位”开始走 */
