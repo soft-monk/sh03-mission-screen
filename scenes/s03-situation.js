@@ -98,7 +98,8 @@ function make(variant) {
     [].forEach.call(document.querySelectorAll(".s6-ai-log"), function (el) {
       var scr = el.closest ? el.closest(".scr") : null;
       var id = scr && scr.dataset ? scr.dataset.id : "";
-      if (id === "SH-04" || id === "SH-05") renderSharedAi(el);
+      if (id === "SH-04") renderSharedAi(el, curScenarioId() + "s4-");
+      else if (id === "SH-05") renderSharedAi(el, curScenarioId() + "s5-");
     });
   }
   function renderSharedAi(el, prefix) {
@@ -281,9 +282,9 @@ function make(variant) {
       pushSharedAi(cfg.id + ":" + item.it.key, item.it.who, item.it.text);
       (function step() {
         if (!item.list.length) {
-          /* 场景一：有语音的条目播完就出下一条（语音时长即节奏） */
-          if (item.it.audio && item.it.audio.length && isScene1()) { playItem(i + 1); return; }
-          /* 场景一：读完这一条就出下一条；最后一条读完打点，
+          /* 有语音的条目：播完立刻出下一条（场景一、场景二都一样） */
+          if (item.it.audio && item.it.audio.length) { playItem(i + 1); return; }
+          /* 场景一没语音时：读完这一条就出下一条；最后一条读完打点，
              交给屏内的“等 3 s → 2.8 s 模拟点击 → 进下一屏” */
           if (isScene1()) {
             setTimeout(function () { playItem(i + 1); }, s1ReadSec(item.it) * 1000);
@@ -1724,23 +1725,21 @@ function make(variant) {
         if (!it.ev.audio || !it.ev.audio.length) { if (logAudioOn) stopLogAudio(); return; }
         startLogAudio(idx, Math.max(0, t - it.start));
       }
-      /* 气泡：显示所有 start ≤ t 的条目（往回拖自动消失） */
+      /* 气泡：只显示本屏自己的（SH-06 的打击/评估对话），不继承上两屏的对话 */
       function renderLogAt(t) {
         if (!aiLogEl) return;
-        var inherited = sharedAiMessages();   /* SH-04/05 继承：直接显示 */
         var html = "", i, n = 0;
-        for (i = 0; i < inherited.length; i++) html += aiMsgHtml(inherited[i].who, inherited[i].text);
         for (i = 0; i < SCHED.length; i++) {
           if (t + 1e-6 < SCHED[i].start) break;
           html += aiMsgHtml(SCHED[i].ev.who, SCHED[i].ev.text);
           n++;
         }
-        var sig = n + ":" + inherited.length;
+        var sig = String(n);
         if (aiLogEl.getAttribute("data-n") === sig) return;
         aiLogEl.setAttribute("data-n", sig);
         aiLogEl.innerHTML = html;
         var sc = aiLogEl.closest(".s6-chat-scroll");
-        if (sc) sc.scrollTop = (n + inherited.length) <= 1 ? 0 : sc.scrollHeight;
+        if (sc) sc.scrollTop = n <= 1 ? 0 : sc.scrollHeight;
       }
       function renderAiLog(t) { renderLogAt(t); }
       window.__s6Rebuild = function () { if (logAudioOn) return; buildSchedule(); };   /* 播放中不重算，避免跳音 */
@@ -2536,9 +2535,9 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
       ACTIVE_VOICE.forEach(function (v, i) {
         if (t >= v.t) pushSharedAi(curScenarioId() + "s4-" + i, v.who, v.text);
       });
-      renderSharedAi(e.commonAiLog);
+      renderSharedAi(e.commonAiLog, curScenarioId() + "s4-");
     } else if (e.variant === "plan") {
-      renderSharedAi(e.commonAiLog);
+      renderSharedAi(e.commonAiLog, curScenarioId() + "s5-");
     }
     /* SH-04：底部 AI 决策助手
        对话气泡常显（不按时间淡入）——这样从别的屏返回 SH-04 时对话还在，

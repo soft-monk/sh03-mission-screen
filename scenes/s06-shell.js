@@ -130,7 +130,8 @@ window.S06_SHELL = (function () {
     var arr = s1SharedAiMessages();
     var html = "";
     for (var i = 0; i < arr.length; i++) {
-      if (arr[i] && typeof arr[i].t === "number" && tt + 1e-6 < arr[i].t) continue;
+      if (!arr[i] || String(arr[i].key || "").indexOf("s1-") !== 0) continue;   /* 只显示 SH-06 自己的语音气泡 */
+      if (typeof arr[i].t === "number" && tt + 1e-6 < arr[i].t) continue;
       var who = arr[i].who || "ai";
       html += '<div class="s6-msg ' + who + '"><div class="s6-avatar">' + (who === "user" ? "用户" : "AI") +
         '</div><div class="s6-bubble">' + arr[i].text + '</div></div>';
