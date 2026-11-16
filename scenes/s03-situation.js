@@ -2569,13 +2569,21 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
       var gr = autoBtn.getBoundingClientRect();
       var gx = (gr.left - sr.left) / scl + gr.width / scl / 2;
       var gy = (gr.top - sr.top) / scl + gr.height / scl / 2;
-      var doneAt = (window.APP_STATE && window.APP_STATE.scenarioId === "scene-1")
-        ? (window.__dlgDoneAt && window.__dlgDoneAt[phase]) : null;
+      var isS1 = !!(window.APP_STATE && window.APP_STATE.scenarioId === "scene-1");
+      var doneAt = isS1 ? (window.__dlgDoneAt && window.__dlgDoneAt[phase]) : null;
       var lt, tMove0, tMove1, tClick0, tClick1, tFade0, tFade1;
       if (doneAt) {
         /* 语音播完 → 等 3 s → 2.8 s 模拟点击动画 → 进下一屏 */
         lt = (performance.now() - doneAt) / 1000 - 3.0;
         if (lt < 0) lt = 0;
+        tMove0 = 0; tMove1 = 2.0;
+        tClick0 = 2.0; tClick1 = 2.2;
+        tFade0 = 2.5; tFade1 = 2.8;
+      } else if (isS1) {
+        /* 场景一：气泡还没读完（没有打点）时不出鼠标。
+           否则旧的兜底窗（plan 24~28 s）会先在 05 屏插一次半截移动，
+           等 26.75 s 打点后再播一次，看起来像点了两次。 */
+        lt = -999;
         tMove0 = 0; tMove1 = 2.0;
         tClick0 = 2.0; tClick1 = 2.2;
         tFade0 = 2.5; tFade1 = 2.8;
