@@ -452,12 +452,12 @@ function make(variant) {
 
     var SH06_VIDEO_HTML = (sc && sc.id === "SH-06")
       ? ('<div class="s6-video-source">' +
-          '<video class="s6-video-a" src="assets/video/goal001_A_ir.mp4" muted playsinline preload="auto"></video>' +
-          '<video class="s6-video-b" src="assets/video/goal001_B_ir.mp4" muted playsinline preload="auto"></video>' +
+          '<video class="s6-video-a" src="assets/video/goal002_A_ir.mp4" muted playsinline preload="auto"></video>' +
+          '<video class="s6-video-b" src="assets/video/goal002_B_ir.mp4" muted playsinline preload="auto"></video>' +
           '<video class="s6-video-c" src="assets/video/goal001_A_ir.mp4" muted playsinline preload="auto"></video>' +
           '<video class="s6-video-d" src="assets/video/goal001_B_ir.mp4" muted playsinline preload="auto"></video>' +
-          '<video class="s6-video-e" src="assets/video/goal001_A_ir.mp4" muted playsinline preload="auto"></video>' +
-          '<video class="s6-video-f" src="assets/video/goal001_B_ir.mp4" muted playsinline preload="auto"></video>' +
+          '<video class="s6-video-e" src="assets/video/goal003_A_ir.mp4" muted playsinline preload="auto"></video>' +
+          '<video class="s6-video-f" src="assets/video/goal003_B_ir.mp4" muted playsinline preload="auto"></video>' +
         '</div>' +
         '<section class="s6-video-smallbar">' +
           '<div class="s6-video-card s6-video-small-card" data-video="A">' +
