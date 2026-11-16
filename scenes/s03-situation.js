@@ -1244,6 +1244,12 @@ function make(variant) {
           if (!st.run) push();
         });
       });
+      /* 大窗本身点击即收起 */
+      largeBox.addEventListener("click", function () {
+        if (!expanded.length) return;
+        expanded = [];
+        reflowLarge();
+      });
       [["A", videoA], ["B", videoB], ["C", videoC], ["D", videoD], ["E", videoE], ["F", videoF]].forEach(function (pair) {
         var key = pair[0], v = pair[1];
         if (!v) return;
@@ -1258,7 +1264,13 @@ function make(variant) {
       [["A", videoA], ["C", videoC], ["E", videoE]].forEach(function (pair) {
         var key = pair[0], v = pair[1];
         if (!v) return;
-        v.addEventListener("ended", function () { blackenAttack(key); });
+        v.addEventListener("ended", function () {
+          blackenAttack(key);
+          if (expanded.indexOf(key) >= 0) {          /* 播完就把大窗收起 */
+            expanded = expanded.filter(function (k) { return k !== key; });
+            reflowLarge();
+          }
+        });
       });
       /* 三条毁伤消息：按飞行时间轴触发（不再看视频进度） */
       function checkTimelineRules() {
@@ -2246,7 +2258,7 @@ function make(variant) {
         ".s6-video-small-card{width:calc(25% - 12px);flex:none;cursor:pointer}",
         ".s6-video-large{position:absolute;left:7.8%;right:21%;top:14%;height:45%;z-index:19;display:none;opacity:0;pointer-events:none;",
         "  transition:opacity .3s ease}",
-        ".s6-video-large.on{display:flex;align-items:center;justify-content:center;opacity:1}",
+        ".s6-video-large.on{display:flex;align-items:center;justify-content:center;opacity:1;pointer-events:auto;cursor:pointer}",
         ".s6-video-grid{display:grid;gap:10px;width:auto;height:auto}",
         ".s6-video-cell{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;border-radius:9px;box-sizing:border-box;",
         "  border:1px solid rgba(239,68,68,.65);background:transparent;box-shadow:0 0 24px rgba(239,68,68,.18)}",
