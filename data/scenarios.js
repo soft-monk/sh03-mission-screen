@@ -120,18 +120,19 @@
       { n: "编组3", k: "电子无人机", img: "uav-red.png", v: 2 },
       { n: "编组4", k: "通信无人机", img: "uav-green.png", v: 4 }
     ],
+    /* 场景一气泡：at = 上一条按 4 字/秒读完的时刻
+       （引擎对场景一实时按字数计算，这里作为兜底与阅读用） */
     s4Dialog: [
-      { key: "s4-task-header", who: "ai", at: 0.0, text: "任务分析：" },
-      { key: "s4-area", who: "ai", at: 0.0, text: "沿海岛屿任务区<br>中心点坐标：经度121.02度，纬度24.84度<br>区域形状：边长40km矩形<br>情报显示：区域内岛屿与近岸目标分散，需全域覆盖侦察。" },
-      { key: "s4-mission-requirement", who: "ai", at: 26.5, text: "上级任务要求<br>对沿海岛屿任务区全域执行侦察与封控<br>持续40分钟时间<br>按网格化分区覆盖，确保无盲区。" }
+      { key: "s4-task-header", who: "ai", at: 0.0, text: "已接收任务指令，解析如下：" },
+      { key: "s4-mission-requirement", who: "ai", at: 3.25, text: "发射侦察无人蜂群对任务区域1进行持续侦察监视，持续60分钟，上报识别目标并引导远程火力进行打击。" }
     ],
     s4Audio: [],
     s5Dialog: [
-      { key: "s5-plan-header", who: "ai", at: 0.0, text: "推荐编组方案：" },
-      { key: "s5-eo", who: "ai", at: 0.0, text: "光电无人机34架，部署到沿海岛屿任务区，负责全域目标探测与扫描。" },
-      { key: "s5-radar", who: "ai", at: 5.5, text: "雷达无人机8架，部署到沿海岛屿任务区，负责全域目标探测与扫描。" },
-      { key: "s5-ew", who: "ai", at: 11.0, text: "电子无人机2架，部署到沿海岛屿任务区，负责电子侦察与压制。" },
-      { key: "s5-relay", who: "ai", at: 16.5, text: "通信无人机4架，随队部署，负责通信中继与数据回传。" }
+      { key: "s5-plan-header", who: "ai", at: 0.0, text: "推荐集群编组方案如下：" },
+      { key: "s5-eo", who: "ai", at: 2.75, text: "光电侦察无人机34架，执行光学遍历搜索和毁伤评估任务。" },
+      { key: "s5-radar", who: "ai", at: 9.5, text: "雷达侦察无人机6架，使用SAR成像模式对区域进行遍历搜索。" },
+      { key: "s5-ew", who: "ai", at: 16.75, text: "电子侦察无人机2架，执行区域覆盖电子侦察任务。" },
+      { key: "s5-relay", who: "ai", at: 22.5, text: "中继通信无人机4架 部署保障通信。" }
     ],
     s5Audio: [], s6Dialog: [], s6Audio: [],
     metrics: [{ k: "封控覆盖率", v: 91 }, { k: "边界完整度", v: 95 }, { k: "目标发现效率", v: 88 }, { k: "电子压制能力", v: 92 }, { k: "任务成功率", v: 89 }, { k: "资源利用率", v: 84 }],

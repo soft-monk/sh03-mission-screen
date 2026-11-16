@@ -20,9 +20,10 @@
   var HEAD_IDS = ["SH-04", "SH-05", "SH-06"];
   var HOLD = [{ t: 25.5, screen: "SH-03", prompt: "请选择任务场景" }];
 
-  function buildBranch(baseNo, shortName) {
+  function buildBranch(baseNo, shortName, headT, nextT) {
     var screens = COMMON_IDS.concat(HEAD_IDS).map(function (id) { return cloneScreen(find(id)); }).filter(Boolean);
-    var t = 109;
+    if (headT) screens.forEach(function (sc) { if (headT[sc.id] !== undefined) sc.t = headT[sc.id]; });
+    var t = nextT || 109;
     for (var i = 1; i <= 6; i++) {
       screens.push({
         id: "SH-" + (baseNo + i),
@@ -39,13 +40,16 @@
       s.end = i + 1 < screens.length ? screens[i + 1].t : total;
       s.dur = s.end - s.t;
     });
+    var p2t = headT && headT["SH-05"] !== undefined ? headT["SH-05"] : 66;
+    var p3t = headT && headT["SH-06"] !== undefined ? headT["SH-06"] : 94;
+    var p4t = nextT || 109;
     var chapters = [
       { key: "boot", name: "启动", t: 0 },
       { key: "p1", name: "场景确认", t: 14 },
-      { key: "p2", name: "编组方案", t: 66 },
-      { key: "p3", name: "方案确认", t: 94 },
-      { key: "p4", name: "任务执行", t: 109 },
-      { key: "p5", name: "任务收尾", t: 169 }
+      { key: "p2", name: "编组方案", t: p2t },
+      { key: "p3", name: "方案确认", t: p3t },
+      { key: "p4", name: "任务执行", t: p4t },
+      { key: "p5", name: "任务收尾", t: p4t + 60 }
     ];
     var phases = [1, 2, 3, 4, 5].map(function (i) {
       var start = chapters[i].t;
@@ -56,7 +60,9 @@
   }
 
   var FLOWS = {
-    "scene-1": buildBranch(100, "场景一"),
+    /* 场景一：SH-04/05 气泡按 4 字/秒读完 + 等 3 s + 2.8 s 模拟点击，
+       进入下一屏 26 → 47.05 → 79.60，占位屏从 94.60 开始 */
+    "scene-1": buildBranch(100, "场景一", { "SH-04": 26, "SH-05": 47.05, "SH-06": 79.6 }, 94.6),
     "scene-2": BASE,
     "scene-3": buildBranch(200, "场景三")
   };

@@ -57,7 +57,7 @@ window.S06_SHELL = (function () {
       return "<div class=\"s6-tb-row\"><span>" + r[0] + "</span><b" + (r[2] ? " class=\"" + r[2] + "\"" : "") + ">" + r[1] + "</b></div>";
     }).join("");
     var tags = (t.tags || []).map(function (x) { return "<i>" + x + "</i>"; }).join("");
-    return "<div class=\"s6-tb s6-target-item open\" data-target=\"" + t.no + "\" style=\"display:none\">" +
+    return "<div class=\"s6-tb s6-target-item\" data-target=\"" + t.no + "\" style=\"display:none\">" +
       "<div class=\"s6-tb-head\">" +
         "<span class=\"s6-tb-no\">" + t.no + "</span>" +
         "<span class=\"s6-tb-name\">" + t.name + "</span>" +
@@ -77,7 +77,7 @@ window.S06_SHELL = (function () {
         sus: "疑似",
         rows: [
           ["类型", o.kind === "radar" ? "雷达目标" : o.kind === "jet" ? "空中目标" : "地面目标"],
-          ["判定", "疑似（未经确认）", "sus"],
+          ["判定", "疑似（未经确认）", "sus s6-tb-judge"],
           ["来源", "雷达 SAR-01"],
           ["区域", "岸基机场"]
         ],
@@ -89,16 +89,34 @@ window.S06_SHELL = (function () {
     if (!root) return;
     var items = root.querySelectorAll(".s6-target-item");
     var cnt = root.querySelector(".s6-target-count");
-    var on = t >= S1_TGT_T0;
+    var times = s1BaseTimes();
     var n = 0;
     [].forEach.call(items, function (el) {
-      var show = on && el.getAttribute("data-target") !== "0";
+      var id = el.getAttribute("data-target");
+      var tm = times[id];
+      var show = !!(tm && t + 1e-6 >= tm.sus);
       el.style.display = show ? "" : "none";
-      if (show) n++;
+      if (!show) { el.classList.remove("confirmed", "destroyed"); return; }
+      n++;
+      var st = tm.dest && t + 1e-6 >= tm.dest ? 3 : (tm.conf && t + 1e-6 >= tm.conf ? 2 : 1);
+      el.classList.toggle("confirmed", st === 2);
+      el.classList.toggle("destroyed", st === 3);
+      var judge = el.querySelector(".s6-tb-judge");
+      if (judge) {
+        judge.textContent = st === 3 ? "已摧毁" : st === 2 ? "已确认" : "疑似（未经确认）";
+        judge.className = "s6-tb-judge " + (st === 3 ? "destroyed" : st === 2 ? "confirmed" : "sus");
+      }
+      var sus = el.querySelector(".s6-tb-sus");
+      if (sus) {
+        sus.textContent = st === 3 ? "已摧毁" : st === 2 ? "已确认" : "疑似";
+        sus.className = "s6-tb-sus" + (st === 3 ? " dest" : st === 2 ? " conf" : "");
+      }
+      var tags = el.querySelector(".s6-tb-tags");
+      if (tags) tags.innerHTML = st === 3 ? "<i>已摧毁</i>" : st === 2 ? "<i>已确认</i>" : "<i>疑似目标</i><i>待复核</i>";
     });
     if (cnt) cnt.textContent = String(n);
     var empty = root.querySelector(".s6-tb-empty");
-    if (empty) empty.style.display = on ? "none" : "";
+    if (empty) empty.style.display = n ? "none" : "";
   }
   /* SH-06：只继承前面 SH-04/05 的共享 AI 对话，本屏不新增消息 */
   function s1SharedAiMessages() {
@@ -106,11 +124,13 @@ window.S06_SHELL = (function () {
     if (!window.APP_STATE.aiMessages) window.APP_STATE.aiMessages = [];
     return window.APP_STATE.aiMessages;
   }
-  function s1RenderSharedAi(el) {
+  function s1RenderSharedAi(el, t) {
     if (!el) return;
+    var tt = typeof t === "number" ? t : Infinity;
     var arr = s1SharedAiMessages();
     var html = "";
     for (var i = 0; i < arr.length; i++) {
+      if (arr[i] && typeof arr[i].t === "number" && tt + 1e-6 < arr[i].t) continue;
       var who = arr[i].who || "ai";
       html += '<div class="s6-msg ' + who + '"><div class="s6-avatar">' + (who === "user" ? "用户" : "AI") +
         '</div><div class="s6-bubble">' + arr[i].text + '</div></div>';
@@ -145,6 +165,16 @@ window.S06_SHELL = (function () {
     return "<div class=\"s6-video-source\">" + src + "</div>" +
       "<section class=\"s6-video-smallbar\">" + small + "</section>" +
       "<section class=\"s6-video-large\"><div class=\"s6-video-grid\"></div></section>";
+  }
+  /* 场景一 SH-06：两路侦察视频（05/06 号光电，远火到达前 15 s 开始播放） */
+  function htmlS1Video() {
+    function card(k, no) {
+      return "<div class=\"s6-video-card\" data-video=\"" + k + "\">" +
+        "<div class=\"s6-video-title\">" + no + "号光电侦察无人机 ｜ 侦察确认</div>" +
+        "<video class=\"s1-video\" src=\"assets/video/scene1_" + k + "_ir.mp4\" muted playsinline preload=\"auto\"></video>" +
+      "</div>";
+    }
+    return "<section class=\"s6-video-smallbar s1-videobar\">" + card("A", "05") + card("B", "06") + "</section>";
   }
   function htmlControls(totalText) {
     return "<section class=\"s6-ctl\">" +
@@ -226,7 +256,8 @@ window.S06_SHELL = (function () {
       /* 目标卡片（同场景二 SH-06）：头部可点开/收起 */
       ".s6-toolbox{position:relative;z-index:1;border-radius:10px;overflow:hidden;",
       "  background:linear-gradient(180deg,rgba(6,18,32,.97),rgba(4,12,22,.98));border:1px solid rgba(56,189,248,.28);",
-      "  box-shadow:0 12px 32px rgba(0,0,0,.5),0 0 0 1px rgba(56,189,248,.08) inset}",
+      "  box-shadow:0 12px 32px rgba(0,0,0,.5),0 0 0 1px rgba(56,189,248,.08) inset;",
+      "  max-height:336px;overflow-y:auto;scrollbar-width:thin}",
       ".s6-toolbox-h{display:flex;align-items:center;justify-content:space-between;padding:10px 13px;",
       "  font-size:15px;letter-spacing:1px;color:#e8f4ff;border-bottom:1px solid rgba(56,189,248,.2);",
       "  background:linear-gradient(180deg,rgba(56,189,248,.12),rgba(56,189,248,.02))}",
@@ -278,6 +309,68 @@ window.S06_SHELL = (function () {
       "  border-bottom:5px solid transparent;border-right:5px solid rgba(12,34,58,.95)}",
       ".s6-msg.user .s6-bubble{background:rgba(22,101,52,.88);border-color:rgba(74,222,128,.45);color:#dcfce7}",
       ".s6-msg.user .s6-bubble:before{left:auto;right:-5px;border-right:0;border-left:5px solid rgba(22,101,52,.88)}"
+    ].join("\n");
+    document.head.appendChild(st);
+  }
+  /* 场景一 SH-06：SAR 影像窗 / 侦察视频窗 / 目标三态样式 */
+  function ensureS1Css() {
+    if (document.getElementById("css-s1-play")) return;
+    var st = document.createElement("style");
+    st.id = "css-s1-play";
+    st.textContent = [
+      ".s1-sar-win{position:absolute;left:28%;top:14%;width:40%;z-index:23;display:none;",
+      "  background:#04101f;border:1px solid rgba(56,189,248,.45);border-radius:10px;overflow:hidden;",
+      "  box-shadow:0 20px 60px rgba(0,0,0,.65);cursor:zoom-in}",
+      ".s1-sar-win.on{display:block}",
+      ".s1-sar-win.zoom{left:12%;top:9%;width:70%;cursor:zoom-out}",
+      ".s1-sar-win img{display:block;width:100%;height:auto;max-height:620px;object-fit:contain;background:#000}",
+      ".s1-sar-cap{padding:6px 10px;font-size:12px;letter-spacing:1px;color:#9fd0f5;background:rgba(4,16,30,.92)}",
+      ".s1-videobar{position:absolute;left:10%;top:15%;width:66%;display:none;align-items:flex-start;",
+      "  justify-content:center;gap:16px;z-index:22;pointer-events:none}",
+      ".s1-videobar.on{display:flex}",
+      ".s1-videobar .s6-video-card{flex:1;max-width:47%;background:rgba(4,16,30,.94);",
+      "  border:1px solid rgba(56,189,248,.35);border-radius:10px;overflow:hidden}",
+      ".s1-videobar .s6-video-title{height:28px;line-height:28px;padding:0 10px;font-size:12px;letter-spacing:1px;",
+      "  color:#fecaca;background:rgba(10,24,42,.95);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".s1-video{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;background:#000}",
+      ".s1-summary{position:absolute;left:116px;top:137px;width:1404px;height:893px;display:none;z-index:40;",
+      "  flex-direction:column;gap:14px;padding:20px 24px;box-sizing:border-box;border-radius:12px;",
+      "  background:linear-gradient(180deg,rgba(6,16,30,.975),rgba(4,10,20,.99));",
+      "  border:1px solid rgba(56,189,248,.38);box-shadow:0 24px 80px rgba(0,0,0,.65)}",
+      ".s1-summary.on{display:flex}",
+      ".s1-sum-head b{font-size:26px;letter-spacing:2px;color:#eaf4ff;padding-left:14px;border-left:4px solid #38bdf8}",
+      ".s1-sum-kpis{display:flex;gap:16px;margin-bottom:14px}",
+      ".s1-sum-kpi{flex:1;background:linear-gradient(180deg,#152741,#101d32);border:1px solid #23395a;",
+      "  border-left:4px solid #22c55e;border-radius:10px;padding:12px 18px;display:flex;flex-direction:column;gap:4px}",
+      ".s1-sum-kpi.cy{border-left-color:#38bdf8}",
+      ".s1-sum-kpi span{font-size:12px;color:#7c9bbd}",
+      ".s1-sum-kpi b{font-size:30px;color:#eaf4ff;line-height:1.1}",
+      ".s1-sum-kpi em{font-style:normal;font-size:12px;color:#4ade80}",
+      ".s1-sum-main{display:flex;gap:16px;flex:1;min-height:0}",
+      ".s1-sum-panel{flex:1;background:rgba(12,26,44,.8);border:1px solid #1f3556;border-radius:10px;padding:12px 16px;",
+      "  display:flex;flex-direction:column;gap:10px}",
+      ".s1-sum-panel h4{margin:0;font-size:16px;color:#e2efff;padding-left:10px;border-left:3px solid #38bdf8}",
+      ".s1-sum-rows{display:flex;flex-direction:column;gap:10px}",
+      ".s1-sum-tr{display:flex;align-items:center;gap:10px;background:#151f31;border:1px solid #243755;",
+      "  border-radius:8px;padding:8px 12px;font-size:13px;color:#eaf4ff}",
+      ".s1-sum-tr b{flex:1;font-weight:500}",
+      ".s1-sum-tr em{font-style:normal;font-size:11.5px;color:#f87171;border:1px solid #ef4444;",
+      "  background:#2a1218;border-radius:4px;padding:2px 8px}",
+      ".s1-sum-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 40px;font-size:14px;color:#cfe0f5}",
+      ".s1-sum-grid span{display:flex;gap:10px}",
+      ".s1-sum-grid b{color:#7dd3fc;font-weight:600}",
+      ".s1-sum-loss{margin-top:auto;padding-top:10px;border-top:1px solid #1f3556;font-size:14px;color:#cfe0f5}",
+      ".s1-sum-loss b{color:#4ade80;margin-left:6px}",
+      ".s1-sum-foot{display:flex;justify-content:center}",
+      ".s1-sum-back{width:640px;height:56px;border-radius:10px;border:1px solid #2b4a70;background:#0f1e33;",
+      "  color:#9fd0f5;font-size:17px;letter-spacing:1px;cursor:pointer;font-family:inherit}",
+      ".s6-tb.confirmed .s6-tb-head{background:rgba(127,29,29,.55);box-shadow:inset 2px 0 0 #ef4444}",
+      ".s6-tb.confirmed .s6-tb-no,.s6-tb.confirmed .s6-tb-name{color:#fecaca}",
+      ".s6-tb.destroyed .s6-tb-head{background:rgba(70,10,10,.78);box-shadow:inset 2px 0 0 #dc2626}",
+      ".s6-tb-sus.conf{color:#fca5a5;border-color:rgba(248,113,113,.5);background:rgba(239,68,68,.12)}",
+      ".s6-tb-sus.dest{color:#fecaca;border-color:rgba(248,113,113,.65);background:rgba(127,29,29,.55)}",
+      ".s6-tb-row b.confirmed{color:#f87171}",
+      ".s6-tb-row b.destroyed{color:#fca5a5}"
     ].join("\n");
     document.head.appendChild(st);
   }
@@ -341,10 +434,53 @@ window.S06_SHELL = (function () {
 
   /* 目标出现：固定 20:03（SAR 扫到机场）后，6 个疑似目标一起标绘；确认逻辑后续再做 */
   var S1_TGT_T0 = 20 * 60 + 3;
+  /* 场景一 SH-06 剧情：SAR 发现 → 逐个入列 → 光电盘旋确认 → 远火打击 → 侦察确认毁伤 */
+  var S1_SAR_IMG_T0 = 19 * 60 + 41;         /* 1181：SAR 条带首次扫到机场 */
+  var S1_SAR_IMG_DUR = 7;
+  var S1_TGT_SUS = { "001": 1181, "002": 1181, "003": 1181, "004": 1181, "005": 1181, "006": 1181 };
+  var S1_TGT_CONF = { "001": 1189, "002": 1189, "003": 1189, "004": 1189, "005": 1189, "006": 1189 };
+  var S1_TGT_DEST = 23 * 60 + 1;            /* 1381：毁伤评估完成，全部摧毁 */
+  var S1_VID_T0 = 22 * 60 + 39;             /* 1359：05/06 抵达评估阵位，视频开始（打击在第 16 秒） */
+  var S1_VID_DUR = 76;
+  var S1_AI_EVENTS = [
+    { t: 0,     text: "根据任务需求和编组方案，已生成蜂群作战方案。" },
+    { t: 8,     text: "光电侦察无人机34架 根据目标预测概率执行分块遍历搜索，最大遍历周期8分钟。" },
+    { t: 16,    text: "雷达侦察无人机6架 采用编队协同搜索模式对任务区域进行SAR条带成像侦察，遍历周期20分钟。" },
+    { t: 24,    text: "电子侦察机2架 对于任务区域进行广域协同搜索 遍历周期10分钟。" },
+    { t: 363,   text: "各编组已经抵达任务区，开始执行侦察任务。" },
+    { t: 1181,  text: "雷达侦察无人机 SAR-01 回传的 SAR 图像识别岸基机场存在 6 个目标：2 架作战飞机，2 部雷达，2 个单体机库，型号已完成识别匹配，置信度99%。" },
+    { t: 1189,  text: "目标已编批，目标坐标已上报。" },
+    { t: 1193,  text: "接收上级指令，三分钟后将对机场目标进行远程打击，已分配光电侦察无人机 5、6 执行毁伤评估任务，预计 3 分钟后达到评估阵位。" },
+    { t: 1359,  text: "光电侦察无人机5已抵达评估阵位，开始回传视频。" },
+    { t: 1365,  text: "光电侦察无人机6已抵达评估阵位，开始回传视频。" },
+    { t: 1375,  text: "目标被击中，图像已上传，正在进行毁伤效果判读评估。" },
+    { t: 1381,  text: "飞机目标003、004已被完全摧毁，雷达目标001、002已被完全摧毁，机库目标005、006被击中，打击效果良好，评估结果已上传。" },
+    { t: 1387,  text: "光电侦察无人机5、6回归原侦察阵位。" }
+  ];
+  /* 慢速语音估算：3 字/秒 + 标点 0.35 s + 起播 0.6 s（后续接真实语音时替换） */
+  function s1VoiceDur(text) {
+    var t = String(text || "");
+    var chars = t.replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, "").length;
+    var punct = (t.match(/[，。：、；！？,.:;]/g) || []).length;
+    return 0.6 + chars / 3.0 + punct * 0.35;
+  }
+  var S1_AI_SCHED = (function () {
+    var out = [], prevEnd = -1;
+    S1_AI_EVENTS.forEach(function (ev) {
+      var start = Math.max(ev.t, prevEnd >= 0 ? prevEnd : 0);
+      var dur = s1VoiceDur(ev.text);
+      out.push({ ev: ev, start: start, dur: dur, end: start + dur });
+      prevEnd = start + dur;
+    });
+    return out;
+  })();
   function s1BaseTimes() {
     if (S1_BASE_TIMES) return S1_BASE_TIMES;
     var out = {};
-    if (S1_BASE) S1_BASE.targets.forEach(function (o) { out[o.id] = { sus: S1_TGT_T0, conf: 0 }; });
+    if (S1_BASE) S1_BASE.targets.forEach(function (o) {
+      out[o.id] = { sus: S1_TGT_SUS[o.no] || S1_TGT_T0, conf: S1_TGT_CONF[o.no] || 0, dest: S1_TGT_DEST };
+      out[o.no] = out[o.id];                 /* 目标列表按编号（001…006）查时间 */
+    });
     S1_BASE_TIMES = out;
     return out;
   }
@@ -391,12 +527,18 @@ window.S06_SHELL = (function () {
     var times = s1BaseTimes();
     var feats = [], changed = false;
     S1_BASE.targets.forEach(function (o) {
-      var tm = times[o.id] || { sus: 0, conf: 0 };
-      var nx = tm.sus && t >= tm.sus ? (tm.conf && t >= tm.conf ? 2 : 1) : 0;
+      var tm = times[o.id] || { sus: 0, conf: 0, dest: 0 };
+      var nx = 0;
+      if (tm.sus && t >= tm.sus) nx = 1;
+      if (tm.conf && t >= tm.conf) nx = 2;
+      if (tm.dest && t >= tm.dest) nx = 3;
       if (nx !== o._st) { o._st = nx; changed = true; }
       if (nx >= 1) feats.push({ icon: "base-" + o.kind + (nx >= 2 ? "-r" : "-y"), lon: o.pos[0], lat: o.pos[1], r: S1_BASE.runway.bearing });
       if (nx && o._lbl) {
-        try { o._lbl.setText(nx >= 2 ? o.name : o.name + "（疑似）"); o._lbl.setColor(nx >= 2 ? "#f87171" : "#fbbf24"); } catch (e) {}
+        try {
+          o._lbl.setText(nx >= 3 ? o.name + "（已摧毁）" : nx >= 2 ? o.name : o.name + "（疑似）");
+          o._lbl.setColor(nx >= 3 ? "#fca5a5" : nx >= 2 ? "#f87171" : "#fbbf24");
+        } catch (e) {}
       }
       if (o._lbl) o._lbl.set(nx ? 1 : 0);
     });
@@ -406,7 +548,7 @@ window.S06_SHELL = (function () {
     try { raw = mv.map(); } catch (e) {}
     if (!raw) return;
     S1_BASE.targets.forEach(function (o) {
-      var col = o._st >= 2 ? "#ef4444" : "#f59e0b";
+      var col = o._st >= 3 ? "#dc2626" : o._st >= 2 ? "#ef4444" : "#f59e0b";
       var vis = o._st ? "visible" : "none";
       try {
         ["base-ring-" + o.id + "-f", "base-ring-" + o.id + "-l"].forEach(function (id) {
@@ -535,16 +677,31 @@ window.S06_SHELL = (function () {
   function mountEmpty(root, sc, cfg) {
     ensureLayerCss();
     ensureEmptyCss();
+    ensureS1Css();
     var uavs = (cfg && cfg.uavs) || [];
     var hasMap = !!(cfg && cfg.mapBounds);   /* 场景一有自己的一套瓦片与边界 */
     var mapHost = null;
     var s1acc = { ids: [], labels: [], plan: false, planIds: [], base: false, grid: false, showRoutes: true };
-    var s1AiLog = null, s1AiLen = -1;
-    function s1SyncAi() {
+    var s1AiLog = null, s1AiLen = -1, s1AiArrLen = -1;
+    function s1PumpAi(t) {
       var arr = s1SharedAiMessages();
-      if (arr.length === s1AiLen) return;
-      s1AiLen = arr.length;
-      s1RenderSharedAi(s1AiLog);
+      S1_AI_SCHED.forEach(function (it, i) {
+        if (t + 1e-6 < it.start) return;
+        var key = "s1-" + i;
+        for (var k = 0; k < arr.length; k++) if (arr[k] && arr[k].key === key) return;
+        arr.push({ key: key, who: "ai", t: it.start, text: it.ev.text });
+      });
+    }
+    function s1SyncAi(t) {
+      var tt = typeof t === "number" ? t : 0;
+      var arr = s1SharedAiMessages(), n = 0;
+      for (var i = 0; i < arr.length; i++) {
+        if (arr[i] && typeof arr[i].t === "number" && tt + 1e-6 < arr[i].t) continue;
+        n++;
+      }
+      if (n === s1AiLen && arr.length === s1AiArrLen) return;
+      s1AiLen = n; s1AiArrLen = arr.length;
+      s1RenderSharedAi(s1AiLog, tt);
     }
     var FL = (hasMap && window.FLIGHT_S1) ? window.FLIGHT_S1 : null;
     var total = FL ? FL.TOTAL : ((window.FLIGHT06 && window.FLIGHT06.TOTAL) || 9000);
@@ -579,7 +736,12 @@ window.S06_SHELL = (function () {
       "<div class=\"s3-scale\"><b></b><span>2 km</span></div>" +
       "<div class=\"s3-coord\">" + ((cfg && cfg.coordText) || "--") + "</div>" +
       htmlRight(s1TargetCards()) +
-      htmlVideo(EMPTY_VIDEO_CARDS, []) +
+      htmlS1Video() +
+      "<section class=\"s1-sar-win\"><img src=\"assets/img/s1-sar-airfield.jpg\" alt=\"\">" +
+        "<div class=\"s1-sar-cap\">SAR 扫描影像 · 岸基机场</div></section>" +
+      "<section class=\"s1-summary\"><div class=\"s1-sum-head\"><b>任务总结</b></div>" +
+        "<div class=\"s1-sum-body\"></div>" +
+        "<div class=\"s1-sum-foot\"><button class=\"s1-sum-back\">↩ 返回场景选择</button></div></section>" +
       "<button class=\"s3-mic\">" + ic("mic", 26, "", 1.7) + "</button>" +
       "<footer class=\"s3-status\"></footer>" +
       htmlControls(fmt(total)) +
@@ -601,7 +763,41 @@ window.S06_SHELL = (function () {
       n.style.opacity = "1";
     });
     s1AiLog = root.querySelector(".s6-ai-log");
-    s1SyncAi();
+    var s1SarWin = root.querySelector(".s1-sar-win");
+    var s1Sum = root.querySelector(".s1-summary");
+    var s1SumBuilt = false;
+    function buildS1Summary() {
+      if (!s1Sum || s1SumBuilt) return;
+      s1SumBuilt = true;
+      var body = s1Sum.querySelector(".s1-sum-body");
+      var tg = (window.BASE_S1 && window.BASE_S1.targets) || [];
+      var rows = tg.map(function (o) {
+        return '<div class="s1-sum-tr"><b>' + o.no + " " + o.name + "</b><em>已摧毁</em></div>";
+      }).join("");
+      body.innerHTML =
+        '<div class="s1-sum-kpis">' +
+          '<div class="s1-sum-kpi"><span>目标处置</span><b>6 / 6</b><em>全部摧毁</em></div>' +
+          '<div class="s1-sum-kpi cy"><span>任务闭环</span><b>已达成</b><em>发现 → 确认 → 打击 → 评估</em></div>' +
+        '</div>' +
+        '<div class="s1-sum-main">' +
+          '<div class="s1-sum-panel"><h4>目标处置明细</h4><div class="s1-sum-rows">' + rows + "</div></div>" +
+          '<div class="s1-sum-panel"><h4>资源使用统计</h4><div class="s1-sum-grid">' +
+            "<span>光电侦察无人机<b>34 架</b></span>" +
+            "<span>雷达侦察无人机<b>6 架</b></span>" +
+            "<span>电子侦察无人机<b>2 架</b></span>" +
+            "<span>通信中继无人机<b>4 架</b></span>" +
+          "</div><div class=\"s1-sum-loss\">无人机战损<b>0 架</b></div></div>" +
+        "</div>";
+      var back = s1Sum.querySelector(".s1-sum-back");
+      if (back) back.addEventListener("click", function () {
+        var r = document.querySelector('[data-act="replay"]');
+        if (r) r.click();
+      });
+    }
+    var s1VidBar = root.querySelector(".s1-videobar");
+    var s1Videos = s1VidBar ? [].slice.call(s1VidBar.querySelectorAll("video")) : [];
+    if (s1SarWin) s1SarWin.addEventListener("click", function () { s1SarWin.classList.toggle("zoom"); });
+    s1SyncAi(0);
     if (hasMap && window.MapViewShared) {
       if (window.MapViewSetBounds) window.MapViewSetBounds(cfg.mapBounds);
       mapHost = root.querySelector(".s3-map");
@@ -664,7 +860,28 @@ window.S06_SHELL = (function () {
       renderCover(force);
       s1UpdateBase(mv, s1acc, st.t);
       s1UpdateTargetPanel(root, st.t);
-      s1SyncAi();
+      s1PumpAi(st.t);
+      /* 播完显示任务总结，停在 SH-06 */
+      if (s1Sum) {
+        var onSum = FL && st.t + 1e-6 >= FL.TOTAL;
+        if (onSum) buildS1Summary();
+        s1Sum.classList.toggle("on", !!onSum);
+      }
+      /* SAR 影像窗（7 s，可点击放大） */
+      if (s1SarWin) s1SarWin.classList.toggle("on", st.t + 1e-6 >= S1_SAR_IMG_T0 && st.t < S1_SAR_IMG_T0 + S1_SAR_IMG_DUR);
+      /* 两路侦察视频：远火到达前 15 s 开始，播放 76 s */
+      if (s1VidBar) {
+        var vOn = st.t + 1e-6 >= S1_VID_T0 && st.t < S1_VID_T0 + S1_VID_DUR;
+        s1VidBar.classList.toggle("on", vOn);
+        s1Videos.forEach(function (v) {
+          if (!vOn) { try { if (!v.paused) v.pause(); } catch (e) {} return; }
+          var want = Math.max(0, Math.min(S1_VID_DUR - 0.1, st.t - S1_VID_T0));
+          if (Math.abs(v.currentTime - want) > 1.2) { try { v.currentTime = want; } catch (e) {} }
+          if (st.run) { var pr = v.play(); if (pr && pr.catch) pr.catch(function () {}); }
+          else { try { v.pause(); } catch (e) {} }
+        });
+      }
+      s1SyncAi(st.t);
     }
     var lastCovBucket = -1, lastCovAt = 0;
     /* 覆盖小格：每 30 仿真秒才重建一次；拖拽时先跳过，松手补一次；
@@ -723,7 +940,7 @@ window.S06_SHELL = (function () {
     }
     (function buildSegs() {
       var marks = FL
-        ? [[0, "集结待命"], [FL.T_LIFT, "起飞编队"], [FL.T_FORM, "编队飞行"], [FL.T_IN, "侦察盘旋"]]
+        ? [[0, "集结"], [FL.T_FORM, "目标侦察"]]
         : [[0, "集结待命"], [total * 0.2, "编队飞行"], [total * 0.45, "侦察"]];
       segsBox.innerHTML = "";
       segLbls.innerHTML = "";
@@ -736,9 +953,9 @@ window.S06_SHELL = (function () {
         seg.style.width = Math.max(W, 0.6) + "%";
         seg.className = "s6-seg s6-seg" + i;
         segsBox.appendChild(seg);
-        if (W < 3) continue;
+        if (W < 1.2) continue;
         var lb = document.createElement("span");
-        lb.style.left = L + "%";
+        lb.style.left = Math.max(0.5, Math.min(97, L + (W < 6 ? 0.6 : 0))) + "%";
         lb.textContent = marks[i][1];
         segLbls.appendChild(lb);
       }

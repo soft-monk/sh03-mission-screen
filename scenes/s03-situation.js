@@ -86,15 +86,26 @@ function make(variant) {
     if (!window.APP_STATE.aiMessages) window.APP_STATE.aiMessages = [];
     return window.APP_STATE.aiMessages;
   }
+  function curScenarioId() {
+    var c = window.getSelectedScenario && window.getSelectedScenario();
+    return c && c.id ? c.id + ":" : "";
+  }
   function pushSharedAi(key, who, text) {
     var arr = sharedAiMessages();
     for (var i = 0; i < arr.length; i++) if (arr[i].key === key) return;
     arr.push({ key: key, who: who || "ai", text: text });
+    /* SH-04 / SH-05 的对话区常驻：新消息进来立即重绘（只显示本屏自己的气泡） */
+    [].forEach.call(document.querySelectorAll(".s6-ai-log"), function (el) {
+      var scr = el.closest ? el.closest(".scr") : null;
+      var id = scr && scr.dataset ? scr.dataset.id : "";
+      if (id === "SH-04" || id === "SH-05") renderSharedAi(el);
+    });
   }
-  function renderSharedAi(el) {
+  function renderSharedAi(el, prefix) {
     if (!el) return;
     var arr = sharedAiMessages(), html = "";
     for (var i = 0; i < arr.length; i++) {
+      if (prefix && String(arr[i].key || "").indexOf(prefix) !== 0) continue;
       var who = arr[i].who || "ai";
       html += '<div class="s6-msg ' + who + '"><div class="s6-avatar">' + (who === "user" ? "用户" : "AI") + '</div><div class="s6-bubble">' + arr[i].text + '</div></div>';
     }
@@ -230,7 +241,7 @@ function make(variant) {
         if (gen !== s6DialogGen) return;      /* 已跳转：旧的开场语音链作废 */
         if (i >= dialogs.length) return;
         var it = dialogs[i];
-        pushSharedAi(it.key, it.who, it.text);
+        pushSharedAi(cfg.id + ":" + it.key, it.who, it.text);
         var list = it.audio ? (Array.isArray(it.audio) ? it.audio.slice() : [it.audio]) : [];
         (function step() {
           if (!list.length) { playNext(i + 1); return; }
@@ -252,12 +263,37 @@ function make(variant) {
       var raw = it.audio;
       return { it: it, list: raw ? (Array.isArray(raw) ? raw.slice() : [raw]) : [] };
     });
+    function markDialogDone(phase) {
+      window.__dlgDoneAt = window.__dlgDoneAt || {};
+      if (!window.__dlgDoneAt[phase]) window.__dlgDoneAt[phase] = performance.now();
+    }
+    /* 场景一：气泡按 4 字/秒读完（标点算字，<br> 不计） */
+    function s1ReadSec(it) {
+      var s = String((it && it.text) || "").replace(/<br\s*\/?>/gi, "").replace(/<[^>]*>/g, "");
+      return Math.max(0.5, s.length / 4);
+    }
+    function isScene1() {
+      return !!(window.APP_STATE && window.APP_STATE.scenarioId === "scene-1");
+    }
     function playItem(i) {
-      if (i >= queue.length) return;
+      if (i >= queue.length) { markDialogDone(phase); return; }
       var item = queue[i];
-      pushSharedAi(item.it.key, item.it.who, item.it.text);
+      pushSharedAi(cfg.id + ":" + item.it.key, item.it.who, item.it.text);
       (function step() {
-        if (!item.list.length) { playItem(i + 1); return; }
+        if (!item.list.length) {
+          /* 场景一：读完这一条就出下一条；最后一条读完打点，
+             交给屏内的“等 3 s → 2.8 s 模拟点击 → 进下一屏” */
+          if (isScene1()) {
+            setTimeout(function () { playItem(i + 1); }, s1ReadSec(item.it) * 1000);
+            return;
+          }
+          /* 没配语音时按 at 间隔放气泡，给后续语音留出时间 */
+          if (i + 1 >= queue.length) return;
+          var a0 = queue[i].it.at || 0, a1 = queue[i + 1].it.at || 0;
+          var gap = Math.max(1.5, a1 - a0) * 1000;
+          setTimeout(function () { playItem(i + 1); }, gap);
+          return;
+        }
         var src = item.list.shift();
         var audio = preMap[src] || new Audio(audioSrc(src));
         st.audios.push(audio);
@@ -1991,6 +2027,7 @@ function make(variant) {
         window.APP_STATE.scenarioId = card.id;
         if (window.resetScenarioAudio) window.resetScenarioAudio();
         window.APP_STATE.aiMessages = [];
+        window.__dlgDoneAt = {};
         var cfg = window.getScenarioConfig ? window.getScenarioConfig(card.id) : null;
         window.APP_STATE.flow = (cfg && cfg.flow) ? cfg.flow.slice() : ["SH-04", "SH-05", "SH-06"];
         if (P.setFlow) P.setFlow(card.id);
@@ -2494,7 +2531,7 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
        之前每帧改 box-shadow 会让三张卡片 + 提示条每帧重绘一大片，等待时自然发卡。 */
     if (e.variant === "mission") {
       ACTIVE_VOICE.forEach(function (v, i) {
-        if (t >= v.t) pushSharedAi("s4-" + i, v.who, v.text);
+        if (t >= v.t) pushSharedAi(curScenarioId() + "s4-" + i, v.who, v.text);
       });
       renderSharedAi(e.commonAiLog);
     } else if (e.variant === "plan") {
@@ -2525,31 +2562,63 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
     var autoBtn = e.variant === "mission" ? e.goBtn : (e.variant === "plan" ? e.confirmBtn : null);
     if (autoBtn && e.autoCursor && e.autoRipple) {
       var isPlan = e.variant === "plan";
-      var tMove0 = isPlan ? 24.0 : 36.0;
-      var tMove1 = isPlan ? 27.0 : 39.0;
-      var tClick0 = isPlan ? 27.0 : 39.0;
-      var tClick1 = isPlan ? 27.3 : 39.3;
-      var tFade0 = isPlan ? 27.75 : 39.75;
-      var tFade1 = isPlan ? 28.0 : 40.0;
+      var phase = isPlan ? "s5" : "s4";
       var stageEl = document.getElementById("stage");
       var sr = stageEl ? stageEl.getBoundingClientRect() : { left: 0, top: 0, width: 1920 };
       var scl = sr.width / 1920 || 1;
       var gr = autoBtn.getBoundingClientRect();
       var gx = (gr.left - sr.left) / scl + gr.width / scl / 2;
       var gy = (gr.top - sr.top) / scl + gr.height / scl / 2;
-      var moveP = FX.easeInOut(FX.at(t, tMove0, tMove1));
+      var doneAt = (window.APP_STATE && window.APP_STATE.scenarioId === "scene-1")
+        ? (window.__dlgDoneAt && window.__dlgDoneAt[phase]) : null;
+      var lt, tMove0, tMove1, tClick0, tClick1, tFade0, tFade1;
+      if (doneAt) {
+        /* 语音播完 → 等 3 s → 2.8 s 模拟点击动画 → 进下一屏 */
+        lt = (performance.now() - doneAt) / 1000 - 3.0;
+        if (lt < 0) lt = 0;
+        tMove0 = 0; tMove1 = 2.0;
+        tClick0 = 2.0; tClick1 = 2.2;
+        tFade0 = 2.5; tFade1 = 2.8;
+      } else {
+        /* 没有语音时的兜底：按屏内时间走（场景二沿用） */
+        lt = t;
+        tMove0 = isPlan ? 24.0 : 36.0;
+        tMove1 = isPlan ? 27.0 : 39.0;
+        tClick0 = isPlan ? 27.0 : 39.0;
+        tClick1 = isPlan ? 27.3 : 39.3;
+        tFade0 = isPlan ? 27.75 : 39.75;
+        tFade1 = isPlan ? 28.0 : 40.0;
+      }
+      var moveP = FX.easeInOut(FX.at(lt, tMove0, tMove1));
       var cx = FX.lerp(gx + 330, gx + 12, moveP);
       var cy = FX.lerp(gy + 220, gy + 8, moveP);
-      var op = FX.at(t, tMove0, tMove0 + 0.25) * (1 - FX.at(t, tFade0, tFade1));
+      var op = FX.at(lt, tMove0, tMove0 + 0.25) * (1 - FX.at(lt, tFade0, tFade1));
       e.autoCursor.style.opacity = op;
       e.autoCursor.style.transform = "translate(" + cx.toFixed(1) + "px," + cy.toFixed(1) + "px)";
-      var press = Math.sin(FX.at(t, tClick0, tClick1) * Math.PI);
+      var press = Math.sin(FX.at(lt, tClick0, tClick1) * Math.PI);
       autoBtn.style.transform = "scale(" + (1 - press * 0.035).toFixed(4) + ")";
-      var rk = FX.at(t, tClick0 + 0.02, tClick1 + 0.04);
+      var rk = FX.at(lt, tClick0 + 0.02, tClick1 + 0.04);
       e.autoRipple.style.left = gx + "px";
       e.autoRipple.style.top = gy + "px";
       e.autoRipple.style.opacity = rk > 0 && rk < 1 ? (1 - rk) * 0.9 : 0;
       e.autoRipple.style.transform = "scale(" + (0.18 + rk * 1.1).toFixed(4) + ")";
+      /* 只在“刚播完动画”的窗口内推进：拖回本屏时 lt 已经很大，不能立刻弹到下一屏 */
+      if (doneAt && lt >= tFade1 && lt <= tFade1 + 1.2 && !e.advanced) {
+        e.advanced = true;
+        var P2 = window.PLAYER;
+        var sid2 = window.APP_STATE && window.APP_STATE.scenarioId;
+        var tl2 = window.getTimelineFor && window.getTimelineFor(sid2);
+        var nextT = null;
+        if (tl2) {
+          for (var si = 0; si < tl2.screens.length; si++) {
+            if (tl2.screens[si].id === e.scid) {
+              nextT = si + 1 < tl2.screens.length ? tl2.screens[si + 1].t : tl2.total;
+              break;
+            }
+          }
+        }
+        if (P2 && nextT !== null) { P2.seek(nextT); P2.play(); }
+      }
     }
     if (e.prompt) {
       var hp = IS_SELECT ? 1 : FX.easeOut(FX.at(t, 7.60, 8.15));
@@ -2579,7 +2648,7 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
   }
   function clearAreaGraphics(e) { setAreaGraphics(e, false); }
   function onShow(e) {
-    if (e && e.scid === "SH-03" && window.APP_STATE) { window.APP_STATE.scenarioId = null; window.APP_STATE.flow = []; }
+    if (e && e.scid === "SH-03" && window.APP_STATE) { window.APP_STATE.scenarioId = null; window.APP_STATE.flow = []; window.__dlgDoneAt = {}; }
     if (e && e.scid === "SH-03") clearAreaGraphics(e);
     if (e && (e.scid === "SH-04" || e.scid === "SH-05" || e.scid === "SH-06") && window.ensureScenarioAudioPreload) window.ensureScenarioAudioPreload();
     if (e && e.scid === "SH-04") startScenarioDialog("s4");
