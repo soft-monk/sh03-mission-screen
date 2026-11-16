@@ -444,19 +444,19 @@ window.S06_SHELL = (function () {
   var S1_AI_EVENTS = [
     /* 起场 4 句：没有语音，按 4 字/秒串行（不写 t，由 S1_AI_SCHED 按字数串出来）；
        第一句落在 0.01 s，进屏时时钟还是 0，所以点播放 / 拖动进度条之后才出现。 */
-    { opening: true, text: "根据任务需求和编组方案，已生成蜂群作战方案。" },
-    { opening: true, text: "光电侦察无人机34架 根据目标预测概率执行分块遍历搜索，最大遍历周期8分钟。" },
-    { opening: true, text: "雷达侦察无人机6架 采用编队协同搜索模式对任务区域进行SAR条带成像侦察，遍历周期20分钟。" },
-    { opening: true, text: "电子侦察机2架 对于任务区域进行广域协同搜索 遍历周期10分钟。" },
-    { t: 363,   text: "各编组已经抵达任务区，开始执行侦察任务。" },
-    { t: 980,   text: "雷达侦察无人机 SAR-01 回传的 SAR 图像识别岸基机场存在 6 个目标：2 架作战飞机，2 部雷达，2 个单体机库，型号已完成识别匹配，置信度99%。" },
-    { t: 988,   text: "目标已编批，目标坐标已上报。" },
-    { t: 992,   text: "接收上级指令，三分钟后将对机场目标进行远程打击，已分配光电侦察无人机 5、6 执行毁伤评估任务，预计 3 分钟后达到评估阵位。" },
-    { t: 1158,  text: "光电侦察无人机5已抵达评估阵位，开始回传视频。" },
-    { t: 1164,  text: "光电侦察无人机6已抵达评估阵位，开始回传视频。" },
-    { t: 1234,  text: "目标被击中，图像已上传，正在进行毁伤效果判读评估。" },
-    { t: 1240,  text: "飞机目标003、004已被完全摧毁，雷达目标001、002已被完全摧毁，机库目标005、006被击中，打击效果良好，评估结果已上传。" },
-    { t: 1246,  text: "光电侦察无人机5、6回归原侦察阵位。" }
+    { opening: true, text: "根据任务需求和编组方案，已生成蜂群作战方案。", audio: ["assets/audio/s1/012.wav"] },
+    { opening: true, text: "光电侦察无人机34架 根据目标预测概率执行分块遍历搜索，最大遍历周期8分钟。", audio: ["assets/audio/s1/013.wav", "assets/audio/s1/014.wav", "assets/audio/s1/015.wav"] },
+    { opening: true, text: "雷达侦察无人机6架 采用编队协同搜索模式对任务区域进行SAR条带成像侦察，遍历周期20分钟。", audio: ["assets/audio/s1/016.wav", "assets/audio/s1/017.wav", "assets/audio/s1/018.wav"] },
+    { opening: true, text: "电子侦察机2架 对于任务区域进行广域协同搜索 遍历周期10分钟。", audio: ["assets/audio/s1/019.wav", "assets/audio/s1/020.wav", "assets/audio/s1/021.wav"] },
+    { t: 363,   text: "各编组已经抵达任务区，开始执行侦察任务。", audio: ["assets/audio/s1/022.wav"] },
+    { t: 980,   text: "雷达侦察无人机 SAR-01 回传的 SAR 图像识别岸基机场存在 6 个目标：2 架作战飞机，2 部雷达，2 个单体机库，型号已完成识别匹配，置信度99%。", audio: ["assets/audio/s1/023.wav", "assets/audio/s1/024.wav", "assets/audio/s1/025.wav", "assets/audio/s1/026.wav", "assets/audio/s1/027.wav"] },
+    { t: 988,   text: "目标已编批，目标坐标已上报。", audio: ["assets/audio/s1/028.wav"] },
+    { t: 992,   text: "接收上级指令，三分钟后将对机场目标进行远程打击，已分配光电侦察无人机 5、6 执行毁伤评估任务，预计 3 分钟后达到评估阵位。", audio: ["assets/audio/s1/029.wav", "assets/audio/s1/030.wav", "assets/audio/s1/031.wav", "assets/audio/s1/032.wav"] },
+    { t: 1158,  text: "光电侦察无人机5已抵达评估阵位，开始回传视频。", audio: ["assets/audio/s1/033.wav"] },
+    { t: 1164,  text: "光电侦察无人机6已抵达评估阵位，开始回传视频。", audio: ["assets/audio/s1/034.wav"] },
+    { t: 1234,  text: "目标被击中，图像已上传，正在进行毁伤效果判读评估。", audio: ["assets/audio/s1/035.wav", "assets/audio/s1/036.wav"] },
+    { t: 1240,  text: "飞机目标003、004已被完全摧毁，雷达目标001、002已被完全摧毁，机库目标005、006被击中，打击效果良好，评估结果已上传。", audio: ["assets/audio/s1/037.wav", "assets/audio/s1/038.wav", "assets/audio/s1/039.wav", "assets/audio/s1/040.wav"] },
+    { t: 1246,  text: "光电侦察无人机5、6回归原侦察阵位。", audio: ["assets/audio/s1/041.wav", "assets/audio/s1/042.wav"] }
   ];
   /* 慢速语音估算：3 字/秒 + 标点 0.35 s + 起播 0.6 s（后续接真实语音时替换） */
   function s1VoiceDur(text) {
@@ -483,6 +483,33 @@ window.S06_SHELL = (function () {
     });
     return out;
   })();
+  /* ---------- 场景一语音：42 条 wav 全部预取成 blob（照场景二 ensureScenarioAudioPreload） ----------
+     播放时直接用内存里的 Audio，不再"到点才请求"，避免起播失败/延后 */
+  window.ensureS1AudioPreload = function () {
+    window.APP_STATE = window.APP_STATE || {};
+    if (window.APP_STATE.s1AudioPreload) return window.APP_STATE.s1AudioPreload;
+    var map = {}, dur = {}, count = 42;
+    var box = window.APP_STATE.s1AudioPreload = { map: map, dur: dur, count: count };
+    for (var i = 1; i <= count; i++) {
+      (function (base, src) {
+        fetch(src).then(function (r) { return r.blob(); }).then(function (blob) {
+          var a = new Audio(URL.createObjectURL(blob));
+          a.preload = "auto";
+          a.addEventListener("loadedmetadata", function () {
+            try { dur[base] = a.duration; } catch (e) {}
+            map[base] = a;
+          }, { once: true });
+          a.load();
+        }).catch(function () {});
+      })("assets/audio/s1/" + ("00" + i).slice(-3) + ".wav",
+         "assets/audio/s1/" + ("00" + i).slice(-3) + ".wav" + (window.__BUILD__ ? "?v=" + window.__BUILD__ : ""));
+    }
+    return box;
+  };
+  window.s1AudioDur = function (src) {
+    var p = window.APP_STATE && window.APP_STATE.s1AudioPreload;
+    return (p && p.dur && p.dur[src]) || 0;
+  };
   function s1BaseTimes() {
     if (S1_BASE_TIMES) return S1_BASE_TIMES;
     var out = {};
@@ -1043,6 +1070,87 @@ window.S06_SHELL = (function () {
         s1vExpanded = []; s1vReflow();
       });
     }
+    /* ---------- SH-06 语音：跟着飞行时钟播（照场景二 syncAudio：暂停/拖动/重进都对得上） ---------- */
+    var s1AiAud = { idx: -1, gen: 0, on: false, els: [] };
+    var S1_AI_AUDIO = null;
+    function s1EvAudio(ev) { return ev && ev.audio && ev.audio.length ? ev.audio : null; }
+    function s1EvAudioDur(ev) {
+      var list = s1EvAudio(ev);
+      if (!list) return 0;
+      var d = 0;
+      for (var i = 0; i < list.length; i++) d += window.s1AudioDur ? window.s1AudioDur(list[i]) : 0;
+      return d;
+    }
+    /* 语音表：按真实时长顺排（start = max(事件时刻, 上一条语音结束)）。
+       气泡时刻不动；语音连续播、不叠音、也不会被下一句截断。 */
+    function s1AudioSched() {
+      if (S1_AI_AUDIO) return S1_AI_AUDIO;
+      var out = [], prev = -1, missing = 0;
+      S1_AI_EVENTS.forEach(function (ev) {
+        var d = s1EvAudioDur(ev);
+        if (!d) { missing++; return; }
+        var base = typeof ev.t === "number" ? ev.t : (prev >= 0 ? prev : 0);
+        var start = prev >= 0 ? Math.max(base, prev) : base;
+        out.push({ ev: ev, start: start, end: start + d });
+        prev = start + d;
+      });
+      if (missing) return null;              /* 预加载还没完成，下一帧再试 */
+      S1_AI_AUDIO = out;
+      return out;
+    }
+    function s1AiAudioStop() {
+      s1AiAud.gen++;
+      s1AiAud.on = false;
+      s1AiAud.idx = -1;
+      s1AiAud.els.forEach(function (a) { try { a.onended = null; a.pause(); } catch (e) {} });
+      s1AiAud.els = [];
+    }
+    function s1AiAudioStart(idx, offset) {
+      s1AiAudioStop();
+      var sch = s1AudioSched();
+      var it = sch && sch[idx];
+      var list = s1EvAudio(it && it.ev);
+      if (!list) return;
+      var pre = (window.APP_STATE && window.APP_STATE.s1AudioPreload) || { map: {} };
+      var acc = 0, k0 = 0, sk = 0;
+      for (var i = 0; i < list.length; i++) {
+        var d = window.s1AudioDur ? window.s1AudioDur(list[i]) : 0;
+        if (offset < acc + d - 0.05 || i === list.length - 1) { k0 = i; sk = Math.max(0, offset - acc); break; }
+        acc += d;
+      }
+      s1AiAud.idx = idx;
+      s1AiAud.on = true;
+      var gen = s1AiAud.gen;
+      (function step(k) {
+        if (gen !== s1AiAud.gen) return;
+        if (k >= list.length) { s1AiAud.on = false; return; }
+        var src = list[k];
+        var audio = (pre.map && pre.map[src]) || new Audio(src);
+        s1AiAud.els.push(audio);
+        audio.onended = function () { step(k + 1); };
+        try { audio.currentTime = (k === k0 ? sk : 0); } catch (e) {}
+        var pr = audio.play();
+        if (pr && pr.catch) pr.catch(function () {});
+        if (audio.readyState < 2) {
+          audio.addEventListener("canplay", function () {
+            if (gen !== s1AiAud.gen) return;
+            if (audio.paused && !audio.ended) { try { audio.play(); } catch (e) {} }
+          }, { once: true });
+        }
+      })(k0);
+    }
+    function s1AiAudioSync(t) {
+      if (!st.run) { if (s1AiAud.on) s1AiAudioStop(); return; }
+      var sch = s1AudioSched();
+      if (!sch) return;
+      var idx = -1;
+      for (var i = 0; i < sch.length; i++) { if (sch[i].start <= t + 1e-6) idx = i; else break; }
+      if (idx < 0) { if (s1AiAud.on) s1AiAudioStop(); return; }
+      var it = sch[idx];
+      if (s1AiAud.on && s1AiAud.idx === idx) return;
+      if (t >= it.end) { if (s1AiAud.on) s1AiAudioStop(); return; }
+      s1AiAudioStart(idx, t - it.start);
+    }
     if (s1SarWin) s1SarWin.addEventListener("click", function () { s1SarWin.classList.toggle("zoom"); });
     s1SyncAi(0);
     if (hasMap && window.MapViewShared) {
@@ -1225,7 +1333,7 @@ window.S06_SHELL = (function () {
       if (st.dead) return;
       requestAnimationFrame(loop);
       if (!root.classList.contains("on")) { st.last = now; return; }
-      if (!st.run) { st.last = now; s1vRender(st.t); return; }
+      if (!st.run) { st.last = now; s1vRender(st.t); s1AiAudioSync(st.t); return; }
       if (!st.last) { st.last = now; return; }
       var dt = Math.min(0.25, (now - st.last) / 1000);
       st.last = now;
@@ -1235,6 +1343,7 @@ window.S06_SHELL = (function () {
       st.acc += dt;
       paintBar();
       s1vRender(st.t);
+      s1AiAudioSync(st.t);
       if (st.acc >= 0.08) { st.acc = 0; requestFlight(); }
     })(performance.now());
     root.__onSpace = function () { goBtn.click(); };

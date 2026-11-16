@@ -120,19 +120,18 @@
       { n: "编组3", k: "电子无人机", img: "uav-red.png", v: 2 },
       { n: "编组4", k: "通信无人机", img: "uav-green.png", v: 4 }
     ],
-    /* 场景一气泡：at = 上一条按 4 字/秒读完的时刻
-       （引擎对场景一实时按字数计算，这里作为兜底与阅读用） */
+    /* 场景一气泡：at 只作兜底；有语音时由 s1 语音时长驱动（见 s03 的 startScenarioDialog） */
     s4Dialog: [
-      { key: "s4-task-header", who: "ai", at: 0.0, text: "已接收任务指令，解析如下：" },
-      { key: "s4-mission-requirement", who: "ai", at: 3.25, text: "发射侦察无人蜂群对任务区域1进行持续侦察监视，持续60分钟，上报识别目标并引导远程火力进行打击。" }
+      { key: "s4-task-header", who: "ai", at: 0.0, audio: ["assets/audio/s1/001.wav"], text: "已接收任务指令，解析如下：" },
+      { key: "s4-mission-requirement", who: "ai", at: 3.25, audio: ["assets/audio/s1/002.wav", "assets/audio/s1/003.wav", "assets/audio/s1/004.wav"], text: "发射侦察无人蜂群对任务区域1进行持续侦察监视，持续60分钟，上报识别目标并引导远程火力进行打击。" }
     ],
     s4Audio: [],
     s5Dialog: [
-      { key: "s5-plan-header", who: "ai", at: 0.0, text: "推荐集群编组方案如下：" },
-      { key: "s5-eo", who: "ai", at: 2.75, text: "光电侦察无人机34架，执行光学遍历搜索和毁伤评估任务。" },
-      { key: "s5-radar", who: "ai", at: 9.5, text: "雷达侦察无人机6架，使用SAR成像模式对区域进行遍历搜索。" },
-      { key: "s5-ew", who: "ai", at: 16.75, text: "电子侦察无人机2架，执行区域覆盖电子侦察任务。" },
-      { key: "s5-relay", who: "ai", at: 22.5, text: "中继通信无人机4架 部署保障通信。" }
+      { key: "s5-plan-header", who: "ai", at: 0.0, audio: ["assets/audio/s1/005.wav"], text: "推荐集群编组方案如下：" },
+      { key: "s5-eo", who: "ai", at: 2.75, audio: ["assets/audio/s1/006.wav", "assets/audio/s1/007.wav"], text: "光电侦察无人机34架，执行光学遍历搜索和毁伤评估任务。" },
+      { key: "s5-radar", who: "ai", at: 9.5, audio: ["assets/audio/s1/008.wav", "assets/audio/s1/009.wav"], text: "雷达侦察无人机6架，使用SAR成像模式对区域进行遍历搜索。" },
+      { key: "s5-ew", who: "ai", at: 16.75, audio: ["assets/audio/s1/010.wav"], text: "电子侦察无人机2架，执行区域覆盖电子侦察任务。" },
+      { key: "s5-relay", who: "ai", at: 22.5, audio: ["assets/audio/s1/011.wav"], text: "中继通信无人机4架 部署保障通信。" }
     ],
     s5Audio: [], s6Dialog: [], s6Audio: [],
     metrics: [{ k: "封控覆盖率", v: 91 }, { k: "边界完整度", v: 95 }, { k: "目标发现效率", v: 88 }, { k: "电子压制能力", v: 92 }, { k: "任务成功率", v: 89 }, { k: "资源利用率", v: 84 }],

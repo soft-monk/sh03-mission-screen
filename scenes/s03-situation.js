@@ -256,7 +256,7 @@ function make(variant) {
       playNext(0);
       return;
     }
-    var pre = window.APP_STATE.scenarioAudioPreload;
+    var pre = (cfg && cfg.id === "scene-1") ? window.APP_STATE.s1AudioPreload : window.APP_STATE.scenarioAudioPreload;
     var preMap = pre ? pre.map : {};
     /* 队列播放：一句 = 一个气泡 + 它的音频（可能多段），上一段播完再出下一句，绝不叠音 */
     var queue = dialogs.map(function (it) {
@@ -281,6 +281,8 @@ function make(variant) {
       pushSharedAi(cfg.id + ":" + item.it.key, item.it.who, item.it.text);
       (function step() {
         if (!item.list.length) {
+          /* 场景一：有语音的条目播完就出下一条（语音时长即节奏） */
+          if (item.it.audio && item.it.audio.length && isScene1()) { playItem(i + 1); return; }
           /* 场景一：读完这一条就出下一条；最后一条读完打点，
              交给屏内的“等 3 s → 2.8 s 模拟点击 → 进下一屏” */
           if (isScene1()) {
@@ -2028,6 +2030,7 @@ function make(variant) {
         if (window.resetScenarioAudio) window.resetScenarioAudio();
         window.APP_STATE.aiMessages = [];
         window.__dlgDoneAt = {};
+        if (card.id === "scene-1" && window.ensureS1AudioPreload) window.ensureS1AudioPreload();
         var cfg = window.getScenarioConfig ? window.getScenarioConfig(card.id) : null;
         window.APP_STATE.flow = (cfg && cfg.flow) ? cfg.flow.slice() : ["SH-04", "SH-05", "SH-06"];
         if (P.setFlow) P.setFlow(card.id);
@@ -2659,6 +2662,7 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
     if (e && e.scid === "SH-03" && window.APP_STATE) { window.APP_STATE.scenarioId = null; window.APP_STATE.flow = []; window.__dlgDoneAt = {}; }
     if (e && e.scid === "SH-03") clearAreaGraphics(e);
     if (e && (e.scid === "SH-04" || e.scid === "SH-05" || e.scid === "SH-06") && window.ensureScenarioAudioPreload) window.ensureScenarioAudioPreload();
+    if (e && (e.scid === "SH-04" || e.scid === "SH-05" || e.scid === "SH-06") && window.APP_STATE && window.APP_STATE.scenarioId === "scene-1" && window.ensureS1AudioPreload) window.ensureS1AudioPreload();
     if (e && e.scid === "SH-04") startScenarioDialog("s4");
     if (e && e.scid === "SH-05") startScenarioDialog("s5");
     else if (e && window.APP_STATE && window.APP_STATE.scenarioId) setAreaGraphics(e, true);
