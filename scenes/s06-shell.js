@@ -128,10 +128,16 @@ window.S06_SHELL = (function () {
     if (!el) return;
     var tt = typeof t === "number" ? t : Infinity;
     var arr = s1SharedAiMessages();
+    var pre = (window.APP_STATE && window.APP_STATE.scenarioId ? window.APP_STATE.scenarioId : "scene-1") + ":";
     var html = "";
     for (var i = 0; i < arr.length; i++) {
-      if (!arr[i] || String(arr[i].key || "").indexOf("s1-") !== 0) continue;   /* 只显示 SH-06 自己的语音气泡 */
-      if (typeof arr[i].t === "number" && tt + 1e-6 < arr[i].t) continue;
+      if (!arr[i]) continue;
+      var k = String(arr[i].key || "");
+      var own = k.indexOf("s1-") === 0;                       /* 本屏 SH-06 自己的气泡 */
+      var inh = k.indexOf(pre + "s4-") === 0 || k.indexOf(pre + "s5-") === 0;   /* SH-04/05 已经说过的 */
+      if (!own && !inh) continue;
+      /* 只有本屏气泡跟进度；前面两屏的一直保留 */
+      if (own && typeof arr[i].t === "number" && tt + 1e-6 < arr[i].t) continue;
       var who = arr[i].who || "ai";
       html += '<div class="s6-msg ' + who + '"><div class="s6-avatar">' + (who === "user" ? "用户" : "AI") +
         '</div><div class="s6-bubble">' + arr[i].text + '</div></div>';

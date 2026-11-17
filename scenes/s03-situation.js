@@ -94,19 +94,27 @@ function make(variant) {
     var arr = sharedAiMessages();
     for (var i = 0; i < arr.length; i++) if (arr[i].key === key) return;
     arr.push({ key: key, who: who || "ai", text: text });
-    /* SH-04 / SH-05 的对话区常驻：新消息进来立即重绘（只显示本屏自己的气泡） */
+    /* SH-04 / SH-05 的对话区常驻：新消息进来立即重绘
+       SH-04 只看本屏；SH-05 先显示 SH-04 说过的，再追加本屏的 */
     [].forEach.call(document.querySelectorAll(".s6-ai-log"), function (el) {
       var scr = el.closest ? el.closest(".scr") : null;
       var id = scr && scr.dataset ? scr.dataset.id : "";
       if (id === "SH-04") renderSharedAi(el, curScenarioId() + "s4-");
-      else if (id === "SH-05") renderSharedAi(el, curScenarioId() + "s5-");
+      else if (id === "SH-05") renderSharedAi(el, [curScenarioId() + "s4-", curScenarioId() + "s5-"]);
     });
+  }
+  function aiKeyMatch(key, prefix) {
+    if (!prefix) return true;
+    var list = Array.isArray(prefix) ? prefix : [prefix];
+    var k = String(key || "");
+    for (var i = 0; i < list.length; i++) if (k.indexOf(list[i]) === 0) return true;
+    return false;
   }
   function renderSharedAi(el, prefix) {
     if (!el) return;
     var arr = sharedAiMessages(), html = "";
     for (var i = 0; i < arr.length; i++) {
-      if (prefix && String(arr[i].key || "").indexOf(prefix) !== 0) continue;
+      if (!aiKeyMatch(arr[i] && arr[i].key, prefix)) continue;
       var who = arr[i].who || "ai";
       html += '<div class="s6-msg ' + who + '"><div class="s6-avatar">' + (who === "user" ? "用户" : "AI") + '</div><div class="s6-bubble">' + arr[i].text + '</div></div>';
     }
@@ -1725,21 +1733,30 @@ function make(variant) {
         if (!it.ev.audio || !it.ev.audio.length) { if (logAudioOn) stopLogAudio(); return; }
         startLogAudio(idx, Math.max(0, t - it.start));
       }
-      /* 气泡：只显示本屏自己的（SH-06 的打击/评估对话），不继承上两屏的对话 */
+      /* 气泡：上面是 SH-04/05 已经说过的（只读），下面按进度追加本屏的；
+         拖进度条只增删本屏那部分，前面两屏的始终保留 */
       function renderLogAt(t) {
         if (!aiLogEl) return;
-        var html = "", i, n = 0;
+        var html = "", i, n = 0, n0 = 0;
+        var inherited = sharedAiMessages();
+        var pre4 = curScenarioId() + "s4-", pre5 = curScenarioId() + "s5-";
+        for (i = 0; i < inherited.length; i++) {
+          var k = String((inherited[i] && inherited[i].key) || "");
+          if (k.indexOf(pre4) !== 0 && k.indexOf(pre5) !== 0) continue;
+          html += aiMsgHtml(inherited[i].who, inherited[i].text);
+          n0++;
+        }
         for (i = 0; i < SCHED.length; i++) {
           if (t + 1e-6 < SCHED[i].start) break;
           html += aiMsgHtml(SCHED[i].ev.who, SCHED[i].ev.text);
           n++;
         }
-        var sig = String(n);
+        var sig = n + ":" + n0;
         if (aiLogEl.getAttribute("data-n") === sig) return;
         aiLogEl.setAttribute("data-n", sig);
         aiLogEl.innerHTML = html;
         var sc = aiLogEl.closest(".s6-chat-scroll");
-        if (sc) sc.scrollTop = n <= 1 ? 0 : sc.scrollHeight;
+        if (sc) sc.scrollTop = (n + n0) <= 1 ? 0 : sc.scrollHeight;
       }
       function renderAiLog(t) { renderLogAt(t); }
       window.__s6Rebuild = function () { if (logAudioOn) return; buildSchedule(); };   /* 播放中不重算，避免跳音 */
@@ -2537,7 +2554,8 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
       });
       renderSharedAi(e.commonAiLog, curScenarioId() + "s4-");
     } else if (e.variant === "plan") {
-      renderSharedAi(e.commonAiLog, curScenarioId() + "s5-");
+      /* SH-05：上面是 SH-04 的气泡（只读），下面继续追加本屏的 */
+      renderSharedAi(e.commonAiLog, [curScenarioId() + "s4-", curScenarioId() + "s5-"]);
     }
     /* SH-04：底部 AI 决策助手
        对话气泡常显（不按时间淡入）——这样从别的屏返回 SH-04 时对话还在，
