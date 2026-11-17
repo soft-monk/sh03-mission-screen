@@ -152,7 +152,7 @@ function make(variant) {
   window.ensureScenarioAudioPreload = function () {
     window.APP_STATE = window.APP_STATE || {};
     if (window.APP_STATE.scenarioAudioPreload) return window.APP_STATE.scenarioAudioPreload;
-    var preMap = {}, count = 66;
+    var preMap = {}, count = 71;
     window.APP_STATE.scenarioAudioPreload = { map: preMap, count: count };
     /* 方案 A：把 66 个 wav 直接取成 Blob 缓存成对象 URL。
        播放时不再走网络，起播几乎零延迟；同时拿到真实时长，播放表可以精确排。 */
@@ -938,9 +938,9 @@ function make(variant) {
         { key: "003-attack", group: "003", video: videoE, at: 41, silent: true }
       ];
       var timelineRules = [
-        { key: "002-destroy", group: "002", at: 4295.80, audio: ["assets/audio/050.wav", "assets/audio/051.wav"], text: "根据打击前后图像比对评估，目标002火控雷达已被摧毁" },
-        { key: "001-destroy", group: "001", at: 4330.13, audio: ["assets/audio/045.wav", "assets/audio/046.wav"], text: "根据打击前后图像比对评估，目标001预警雷达已被摧毁" },
-        { key: "003-destroy", group: "003", at: 4820.00, audio: ["assets/audio/065.wav", "assets/audio/066.wav"], text: "根据打击前后图像比对评估，目标003已被摧毁。" }
+        { key: "002-destroy", group: "002", at: 4295.80, audio: ["assets/audio/048.wav", "assets/audio/049.wav"], text: "根据打击前后图像比对评估，目标002火控雷达已被摧毁" },
+        { key: "001-destroy", group: "001", at: 4330.13, audio: ["assets/audio/050.wav", "assets/audio/051.wav"], text: "根据打击前后图像比对评估，目标001预警雷达已被摧毁" },
+        { key: "003-destroy", group: "003", at: 4820.00, audio: ["assets/audio/068.wav", "assets/audio/069.wav"], text: "根据打击前后图像比对评估，目标003已被摧毁。" }
       ];
       var timelineFired = {};
       var videoAiFired = {};
@@ -989,8 +989,8 @@ function make(variant) {
         AI_EVENTS.forEach(function (ev) {
           if (ev.t === T003_CONFIRM) ev.text = "接收目标003图像，识别确认为敌远程火箭发射车<br>由" + a + "号光电察打机执行攻击。";
         });
-        AI_EVENTS.push({ t: FL.T003_TRACK_ARRIVE, who: "系统", t003: true, text: "「" + a + "号、" + r + "号」光电无人机到达目标后方，开始跟踪。" });
-        AI_EVENTS.push({ t: FL.T003_ORBIT_START + 6, who: "系统", t003: true, text: a + "号光电察打机打击完成，" + r + "号光电察打机转入盘旋进行毁伤评估。" });
+        AI_EVENTS.push({ t: FL.T003_TRACK_ARRIVE, who: "系统", t003: true, audio: ["assets/audio/062.wav"], text: "「" + a + "号、" + r + "号」光电无人机到达目标后方，开始跟踪。" });
+        AI_EVENTS.push({ t: FL.T003_ORBIT_START + 6, who: "系统", t003: true, audio: ["assets/audio/066.wav", "assets/audio/067.wav"], text: a + "号光电察打机打击完成，" + r + "号光电察打机转入盘旋进行毁伤评估。" });
         AI_EVENTS.sort(function (x, y) { return x.t - y.t; });
         buildSchedule();
         renderLogAt(t);
@@ -1597,17 +1597,17 @@ function make(variant) {
         { t: FL.T_REASSIGN || 0, who: "ai", audio: ["assets/audio/038.wav", "assets/audio/039.wav"], text: "已分配17号、18号光电察打机<br>进行002火控雷达察打任务。" },
         { t: FL.T_REPLAN || 0, who: "ai", audio: ["assets/audio/040.wav", "assets/audio/041.wav"], text: "对“潜在目标部署区-2”重新进行区域划分<br>6架光电察打机预计遍历时间9分钟。" },
         { t: T_CONFIRM_002, who: "ai", audio: ["assets/audio/042.wav", "assets/audio/043.wav", "assets/audio/044.wav"], text: "接收目标002图像，识别确认为火控雷达<br>由14号光电察打机执行攻击，15号光电察打机进行毁伤评估" },
-        { t: T_CONFIRM_001, who: "ai", audio: ["assets/audio/047.wav", "assets/audio/048.wav", "assets/audio/049.wav"], text: "接收目标001图像，识别确认为预警雷达<br>由17号光电察打机执行攻击，18号光电察打机进行毁伤评估" },
+        { t: T_CONFIRM_001, who: "ai", audio: ["assets/audio/045.wav", "assets/audio/046.wav", "assets/audio/047.wav"], text: "接收目标001图像，识别确认为预警雷达<br>由17号光电察打机执行攻击，18号光电察打机进行毁伤评估" },
         { t: 4392.33, who: "ai", audio: ["assets/audio/052.wav", "assets/audio/053.wav"], text: "对“潜在目标部署区-2”重新进行区域划分<br>8架光电察打机预计遍历时间7分钟。" },
         { t: 4500.00, who: "ai", audio: ["assets/audio/054.wav", "assets/audio/055.wav"], text: "雷达侦察机在“潜在目标部署区-1”GMTI模式搜索发现1个运动目标，已加入目标列表。" },
         { t: 4500.00, who: "ai", audio: ["assets/audio/056.wav", "assets/audio/057.wav"], text: "推荐行动方案：<br>派出两架光电察打机对目标003进行侦察<br>目标确认后直接打击。" },
         { t: 4502.00, who: "user", text: "方案确认。" },
         { t: 4508.00, who: "ai", audio: ["assets/audio/060.wav", "assets/audio/061.wav"], text: "对“潜在目标部署区-1”重新进行区域划分<br>8架光电察打机预计遍历时间7分钟。" },
-        { t: T003_CONFIRM, who: "ai", audio: ["assets/audio/062.wav", "assets/audio/063.wav", "assets/audio/064.wav"], text: "接收目标003图像，识别确认为敌远程火箭发射车<br>由9号光电察打机执行攻击。" },
-        { t: 4295.80, who: "ai", audio: ["assets/audio/050.wav", "assets/audio/051.wav"], text: "根据打击前后图像比对评估，目标002火控雷达已被摧毁" },
-        { t: 4330.13, who: "ai", audio: ["assets/audio/045.wav", "assets/audio/046.wav"], text: "根据打击前后图像比对评估，目标001预警雷达已被摧毁" },
-        { t: 4820.00, who: "ai", audio: ["assets/audio/065.wav", "assets/audio/066.wav"], text: "根据打击前后图像比对评估，目标003已被摧毁。" },
-        { t: 4824.00, who: "ai", text: "对“潜在目标部署区-1”重新进行区域划分<br>9架光电察打机预计遍历时间6分钟。" }
+        { t: T003_CONFIRM, who: "ai", audio: ["assets/audio/063.wav", "assets/audio/064.wav", "assets/audio/065.wav"], text: "接收目标003图像，识别确认为敌远程火箭发射车<br>由9号光电察打机执行攻击。" },
+        { t: 4295.80, who: "ai", audio: ["assets/audio/048.wav", "assets/audio/049.wav"], text: "根据打击前后图像比对评估，目标002火控雷达已被摧毁" },
+        { t: 4330.13, who: "ai", audio: ["assets/audio/050.wav", "assets/audio/051.wav"], text: "根据打击前后图像比对评估，目标001预警雷达已被摧毁" },
+        { t: 4820.00, who: "ai", audio: ["assets/audio/068.wav", "assets/audio/069.wav"], text: "根据打击前后图像比对评估，目标003已被摧毁。" },
+        { t: 4824.00, who: "ai", audio: ["assets/audio/070.wav", "assets/audio/071.wav"], text: "对“潜在目标部署区-1”重新进行区域划分<br>9架光电察打机预计遍历时间6分钟。" }
       ].filter(function (ev) { return ev.t >= 0; }).sort(function (a, b) { return a.t - b.t; });
       function aiMsgHtml(who, text) {
         who = who || "ai";
