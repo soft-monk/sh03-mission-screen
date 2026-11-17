@@ -639,7 +639,7 @@ function make(variant) {
       (IS_MISSION
         ? '<div class="s3-panel">' +
             '<div class="s3-tih">任务信息</div>' +
-            '<div class="s3-tir"><span>任务名称</span><b>' + ((SCFG && SCFG.name) || '敏捷拒止布控') + '（演示）</b></div>' +
+            '<div class="s3-tir"><span>任务名称</span><b>' + ((SCFG && SCFG.name) || '敏捷拒止布控') + '</b></div>' +
             '<div class="s3-tir"><span>任务类型</span><b>侦察 / 打击</b></div>' +
             '<div class="s3-tir"><span>任务区域</span><b>' + ((SCFG && SCFG.region) || '西南方向山区') + '</b></div>' +
             '<div class="s3-tir"><span>任务时间</span><b>2024-06-28 15:14</b></div>' +
