@@ -1,6 +1,4 @@
 /* 播放器：章节条 / 角标 / 全屏 */
-.badge-demo{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:4px;font-size:11px;letter-spacing:1px;
-  color:#fca5a5;border:1px solid rgba(239,68,68,.5);background:rgba(239,68,68,.12)}
 .hud-top .t{font-family:var(--num);font-size:13px;color:#7f9ec0;letter-spacing:1px}
 #hud.hide{opacity:0;transition:opacity .3s}
 #hud{transition:opacity .3s}
