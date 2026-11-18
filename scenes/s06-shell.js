@@ -973,7 +973,7 @@ window.S06_SHELL = (function () {
       s1vSetRate();
       s1vKeys().forEach(function (k) {
         var v = s1vVid[k];
-        if (v && !s1vRemoved[k]) { try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {} }
+        if (v && !s1vRemoved[k] && v.readyState >= 1 && !v.__pendSeek) { try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {} }
       });
     }
     function s1vOpen(k) {
@@ -995,6 +995,27 @@ window.S06_SHELL = (function () {
       s1vKeys().forEach(function (k) { if (!s1vRemoved[k]) any = true; });
       s1vBar.classList.toggle("on", !!any && s1vStarted);
     }
+    /* 定位 + 起播：元数据没到就先记下目标，等 loadedmetadata 再定位，
+       避免「先把视频从 0 播起来、seek 又没生效」看起来像从头播 */
+    function s1vSeekVid(v, target, play) {
+      if (!v) return;
+      function apply() {
+        var d = isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
+        var tgt = Math.max(0, d ? Math.min(target, Math.max(0, d - 0.05)) : target);
+        try { v.currentTime = tgt; } catch (e) {}
+        if (play) { try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e2) {} }
+        else { try { v.pause(); } catch (e3) {} }
+      }
+      if (v.readyState >= 1) { apply(); return; }
+      v.__pendSeek = apply;
+      if (!v.__pendHooked) {
+        v.__pendHooked = true;
+        v.addEventListener("loadedmetadata", function () {
+          var f = v.__pendSeek; v.__pendSeek = null;
+          if (f) f();
+        });
+      }
+    }
     function s1vSeekTo(t, play) {
       s1vKeys().forEach(function (k) {
         var v = s1vVid[k];
@@ -1004,10 +1025,10 @@ window.S06_SHELL = (function () {
         var dur = isFinite(v.duration) && v.duration > 0 ? v.duration : S1_VID_DUR;
         var endT = t0 + dur;
         if (s1vRemoved[k] && t + 1e-6 < endT - 0.5) s1vOpen(k);
-        if (s1vRemoved[k]) return;
-        try { v.currentTime = Math.min(Math.max(0, t - t0), Math.max(0, dur - 0.05)); } catch (e) {}
-        if (play) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
-        else { try { v.pause(); } catch (e) {} }
+        if (s1vRemoved[k]) { try { v.pause(); } catch (e) {} return; }
+        var mt = Math.max(0, t - t0);
+        if (mt >= dur - 0.05) { s1vSeekVid(v, dur - 0.05, false); return; }   /* 已经播完：只定格末帧，不起播 */
+        s1vSeekVid(v, mt, play);
       });
       s1vPaintKey("A"); s1vPaintKey("B");
     }
@@ -1036,13 +1057,9 @@ window.S06_SHELL = (function () {
         s1vStarted = true;
         s1vRemoved = {};
         s1vExpanded = []; s1vReflow();
-        s1vKeys().forEach(function (k) {
-          var v = s1vVid[k];
-          if (v) { try { v.currentTime = 0; } catch (e) {} }
-          s1vOpen(k);
-        });
+        s1vKeys().forEach(function (k) { s1vOpen(k); });
         s1vStartMirrors();
-        s1vPlay();
+        /* 不在激活时从 0 起播：定位交给 s1vSeekTo，播放由本函数末尾的“掉线补播”兜底 */
       } else {
         s1vSetRate();
       }

@@ -1141,7 +1141,7 @@ function make(variant) {
       function playVideos() {
         setVideoRate();
         [videoA, videoB].forEach(function (v) {
-          if (v && !v.__frozen && !v.__dead) {
+          if (v && !v.__frozen && !v.__dead && v.readyState >= 1 && !v.__pendSeek) {
             try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
           }
         });
@@ -1149,7 +1149,7 @@ function make(variant) {
       function playExtraVideos() {
         setVideoRate();
         [videoC, videoD].forEach(function (v) {
-          if (v && !v.__frozen && !v.__dead) {
+          if (v && !v.__frozen && !v.__dead && v.readyState >= 1 && !v.__pendSeek) {
             try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
           }
         });
@@ -1157,7 +1157,7 @@ function make(variant) {
       function playThirdVideos() {
         setVideoRate();
         [videoE, videoF].forEach(function (v) {
-          if (v && !v.__frozen && !v.__dead) {
+          if (v && !v.__frozen && !v.__dead && v.readyState >= 1 && !v.__pendSeek) {
             try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
           }
         });
@@ -1369,6 +1369,28 @@ function make(variant) {
         if (card) card.style.display = "";
         try { paintKey(k); } catch (e) {}
       }
+      /* 定位 + 起播：元数据没到就先记下目标，等 loadedmetadata 再定位，
+         避免「先把视频从 0 播起来、seek 又没生效」看起来像从头播 */
+      function videoSeekTo(v, target, play) {
+        if (!v) return;
+        function apply() {
+          var d = isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
+          var tgt = Math.max(0, d ? Math.min(target, Math.max(0, d - 0.05)) : target);
+          try { v.currentTime = tgt; } catch (e) {}
+          if (play) { try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e2) {} }
+          else { try { v.pause(); } catch (e3) {} }
+        }
+        if (v.readyState >= 1) { apply(); return; }
+        v.__pendSeek = apply;
+        try { v.pause(); } catch (e0) {}          /* 还没定位好之前不许播，避免从 0 起播 */
+        if (!v.__pendHooked) {
+          v.__pendHooked = true;
+          v.addEventListener("loadedmetadata", function () {
+            var f = v.__pendSeek; v.__pendSeek = null;
+            if (f) f();
+          });
+        }
+      }
       function seekVideosTo(t, play) {
         [["A", videoA], ["B", videoB], ["C", videoC], ["D", videoD], ["E", videoE], ["F", videoF]].forEach(function (pair) {
           var k = pair[0], v = pair[1];
@@ -1376,13 +1398,15 @@ function make(variant) {
           var s0 = videoStartOf(k);
           if (t + 1e-6 < s0) { try { v.pause(); v.currentTime = 0; } catch (e) {} return; }
           var mt = Math.max(0, t - s0), dur = isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
-          if (dur) mt = Math.min(mt, Math.max(0, dur - 0.05));
           var destroyedKey = (k === "A" && t + 1e-6 >= DESTROY_T["002"]) || (k === "C" && t + 1e-6 >= DESTROY_T["001"]) || (k === "E" && t + 1e-6 >= DESTROY_T["003"]);
+          if (dur && mt >= dur - 0.05) {          /* 已经播完：不重开卡片、不起播，只把画面定在末帧 */
+            videoSeekTo(v, dur - 0.05, false);
+            return;
+          }
           if (!destroyedKey && removedChannels[k]) reopenChannelCard(k);
-          try { v.currentTime = mt; } catch (e) {}
           v.__frozen = false;
           v.__black = false;
-          if (play && !destroyedKey) { var pr = v.play(); if (pr && pr.catch) pr.catch(function () {}); } else { try { v.pause(); } catch (e2) {} }
+          videoSeekTo(v, mt, play && !destroyedKey);
         });
       }
       function renderVideos(t) {
@@ -1402,7 +1426,7 @@ function make(variant) {
           videoStarted = true;
           expanded = [];
           reflowLarge();
-          [videoA, videoB].forEach(function (v) { try { if (v) { v.__frozen = false; v.currentTime = 0; } } catch (e) {} });
+          [videoA, videoB].forEach(function (v) { try { if (v) { v.__frozen = false; } } catch (e) {} });
           trackerA.start();
           trackerB.start();
           startMirrors();
@@ -1419,7 +1443,7 @@ function make(variant) {
           });
           if (!extraStarted) {
             extraStarted = true;
-            [videoC, videoD].forEach(function (v) { try { if (v) { v.__frozen = false; v.currentTime = 0; } } catch (e) {} });
+            [videoC, videoD].forEach(function (v) { try { if (v) { v.__frozen = false; } } catch (e) {} });
             trackerC.start();
             trackerD.start();
             playExtraVideos();
@@ -1436,7 +1460,7 @@ function make(variant) {
           });
           if (!thirdStarted) {
             thirdStarted = true;
-            [videoE, videoF].forEach(function (v) { try { if (v) { v.__frozen = false; v.currentTime = 0; } } catch (e) {} });
+            [videoE, videoF].forEach(function (v) { try { if (v) { v.__frozen = false; } } catch (e) {} });
             trackerE.start(); trackerF.start();
             playThirdVideos();
             paintKey("E"); paintKey("F");
@@ -1447,15 +1471,20 @@ function make(variant) {
         updateSmallBarVisibility();
         checkTimelineRules();
         checkVideoAi();
-        if (videoA && videoA.ended && !removedChannels.A && !videoA.__black) blackenAttack("A");
-        if (videoB && videoB.ended && !removedChannels.B) closeVideoChannel("B");
+        /* 按时间判定"已播完"：元数据一到就补上关闭，避免拖到结束点后卡片残留 */
+        function s6PastEnd(k, v) {
+          var d = isFinite(v && v.duration) && v.duration > 0 ? v.duration : 0;
+          return d > 0 && t - videoStartOf(k) >= d - 0.05;
+        }
+        if (videoA && !removedChannels.A && (videoA.ended || s6PastEnd("A", videoA)) && !videoA.__black) blackenAttack("A");
+        if (videoB && !removedChannels.B && (videoB.ended || s6PastEnd("B", videoB))) closeVideoChannel("B");
         if (extraStarted) {
-          if (videoC && videoC.ended && !removedChannels.C && !videoC.__black) blackenAttack("C");
-          if (videoD && videoD.ended && !removedChannels.D) closeVideoChannel("D");
+          if (videoC && !removedChannels.C && (videoC.ended || s6PastEnd("C", videoC)) && !videoC.__black) blackenAttack("C");
+          if (videoD && !removedChannels.D && (videoD.ended || s6PastEnd("D", videoD))) closeVideoChannel("D");
         }
         if (thirdStarted) {
-          if (videoE && videoE.ended && !removedChannels.E && !videoE.__black) blackenAttack("E");
-          if (videoF && videoF.ended && !removedChannels.F) closeVideoChannel("F");
+          if (videoE && !removedChannels.E && (videoE.ended || s6PastEnd("E", videoE)) && !videoE.__black) blackenAttack("E");
+          if (videoF && !removedChannels.F && (videoF.ended || s6PastEnd("F", videoF))) closeVideoChannel("F");
         }
         if (!st.run) pauseVideos();
         else {
