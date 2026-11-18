@@ -171,7 +171,7 @@
   });
   var configs = { "scene-1": S2, "scene-2": BASE, "scene-3": S3 };
   window.SCENARIO_CONFIG = configs;
-  window.SCENARIO_ORDER = ["scene-1", "scene-2", "scene-3"];
+  window.SCENARIO_ORDER = ["scene-1", "scene-2"];
   window.APP_STATE = window.APP_STATE || { scenarioId: null, flow: [] };
   window.getScenarioConfig = function (id) { return configs[id] || null; };
   window.getSelectedScenario = function () { return configs[window.APP_STATE.scenarioId] || null; };
