@@ -30,7 +30,7 @@ window.MapView = function (host) {
         sat: {
           type: "raster",
           tiles: ["assets/map/online/{z}/{x}/{y}.jpg"],
-          tileSize: 256, minzoom: 11, maxzoom: 12, attribution: "Esri World Imagery (本地缓存)"
+          tileSize: 256, minzoom: 9, maxzoom: 12, attribution: "Esri World Imagery (本地缓存)"
         }
       },
       /* 不再挂兜底整图（原 basemap.jpg）：拖出瓦片范围直接显示底色，
@@ -99,7 +99,7 @@ window.MapView = function (host) {
   /* 可切换的缩放上下限：场景二缩到 10 就到底，避免露出没有瓦片的深色底 */
   var pendingZoomRange = null;
   window.MapViewSetZoomRange = function (minZ, maxZ) {
-    pendingZoomRange = [minZ == null ? 9 : minZ, maxZ == null ? 12 : maxZ];
+    pendingZoomRange = [minZ == null ? 8.5 : minZ, maxZ == null ? 17 : maxZ];
     if (!map) return;
     try { map.setMinZoom(pendingZoomRange[0]); map.setMaxZoom(pendingZoomRange[1]); } catch (e) {}
   };
@@ -120,8 +120,8 @@ window.MapView = function (host) {
     };
     if (!IS3D) {
       /* 缩放范围：z9 = 视野约 450km（正好在兜底整图里）；z16 = 比 z13 细节放大 8 倍，再大就糊 */
-      opts.minZoom = 9;
-      opts.maxZoom = 12;   /* 瓦片只到 z12（z13 未离线缓存），限到 12 就不会放出一片黑 */
+      opts.minZoom = 8.5;
+      opts.maxZoom = 17;   /* z12 以上走 overzoom（模糊但不黑），放到 17 才看得到单架无人机 */
       /* 拖拽边界 = 兜底整图内缩，拖到头就停住，不会漂到空白里 */
       opts.maxBounds = DEFAULT_BOUNDS;
     }
