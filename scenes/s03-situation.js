@@ -401,9 +401,9 @@ function make(variant) {
           }).join("") +
         '</aside>' +
         '<section class="s5-plan">' +
-          '<div class="s5-ph"><b>推荐方案</b><i>AI推荐</i></div>' +
+          '<div class="s5-ph"><b>推荐编组方案</b></div>' +
           '<div class="s5-g s5-gh">' +
-            '<div class="s5-gn">编组</div><div class="s5-gk">类型</div><div class="s5-gv">数量</div><div class="s5-gt">目标区域</div>' +
+            '<div class="s5-gn">编组</div><div class="s5-gk">类型</div><div class="s5-gv">数量</div><div class="s5-gt">部署位置</div>' +
           '</div>' +
           ACTIVE_GROUPS.map(function (g) {
             return '<div class="s5-g">' +
@@ -2231,7 +2231,7 @@ function make(variant) {
         ".s5-ph i{font-style:normal;font-size:12px;padding:3px 10px;border-radius:4px;color:#4ade80;background:rgba(34,197,94,.16);border:1px solid rgba(74,222,128,.45)}",
         ".s5-g{display:grid;grid-template-columns:72px 150px 92px 1fr;align-items:center;gap:12px;padding:14px 16px;margin-top:12px;border-radius:9px;background:rgba(9,26,46,.9);border:1px solid rgba(56,189,248,.16)}",
         ".s5-gh{margin-top:8px;padding:10px 16px;background:rgba(14,40,66,.9);border-color:rgba(56,189,248,.3);font-size:12.5px;color:#7dd3fc;letter-spacing:1px}",
-        ".s5-gh>div{text-align:center}",
+        ".s5-gh>div{text-align:center;font-size:12.5px;font-family:inherit;color:inherit}",
         ".s5-gn{font-size:14px;color:#9fc4e6;letter-spacing:1px;text-align:center}",
         ".s5-gk{display:flex;align-items:center;justify-content:center;gap:9px;font-size:14px;color:#dbeafe;text-align:center}",
         ".s5-gk img{width:34px;height:auto}",
