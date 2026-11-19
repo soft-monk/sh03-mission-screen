@@ -1657,11 +1657,16 @@ function make(variant) {
         if (a && isFinite(a.__dur) && a.__dur > 0) return a.__dur;
         return 3.0;                   /* 时长未就绪：先估算，metadata 到了会重算 */
       }
-      /* 把事件排成一张“顺序播放表”：start 取 max(标称时刻, 上一条结束) */
+      /* 把事件排成一张“顺序播放表”：start 取 max(标称时刻, 上一条结束)；
+         规则：① 开场连播（t=0 的几条）不截断，照常串行；
+               ② 其余条目最多比标称时刻晚 CAP 秒，超了就把上一条语音截断，保证跟得上画面；
+               ③ 相邻两条至少隔 MIN 秒，避免同一时刻多条挤在一起互相截断。 */
       function buildSchedule() {
-        var out = [], prev = -1e9;
+        var out = [], prev = -1e9, prevStart = -1e9, CAP = 8, MIN = 1.2;
         AI_EVENTS.forEach(function (ev) {
           var st0 = Math.max(ev.t, prev);
+          if (ev.t > 0 && st0 > ev.t + CAP) st0 = ev.t + CAP;
+          if (st0 < prevStart + MIN) st0 = prevStart + MIN;
           var dur = 0.55;             /* 无语音条目占 0.55 s，保持“一条一条” */
           if (ev.audio && ev.audio.length) {
             dur = 0;
@@ -1669,6 +1674,7 @@ function make(variant) {
           }
           out.push({ ev: ev, start: st0, end: st0 + dur });
           prev = st0 + dur;
+          prevStart = st0;
         });
         SCHED = out;
       }
@@ -2713,12 +2719,21 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
     if (e && e.needMap && window.MapViewSetBounds) window.MapViewSetBounds(e.mapBounds || null);
     if (e && e.needMap && window.MapViewSetZoomRange) window.MapViewSetZoomRange(e.minZoom || null, 17);
     if (e && e.needMap) e._camLast = null;   /* 边界变了，强制下一帧重新应用相机 */
-    if (e && e.scid === "SH-06" && e.host && e.host.closest) {
-      var scr = e.host.closest(".scr");
-      if (scr && scr.__s6Refresh) scr.__s6Refresh();
-      requestAnimationFrame(function () {
+    /* 进入屏：AI 聊天区滚到底。屏挂载时还是 display:none，滚动赋值会失效，所以等两帧再设。
+       SH-04/05 走 e.root 里的 .s6-ai-log；场景二 SH-06 直接用 e.aiChat；场景一 SH-06 的外壳两者都可能没有，回退到 root 查找 */
+    if (e && (e.scid === "SH-04" || e.scid === "SH-05" || e.scid === "SH-06")) {
+      if (e.scid === "SH-06" && e.host && e.host.closest) {
+        var scr = e.host.closest(".scr");
+        if (scr && scr.__s6Refresh) scr.__s6Refresh();
+      }
+      var aiBox = (e.scid === "SH-06" && e.aiChat) ? e.aiChat : null;
+      if (!aiBox) {
+        var aiLogEl = e.root && e.root.querySelector(".s6-ai-log");
+        aiBox = (aiLogEl && aiLogEl.closest) ? aiLogEl.closest(".s6-chat-scroll") : null;
+      }
+      if (aiBox) requestAnimationFrame(function () {
         requestAnimationFrame(function () {
-          if (e.aiChat) e.aiChat.scrollTop = e.aiChat.scrollHeight;
+          try { aiBox.scrollTop = aiBox.scrollHeight; } catch (err) {}
         });
       });
     }
@@ -2750,7 +2765,16 @@ window.dispatchScenarioScreen = function (real, fallback) {
       return ctx;
     },
     render: function (t, e) { if (e && e.__impl && e.__impl.render) e.__impl.render(t, e); },
-    onShow: function (e) { if (e && e.__impl && e.__impl.onShow) e.__impl.onShow(e); },
+    onShow: function (e) {
+      if (e && e.__impl && e.__impl.onShow) e.__impl.onShow(e);
+      /* 场景一 SH-06 走外壳（外壳没有 onShow），这里补一次“进入即把 AI 聊天区滚到底”；
+         屏挂载时还是 display:none，滚动赋值要等两帧才生效 */
+      var lg = e && e.root && e.root.querySelector(".s6-ai-log");
+      var box = (lg && lg.closest) ? lg.closest(".s6-chat-scroll") : null;
+      if (box) requestAnimationFrame(function () {
+        requestAnimationFrame(function () { try { box.scrollTop = box.scrollHeight; } catch (err) {} });
+      });
+    },
     onHide: function (e) { if (e && e.__impl && e.__impl.onHide) e.__impl.onHide(e); },
     usesMap: true
   };

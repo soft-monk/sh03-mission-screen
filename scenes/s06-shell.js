@@ -478,18 +478,39 @@ window.S06_SHELL = (function () {
     var s = String(text || "").replace(/<br\s*\/?>/gi, "").replace(/<[^>]*>/g, "");
     return Math.max(0.5, s.length / 4);
   }
-  var S1_AI_SCHED = (function () {
-    var out = [], prevEnd = -1;
+  /* 气泡表：必须与语音表使用同一份"真实时长"，否则气泡会比语音晚 1~10 s。
+     时长来自 42 条 wav 的预载（window.s1AudioDur）；未就绪时先不排表，等预载完成；
+     若 5 s 内仍有缺（文件缺失等），退回按字数估算，保证演示不卡住。 */
+  var S1_AI_SCHED = [];
+  var s1SchedBuilt = false, s1SchedTries = 0;
+  function s1BuildAiSched(force) {
+    if (s1SchedBuilt) return true;
+    var out = [], prevEnd = -1, missing = 0;
     S1_AI_EVENTS.forEach(function (ev) {
-      var opening = !!ev.opening;
-      /* 起场 4 句：读完上一条就出下一条，不加额外间隔；其余仍按标称时刻 + 语音估算串 */
-      var start = opening ? (prevEnd >= 0 ? prevEnd : 0.01)
-        : Math.max(ev.t || 0, prevEnd >= 0 ? prevEnd : 0);
-      var dur = opening ? s1ReadSec(ev.text) : s1VoiceDur(ev.text);
+      var list = (ev.audio && ev.audio.length) ? ev.audio : null;
+      var dur = 0, missEv = 0;
+      if (list) {
+        for (var i = 0; i < list.length; i++) {
+          var d = window.s1AudioDur ? window.s1AudioDur(list[i]) : 0;
+          if (!d) missEv++;
+          dur += d;
+        }
+      }
+      if (!list || missEv) { dur = s1VoiceDur(ev.text); missing++; }   /* 缺时长：按字数估算兜底 */
+      var base = typeof ev.t === "number" ? ev.t : (prevEnd >= 0 ? prevEnd : 0.01);
+      var start = prevEnd >= 0 ? Math.max(base, prevEnd) : base;
       out.push({ ev: ev, start: start, dur: dur, end: start + dur });
       prevEnd = start + dur;
     });
-    return out;
+    if (missing && !force) return false;
+    S1_AI_SCHED = out;
+    s1SchedBuilt = true;
+    return true;
+  }
+  (function s1WaitSched() {
+    if (s1BuildAiSched(s1SchedTries >= 25)) return;     /* 5 s 后强制兜底 */
+    s1SchedTries++;
+    setTimeout(s1WaitSched, 200);
   })();
   /* ---------- 场景一语音：42 条 wav 全部预取成 blob（照场景二 ensureScenarioAudioPreload） ----------
      播放时直接用内存里的 Audio，不再"到点才请求"，避免起播失败/延后 */
@@ -1108,20 +1129,12 @@ window.S06_SHELL = (function () {
     }
     /* 语音表：按真实时长顺排（start = max(事件时刻, 上一条语音结束)）。
        气泡时刻不动；语音连续播、不叠音、也不会被下一句截断。 */
+    /* 语音表：直接复用气泡表（同一份真实时长），保证"气泡出现"与"语音起播"逐条对齐 */
     function s1AudioSched() {
       if (S1_AI_AUDIO) return S1_AI_AUDIO;
-      var out = [], prev = -1, missing = 0;
-      S1_AI_EVENTS.forEach(function (ev) {
-        var d = s1EvAudioDur(ev);
-        if (!d) { missing++; return; }
-        var base = typeof ev.t === "number" ? ev.t : (prev >= 0 ? prev : 0);
-        var start = prev >= 0 ? Math.max(base, prev) : base;
-        out.push({ ev: ev, start: start, end: start + d });
-        prev = start + d;
-      });
-      if (missing) return null;              /* 预加载还没完成，下一帧再试 */
-      S1_AI_AUDIO = out;
-      return out;
+      if (!S1_AI_SCHED.length) return null;   /* 气泡表还没建好（等预载时长），下一帧再试 */
+      S1_AI_AUDIO = S1_AI_SCHED;
+      return S1_AI_AUDIO;
     }
     function s1AiAudioStop() {
       s1AiAud.gen++;
