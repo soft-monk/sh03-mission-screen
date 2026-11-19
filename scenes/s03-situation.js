@@ -438,6 +438,12 @@ function make(variant) {
     if (sc && sc.id === "SH-06") {
       SH06_RIGHT_HTML =
         '<section class="s6-right">' +
+          '<section class="s6-ai">' +
+            '<div class="s6-ai-h">' + ic("mic", 16, "", 1.6) + '<span>AI决策助手</span></div>' +
+            '<div class="s6-chat s6-chat-scroll">' +
+              '<div class="s6-ai-log"></div>' +
+            '</div>' +
+          '</section>' +
           '<div class="s6-toolbox">' +
             '<div class="s6-toolbox-h"><span>目标</span><b class="s6-target-count">0</b></div>' +
             '<div class="s6-tb s6-target-item open" data-target="001" style="display:none">' +
@@ -488,12 +494,6 @@ function make(variant) {
               '</div>' +
             '</div>' +
           '</div>' +
-          '<section class="s6-ai">' +
-            '<div class="s6-ai-h">' + ic("mic", 16, "", 1.6) + '<span>AI决策助手</span></div>' +
-            '<div class="s6-chat s6-chat-scroll">' +
-              '<div class="s6-ai-log"></div>' +
-            '</div>' +
-          '</section>' +
         '</section>';
     }
 
@@ -2260,8 +2260,8 @@ function make(variant) {
         ".s6-nums .r{color:#f87171}",
         ".s6-nums .b{color:#eaf4ff}",
 
-        ".s6-right{position:absolute;right:32px;top:88px;width:344px;z-index:13;display:flex;flex-direction:column;gap:18px}",
-        ".s6-toolbox{position:relative;z-index:1;border-radius:10px;overflow:hidden;",
+        ".s6-right{position:absolute;right:32px;top:88px;width:344px;z-index:13;display:flex;flex-direction:column;gap:18px;height:calc(100% - 108px)}",
+        ".s6-toolbox{position:relative;z-index:1;border-radius:10px;overflow-y:auto;flex:0 1 auto;min-height:0;",
         "  background:linear-gradient(180deg,rgba(6,18,32,.97),rgba(4,12,22,.98));border:1px solid rgba(56,189,248,.28);",
         "  box-shadow:0 12px 32px rgba(0,0,0,.5),0 0 0 1px rgba(56,189,248,.08) inset}",
         ".s6-toolbox-h{display:flex;align-items:center;justify-content:space-between;padding:10px 13px;",
@@ -2304,13 +2304,13 @@ function make(variant) {
         ".s6-tb-tags i{font-style:normal;font-size:11px;color:#9fc4e6;background:rgba(56,189,248,.1);",
         "  border:1px solid rgba(56,189,248,.22);border-radius:3px;padding:1px 6px}",
         ".s6-ai{border-radius:12px;padding:12px 14px;background:linear-gradient(180deg,rgba(6,18,32,.97),rgba(4,12,22,.98));",
-        "  border:1px solid rgba(56,189,248,.24);box-shadow:0 12px 32px rgba(0,0,0,.45)}",
+        "  border:1px solid rgba(56,189,248,.24);box-shadow:0 12px 32px rgba(0,0,0,.45);display:flex;flex-direction:column;height:400px;flex:none}",
         ".s6-ai-h{display:flex;align-items:center;gap:7px;font-size:14px;letter-spacing:1px;color:#bfe9ff;",
         "  padding-bottom:9px;border-bottom:1px solid rgba(56,189,248,.14)}",
         ".s6-ai-h svg{color:#38bdf8}",
-        ".s6-chat{margin-top:10px;display:flex;flex-direction:column;gap:10px}",
-        ".s6-chat-scroll{max-height:236px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;",
-        "  scrollbar-width:thin;scrollbar-color:rgba(56,189,248,.35) transparent}",
+        ".s6-chat{margin-top:10px;display:flex;flex-direction:column;gap:10px;flex:1 1 auto;min-height:0}",
+        ".s6-chat-scroll{max-height:none;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;",
+        "  scrollbar-width:thin;scrollbar-color:rgba(56,189,248,.35) transparent;flex:1 1 auto;min-height:0}",
         ".s6-chat-scroll::-webkit-scrollbar{width:5px}",
         ".s6-chat-scroll::-webkit-scrollbar-thumb{background:rgba(56,189,248,.35);border-radius:3px}",
         ".s6-chat-scroll::-webkit-scrollbar-track{background:transparent}",
