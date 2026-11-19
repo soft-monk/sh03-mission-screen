@@ -10,3 +10,5 @@
 .endcard .box p{color:#7f9ec0;margin-bottom:22px}
 .badge-scr{display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:4px;font-size:11px;letter-spacing:1.5px;
   font-family:var(--num);color:#7dd3fc;border:1px solid rgba(56,189,248,.55);background:rgba(56,189,248,.12);box-shadow:0 0 12px rgba(56,189,248,.18)}
+/* 调试信息：播放时间码（00:00 / 05:08）与屏号徽标（SH-05 · 场景一）—— 默认隐藏，需要调试时把下面这条注释掉即可恢复显示 */
+#clock,#scrbadge{display:none}
