@@ -279,5 +279,16 @@
   };
 
   window.__READY = true;
-  document.getElementById("wallclock") && (document.getElementById("wallclock").textContent = ("0" + new Date().getHours()).slice(-2) + ":" + ("0" + new Date().getMinutes()).slice(-2));
+  /* 右上角系统时间：先同步一次，再对齐到下一个整分钟，之后每 60 秒刷一次（比每秒刷新省电） */
+  const wallclockEl = document.getElementById("wallclock");
+  function syncWallclock() {
+    if (!wallclockEl) return;
+    const d = new Date();
+    wallclockEl.textContent = ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+  }
+  syncWallclock();
+  setTimeout(function () {
+    syncWallclock();
+    setInterval(syncWallclock, 60000);
+  }, 60000 - (Date.now() % 60000));
 })();
