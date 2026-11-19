@@ -653,16 +653,7 @@ function make(variant) {
             '<div class="s3-tir"><span>任务时间</span><b>2024-06-28 15:14</b></div>' +
             '<div class="s3-tir"><span>任务状态</span><b class="warn">任务准备中</b></div>' +
           '</div>'
-        : '<div class="s3-panel s3-res">' +
-            '<div class="s3-res-h">' + ic("nodes", 18, "", 1.6) + '<span>资源概况</span></div>' +
-            '<div class="s3-grid">' +
-              ACTIVE_RES.map(function (r) {
-                return '<div class="s3-col" style="--glow:rgba(' + r.c + ',.55)"><div class="lb">' + r.k + '</div>' +
-                  '<img src="assets/img/' + r.img + '" alt="">' +
-                  '<div class="num">' + r.v + '</div></div>';
-              }).join("") +
-            '</div>' +
-          '</div>');
+        : '');
 
     if (IS_BARE && !IS_PLAN) {
       var sideEl0 = root.querySelector(".s3-side");
