@@ -51,18 +51,18 @@ function make(variant) {
   ];
   /* SH-05 三栏数据 */
   var UAVS = [
-    { k: "光电无人机", img: "uav-blue.png",   c: "56,189,248",  total: 48, avail: 48, caps: ["侦察", "识别", "跟踪"], used: 20, rest: 28 },
-    { k: "雷达无人机", img: "uav-yellow.png", c: "250,204,21",  total: 32, avail: 32, caps: ["探测", "扫描", "测距"], used: 3,  rest: 29 },
-    { k: "电子无人机", img: "uav-red.png",    c: "248,113,113", total: 28, avail: 28, caps: ["干扰", "压制", "侦测"], used: 6,  rest: 22 },
-    { k: "通信无人机", img: "uav-green.png",  c: "74,222,128",  total: 24, avail: 24, caps: ["中继", "通信", "数据"], used: 4,  rest: 20 }
+    { k: "光电无人机", name: "光电察打机", img: "uav-blue.png",   c: "56,189,248",  total: 48, avail: 48, caps: ["光电成像侦察", "跟踪", "打击"], used: 20, rest: 28 },
+    { k: "雷达无人机", name: "雷达侦察机", img: "uav-yellow.png", c: "250,204,21",  total: 32, avail: 32, caps: ["SAR 成像侦察", "GMTI 动目标侦察"], used: 3,  rest: 29 },
+    { k: "电子无人机", name: "电子侦察机", img: "uav-red.png",    c: "248,113,113", total: 28, avail: 28, caps: ["电子侦察", "干扰诱骗"], used: 6,  rest: 22 },
+    { k: "通信无人机", name: "中继通信机", img: "uav-green.png",  c: "74,222,128",  total: 24, avail: 24, caps: ["中继", "通信", "数据"], used: 4,  rest: 20 }
   ];
   /* 每个编组只用一种机型，不同编组可以用同一种 */
   var GROUPS = [
-    { n: "编组1", k: "光电无人机", img: "uav-blue.png",   v: 10, target: "潜在目标部署区-1" },
-    { n: "编组2", k: "光电无人机", img: "uav-blue.png",   v: 10, target: "潜在目标部署区-2" },
-    { n: "编组3", k: "电子无人机", img: "uav-red.png",    v: 6,  target: "潜在目标部署区-2" },
-    { n: "编组4", k: "雷达无人机", img: "uav-yellow.png", v: 3,  target: "潜在目标部署区-1" },
-    { n: "编组5", k: "中继",       img: "uav-green.png",  v: 4,  target: "" }
+    { n: "编组1", k: "光电察打机", img: "uav-blue.png",   v: 10, target: "潜在目标部署区-1" },
+    { n: "编组2", k: "光电察打机", img: "uav-blue.png",   v: 10, target: "潜在目标部署区-2" },
+    { n: "编组3", k: "电子侦察机", img: "uav-red.png",    v: 6,  target: "潜在目标部署区-2" },
+    { n: "编组4", k: "雷达侦察机", img: "uav-yellow.png", v: 3,  target: "潜在目标部署区-1" },
+    { n: "编组5", k: "中继通信机", img: "uav-green.png",  v: 4,  target: "" }
   ];
   var REASONS = [
     "大范围区域覆盖，提高整体态势感知能力",
@@ -384,14 +384,14 @@ function make(variant) {
           '<div class="s4-mic">' + ic("mic", 36, "", 1.6) + '</div>' +
         '</section>')
       : "";
-    /* SH-05 三栏：左 无人机类型列表 / 中 推荐方案 / 右 推荐理由 + 预期效果 */
+    /* SH-05 三栏：左 无人机资源列表 / 中 推荐方案 / 右 推荐理由 + 预期效果 */
     var FRAME_HTML = IS_PLAN
       ? ('<aside class="s5-uav">' +
-          '<div class="s5-h"><span>无人机类型列表</span><i>i</i></div>' +
+          '<div class="s5-h"><span>无人机资源列表</span><i>i</i></div>' +
           ACTIVE_UAVS.map(function (u) {
             return '<div class="s5-uc" style="--c:' + u.c + '">' +
               '<div class="s5-top"><img src="assets/img/' + u.img + '" alt="">' +
-                '<div class="s5-info"><b>' + u.k + '</b>' +
+                '<div class="s5-info"><b>' + (u.name || u.k) + '</b>' +
                   '<div class="s5-kv"><span>总数量</span><em>' + u.total + '</em></div>' +
                   '<div class="s5-kv"><span>可用数量</span><em>' + u.avail + '</em></div>' +
                 '</div></div>' +
@@ -2198,7 +2198,7 @@ function make(variant) {
         ".s4-bub{max-width:86%;padding:8px 13px;border-radius:8px;font-size:13.5px;line-height:1.45;opacity:0;",
         "  background:rgba(12,34,58,.92);border:1px solid rgba(56,189,248,.22);color:#cfe6ff}",
         ".s4-bub.user{align-self:flex-end;background:rgba(22,101,52,.85);border-color:rgba(74,222,128,.45);color:#dcfce7}",
-        ".s5-uav{position:absolute;left:116px;top:150px;width:300px;border-radius:12px;background:linear-gradient(180deg,rgba(6,18,32,.94),rgba(4,12,22,.96));",
+        ".s5-uav{position:absolute;left:116px;top:150px;width:420px;border-radius:12px;background:linear-gradient(180deg,rgba(6,18,32,.94),rgba(4,12,22,.96));",
         "  border:1px solid rgba(56,189,248,.22);padding:12px 10px;overflow:hidden;z-index:12;display:flex;flex-direction:column;gap:8px}",
         ".s5-h{display:flex;align-items:center;justify-content:space-between;font-size:16px;letter-spacing:1px;color:#e8f4ff;padding:2px 6px 10px;border-bottom:1px solid rgba(56,189,248,.16)}",
         ".s5-h i{font-style:normal;width:18px;height:18px;border-radius:50%;border:1px solid rgba(148,180,210,.6);color:#94b4d2;font-size:12px;display:grid;place-items:center}",
@@ -2209,8 +2209,9 @@ function make(variant) {
         ".s5-info b{display:block;font-size:14px;color:#dbeafe;margin-bottom:4px;letter-spacing:.5px}",
         ".s5-kv{display:flex;justify-content:space-between;font-size:12px;color:#8fa8c4;line-height:1.5}",
         ".s5-kv em{font-style:normal;color:#cfe6ff;font-family:var(--num)}",
-        ".s5-cap{display:flex;align-items:center;gap:5px;font-size:12px;color:#7d95ae}",
-        ".s5-cap i{font-style:normal;padding:1px 7px;border-radius:3px;background:rgba(37,99,235,.22);border:1px solid rgba(56,189,248,.3);color:#bfe0ff}",
+        ".s5-cap{display:flex;align-items:center;gap:5px;font-size:12px;color:#7d95ae;white-space:nowrap}",
+        ".s5-cap>span{flex:none}",
+        ".s5-cap i{font-style:normal;padding:1px 7px;border-radius:3px;background:rgba(37,99,235,.22);border:1px solid rgba(56,189,248,.3);color:#bfe0ff;white-space:nowrap;flex:none}",
         ".s5-al{display:flex;align-items:center;gap:6px;font-size:12px;color:#7d95ae}",
         ".s5-al b{font-weight:600;padding:1px 7px;border-radius:3px;font-size:12px}",
         ".s5-al b.ok{color:#4ade80;background:rgba(34,197,94,.16);border:1px solid rgba(74,222,128,.35)}",
