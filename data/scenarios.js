@@ -7,7 +7,9 @@
     short: "场景二",
     enabled: true,
     region: "东部区域封控区",
-    camera: { center: [114.100, 39.880], zoom: 10.0, pitch: 38, bearing: -20 },
+    /* 总览机位：任务区（西）与集结区（东）同框，SH-04/05/06 共用；
+       SH-06 的开场运镜从这个机位出发（见 scenes/s03-situation.js 的 S6_OVIEW） */
+    camera: { center: [115.030, 39.970], zoom: 8.5, pitch: 30, bearing: -20 },
     mapBounds: [[111.30, 38.10], [117.70, 41.70]],
     minZoom: 8.5,
     area: {

@@ -21,6 +21,7 @@ function make(variant) {
   var IS_PLAN = (variant === "plan" || variant === "bare");                          /* 三栏 + 确认按钮只在 SH-05 */
   var IS_SELECT = variant === "select";     /* 只有 SH-03 才有场景卡和提示条 */
   var hideHook = null;                        /* 本屏退场时的清理动作（SH-06 用） */
+  var s6CamAt = null, s6Start = null;         /* 场景二 SH-06：运镜取机位 / 自动开播（build 时赋值） */
   var MENU = [
     { k: "态势", icon: "crosshair", on: true },
     { k: "任务", icon: "target" },
@@ -661,12 +662,15 @@ function make(variant) {
       sideEl0.style.display = "none";
     }
 
-    /* SH-06：把离线算好的 A* 航路画上去（data/routes.js，不在运行时计算） */
+    /* SH-06：把离线算好的 A* 航路画上去（data/routes.js，不在运行时计算）
+       航路标签不能塞进 labelEls —— onShow 的 setAreaGraphics 会把 labelEls 全部点亮，
+       而标签要按台词逐条出现，由 renderPlanLayers 控制。 */
+    var ROUTE_LBL = [];
     if (sc && sc.id === "SH-06" && window.ROUTES) {
       window.ROUTES.forEach(function (r) {
         map.path("route-" + r.id, r.pts, { color: r.color, width: 3 });
         var mid = r.mid || r.pts[Math.floor(r.pts.length / 2)];
-        labelEls.push({ h: map.label(r.name, mid, r.color, 15) });
+        ROUTE_LBL.push({ id: r.id, h: map.label(r.name, mid, r.color, 15) });
       });
     }
 
@@ -696,6 +700,205 @@ function make(variant) {
       var spds = [].slice.call(ctl.querySelectorAll(".s6-spds b"));
       var st = { t: 0, speed: 1, run: false, started: false, last: 0, acc: 0 };
       var COLORS = { blue: "#38bdf8", yellow: "#facc15", red: "#f87171", green: "#4ade80" };
+
+      /* ============ 场景二 SH-06：开场运镜 + 航路逐型揭示 ============
+         5 句机型介绍（AI_EVENTS 里的 020/022/024/026/028）= 5 段镜头：
+           ① 画出该型的编队航路  ② 镜头从集结区沿这条航路推到任务区
+           ③ 拉回「任务区视角」（中心=任务区中心，刚好看满任务区）
+           ④ 在这个视角下画出该型的规划航路
+         中继没有台词：开局直接画（编队航路 + 规划航路）。
+         五段放完由第 7 句（030）拉回总览，之后一直停在总览。
+         全部是「内层时间 t 的纯函数」，拖进度条 / 暂停 / 回退都一致。 */
+      var S6_CAM0 = (SCFG && SCFG.camera) || null;        /* 总览机位：与 SH-04/05 共用 data/scenarios.js 的那一份 */
+      var S6_OVIEW = {
+        center: (S6_CAM0 && S6_CAM0.center ? S6_CAM0.center : [115.030, 39.970]).slice(),
+        zoom: (S6_CAM0 && S6_CAM0.zoom != null) ? S6_CAM0.zoom : 8.5,
+        pitch: (S6_CAM0 && S6_CAM0.pitch != null) ? S6_CAM0.pitch : 30,
+        bearing: (S6_CAM0 && S6_CAM0.bearing != null) ? S6_CAM0.bearing : -20
+      };
+      var S6_ZOOM = 11.3, S6_PITCH = 44;          /* 运镜中段：贴着航路走 */
+      var S6_IN = 0.22, S6_GO = 0.72, S6_OUT = 0.88;   /* 拉近 / 走航路 / 拉回 的分界 */
+      var S6_SHOTS = [
+        { src: "assets/audio/s2/020.wav", route: 0, item: "photo1" },   /* 光电 · 潜在目标区1 */
+        { src: "assets/audio/s2/022.wav", route: 3, item: "gmti" },     /* 雷达 GMTI · 区1 */
+        { src: "assets/audio/s2/024.wav", route: 3, item: "sar" },      /* 雷达 SAR · 区1 */
+        { src: "assets/audio/s2/026.wav", route: 0, item: "photo2" },   /* 光电 · 潜在目标区2 */
+        { src: "assets/audio/s2/028.wav", route: 2, item: "ewar" }      /* 电子 · 区2 */
+      ];
+      var S6_ITEMS = ["photo1", "gmti", "sar", "photo2", "ewar", "relay"];
+      /* 规划航路按机型/机号切分（flight06 的 tracks() 带 k） */
+      var S6_FILTER = {
+        photo1: function (d) { return d.type === "blue" && d.k < 10; },
+        photo2: function (d) { return d.type === "blue" && d.k >= 10; },
+        gmti: function (d) { return d.type === "yellow" && d.k > 0; },
+        sar: function (d) { return d.type === "yellow" && d.k === 0; },
+        ewar: function (d) { return d.type === "red"; },
+        relay: function (d) { return d.type === "green"; }
+      };
+      /* 航路几何：把 ROUTES 的折线预积分成"按里程取点" */
+      var ROUTE_GEO = (window.ROUTES || []).map(function (r) {
+        var pts = r.pts, cum = [0], total = 0;
+        for (var i = 1; i < pts.length; i++) {
+          var dy = (pts[i][1] - pts[i - 1][1]) * 111030;
+          var dx = (pts[i][0] - pts[i - 1][0]) * 111320 * Math.cos(pts[i][1] * Math.PI / 180);
+          total += Math.hypot(dx, dy);
+          cum.push(total);
+        }
+        return { pts: pts, cum: cum, total: total };
+      });
+      function routePt(g, f) {
+        if (!g || !g.pts.length) return S6_OVIEW.center.slice();
+        var want = Math.max(0, Math.min(1, f)) * g.total, i = 1;
+        for (; i < g.cum.length; i++) if (g.cum[i] >= want) break;
+        if (i >= g.pts.length) return g.pts[g.pts.length - 1].slice();
+        var a = g.pts[i - 1], b = g.pts[i];
+        var seg = g.cum[i] - g.cum[i - 1], k = seg > 0 ? (want - g.cum[i - 1]) / seg : 0;
+        return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+      }
+      /* 每句的时间窗：与 buildSchedule 一致 —— t=0 的连播链首尾相接 */
+      function s6ShotWins() {
+        var acc = 0, win = {};
+        for (var i = 0; i < AI_EVENTS.length; i++) {
+          var ev = AI_EVENTS[i];
+          if (ev.t > 0) break;
+          var d = 0.55;
+          if (ev.audio && ev.audio.length) {
+            d = 0;
+            ev.audio.forEach(function (x) { d += clipDur(x); });
+            win[ev.audio[0]] = { a: acc, b: acc + d };
+          }
+          acc += d;
+        }
+        return win;
+      }
+      /* 任务区视角：展示"规划航路"时镜头停在这里 —— 中心=任务区中心，刚好看满整个任务区 */
+      var S6_TASK = (function () {
+        var m = (ACTIVE_AREA && ACTIVE_AREA.mission) || null;
+        var b = (S6_CAM0 && S6_CAM0.bearing != null) ? S6_CAM0.bearing : -20;
+        if (m && m.length >= 3) {
+          var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+          m.forEach(function (q) {
+            x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]);
+            y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]);
+          });
+          return { center: [(x0 + x1) / 2, (y0 + y1) / 2], zoom: 9.0, pitch: 30, bearing: b };
+        }
+        return { center: [114.098, 39.8827], zoom: 9.0, pitch: 30, bearing: b };
+      })();
+      function camCopy(a) {
+        return { center: [a.center[0], a.center[1]], zoom: a.zoom, pitch: a.pitch, bearing: a.bearing };
+      }
+      function camMix(a, b, k) {
+        return {
+          center: [FX.lerp(a.center[0], b.center[0], k), FX.lerp(a.center[1], b.center[1], k)],
+          zoom: FX.lerp(a.zoom, b.zoom, k),
+          pitch: FX.lerp(a.pitch, b.pitch, k),
+          bearing: a.bearing
+        };
+      }
+      /* 当前内层时间应处的机位（无运镜时 = 总览机位） */
+      s6CamAt = function () {
+        var t = st.t, win = s6ShotWins();
+        var from = S6_OVIEW;                 /* 每段"拉近"的起点：上一段停在哪就从哪出发 */
+        for (var i = 0; i < S6_SHOTS.length; i++) {
+          var w = win[S6_SHOTS[i].src];
+          if (!w) continue;
+          if (t >= w.b) { from = S6_TASK; continue; }   /* 这一段已播完：画面停在任务区视角 */
+          if (t < w.a) break;
+          var u = (t - w.a) / Math.max(0.001, w.b - w.a);
+          var g = ROUTE_GEO[S6_SHOTS[i].route];
+          if (u < S6_IN) {
+            return camMix(from, { center: routePt(g, 0), zoom: S6_ZOOM, pitch: S6_PITCH, bearing: S6_OVIEW.bearing },
+                          FX.easeInOut(u / S6_IN));
+          }
+          if (u < S6_GO) {
+            return { center: routePt(g, FX.easeInOut((u - S6_IN) / (S6_GO - S6_IN))),
+                     zoom: S6_ZOOM, pitch: S6_PITCH, bearing: S6_OVIEW.bearing };
+          }
+          if (u < S6_OUT) {
+            return camMix({ center: routePt(g, 1), zoom: S6_ZOOM, pitch: S6_PITCH, bearing: S6_OVIEW.bearing },
+                          S6_TASK, FX.easeInOut((u - S6_GO) / (S6_OUT - S6_GO)));
+          }
+          return camCopy(S6_TASK);           /* 88% 之后停在任务区视角，给规划航路留看的时间 */
+        }
+        /* 不在任何段落里 */
+        if (from === S6_TASK) {
+          /* 五段都放完：用第 7 句「任务计划已下达给各无人机」那 2.6 秒拉回总览 */
+          var w30 = win["assets/audio/s2/030.wav"];
+          if (w30 && t < w30.b + 0.001) {
+            return camMix(S6_TASK, S6_OVIEW, FX.easeInOut((t - w30.a) / Math.max(0.001, w30.b - w30.a)));
+          }
+          return camCopy(S6_OVIEW);
+        }
+        return camCopy(S6_OVIEW);
+      };
+      /* 比例尺：与 render() 里同一套算法；运镜期间 render() 不跑，这里得自己跟着 zoom 走 */
+      var scaleBarEl = root.querySelector(".s3-scale b"), scaleTextEl = root.querySelector(".s3-scale span");
+      var lastScaleZ = -1;
+      function applyScale(z) {
+        if (!scaleBarEl) return;
+        var q = Math.round(z * 1000) / 1000;
+        if (q === lastScaleZ) return;          /* 每帧都调，值没变就别写 DOM */
+        lastScaleZ = q;
+        var mpp = 156543.03 * Math.cos(39.920 * Math.PI / 180) / Math.pow(2, z);
+        var cands = [1000, 2000, 5000, 10000, 20000], pick = cands[0];
+        for (var i = 0; i < cands.length; i++) if (cands[i] / mpp <= 150) pick = cands[i];
+        scaleBarEl.style.width = (pick / mpp).toFixed(0) + "px";
+        if (scaleTextEl) scaleTextEl.textContent = (pick / 1000) + " km";
+      }
+      /* 规划航路：从"计划态"（T_TRACKS）里按型切出来各建一层；
+         T_TRACKS 之后隐藏预览层，交给时间驱动的 tracks 层（几何重合，不会跳） */
+      var planBuilt = {}, lastPlanSig = "";
+      function buildPlanLayer(key) {
+        if (planBuilt[key] || !map.tracks) return;
+        planBuilt[key] = true;
+        var lines = FL.tracks(FL.T_TRACKS).filter(S6_FILTER[key]).map(function (d) {
+          return { color: COLORS[d.type] || "#38bdf8", pts: d.pts };
+        });
+        map.tracks("plan-" + key, lines);
+      }
+      function renderPlanLayers(t) {
+        var win = s6ShotWins(), revG = {}, revItem = {}, i;
+        var routes = window.ROUTES || [];
+        for (i = 0; i < routes.length; i++) revG[routes[i].id] = false;
+        for (i = 0; i < S6_ITEMS.length; i++) revItem[S6_ITEMS[i]] = false;
+        if (routes[1]) revG[routes[1].id] = true;      /* 中继（编组2/G2）：开局直接画 */
+        revItem.relay = true;
+        for (i = 0; i < S6_SHOTS.length; i++) {
+          var s = S6_SHOTS[i], w = win[s.src];
+          if (!w) continue;
+          var rid = routes[s.route] ? routes[s.route].id : null;
+          if (t + 1e-6 >= w.a && rid) revG[rid] = true;                                  /* 气泡一开始 → 编队航路 */
+          if (t + 1e-6 >= w.a + S6_OUT * (w.b - w.a)) revItem[s.item] = true;            /* 拉回之后 → 规划航路 */
+        }
+        var live = t + 1e-6 >= FL.T_TRACKS;
+        var sig = "";
+        for (i = 0; i < routes.length; i++) sig += revG[routes[i].id] ? "1" : "0";
+        for (i = 0; i < S6_ITEMS.length; i++) sig += revItem[S6_ITEMS[i]] ? "1" : "0";
+        sig += live ? "1" : "0";
+        if (sig === lastPlanSig) return;
+        lastPlanSig = sig;
+        for (i = 0; i < routes.length; i++) {
+          var r = routes[i], on = !!revG[r.id];
+          if (map.setVis) map.setVis(["route-" + r.id], on);
+          for (var j = 0; j < ROUTE_LBL.length; j++) if (ROUTE_LBL[j].id === r.id) ROUTE_LBL[j].h.set(on ? 1 : 0);
+        }
+        for (i = 0; i < S6_ITEMS.length; i++) {
+          var key = S6_ITEMS[i], show = revItem[key] && !live;
+          if (show) buildPlanLayer(key);
+          if (map.setVis) map.setVis(["plan-" + key], show);
+        }
+      }
+      /* 自动开播：进入本屏即点一次播放（不用人点）；播过的 / 拖回去的不重开 */
+      s6Start = function () {
+        if (st.started || st.t > 0.5) return;
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            if (!st.started) goBtn.click();
+          });
+        });
+      };
+
 
       var targetItems = [].slice.call(root.querySelectorAll(".s6-target-item"));
       var targetCountEl = root.querySelector(".s6-target-count");
@@ -1843,7 +2046,7 @@ function make(variant) {
       })();
 
       function push() {
-        if (!st.started) { renderAiLog(-1); renderTargetState(-1); renderVideos(-1); map.fleet("fleet", []); map.trails("trails", []); if (map.tracks && FL.tracks) map.tracks("tracks", FL.tracks(FL.T_TRACKS).map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.pts }; })); if (map.scan) map.scan("scan", []); if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); } if (map.beam) map.beam("sbeam", []); if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); } paint(); return; }
+        if (!st.started) { renderAiLog(-1); renderTargetState(-1); renderVideos(-1); map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); if (map.scan) map.scan("scan", []); if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); } if (map.beam) map.beam("sbeam", []); if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); } renderPlanLayers(0); paint(); return; }
         if (st.started && st.t + 1e-6 >= FL.TOTAL) showSummary();
         renderLogAt(st.t);                    /* 气泡随进度条走 */
         if (!dragging) syncAudio(st.t);       /* 语音跟着当前时刻走 */
@@ -1880,11 +2083,12 @@ function make(variant) {
         map.fleet("fleet", fleet);
         map.trails("trails", fleet.filter(function (d) { return d.trail && d.trail.length > 1; })
           .map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.trail }; }));
-        /* 规划航迹放在尾迹之后创建 => 图层压在尾迹上面，不被粗尾迹盖住 */
+        /* 规划航迹放在尾迹之后创建 => 图层压在尾迹上面，不被粗尾迹盖住。
+           T_TRACKS 之前不画"全量规划航迹"：开场按台词逐型揭示（renderPlanLayers） */
         if (map.tracks && FL.tracks) {
-          var trackTime = st.t < FL.T_TRACKS ? FL.T_TRACKS : st.t;
-          map.tracks("tracks", FL.tracks(trackTime).map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.pts }; }));
+          map.tracks("tracks", st.t + 1e-6 >= FL.T_TRACKS ? FL.tracks(st.t).map(function (d) { return { color: COLORS[d.type] || "#38bdf8", pts: d.pts }; }) : []);
         }
+        renderPlanLayers(st.t);
         paint();
       }
 
@@ -1943,6 +2147,15 @@ function make(variant) {
       function loop(now) {
         if (st.dead) return;                  /* 已退场：不再续命 */
         requestAnimationFrame(loop);
+        /* 运镜：外层播放器进本屏就暂停了（render() 不再每帧跑），这里自己每帧下发机位。
+           setView 内部按"中心/zoom/pitch/bearing"去重，值没变时是空操作。 */
+        if (map.setView && s6CamAt && root.classList.contains("on")) {
+          var sc6 = s6CamAt();
+          if (sc6) {
+            map.setView({ center: sc6.center, zoom: sc6.zoom, pitch: sc6.pitch, bearing: sc6.bearing });
+            applyScale(sc6.zoom);      /* 比例尺跟着缩放走，别停在总览的数值上 */
+          }
+        }
         if (dragging || !st.run || !root.classList.contains("on")) { st.last = now; return; }
         if (!st.last) { st.last = now; return; }
         var dt = Math.min(0.25, (now - st.last) / 1000);
@@ -2001,6 +2214,7 @@ function make(variant) {
       function applyVis() {
         if (!map.setVis) return;
         map.setVis(["tracks"], visState.tracks);
+        map.setVis(["plan-"], visState.tracks);        /* 开场逐型揭示的规划航路预览，跟随同一开关 */
         map.setVis(["trails"], visState.trails);
         map.setVis(["cov-photo"], visState["cov-photo"]);
         map.setVis(["cov-gmti"], visState["cov-gmti"]);
@@ -2048,6 +2262,10 @@ function make(variant) {
           map.fleet("fleet", []);
           map.trails("trails", []);
           if (map.tracks) map.tracks("tracks", []);
+          /* 航路与标签是共享地图上的常驻图元，退场必须一起收掉 */
+          ROUTE_LBL.forEach(function (o) { if (map.setVis) map.setVis(["route-" + o.id], false); o.h.set(0); });
+          S6_ITEMS.forEach(function (k) { if (map.setVis) map.setVis(["plan-" + k], false); });
+          s6CamAt = null; s6Start = null;
           if (map.scan) map.scan("scan", []);
           if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); }
           if (map.beam) map.beam("sbeam", []);
@@ -2503,14 +2721,16 @@ function make(variant) {
     var cp = FX.easeInOut(FX.at(t, 0.2, 11.0));
     var is3d = !!(e.map && e.map.is3d);
     /* 平面版：斜着看的平整卫星图（pitch 只是相机倾斜，没有地形起伏） */
-var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
+    var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
     var CAM = e.scid === "SH-03" ? CAM03 : ((SELCFG && SELCFG.camera) ? SELCFG.camera : CAM03);
-    var zoom = is3d ? FX.lerp(10.95, 11.25, cp) : CAM.zoom;
-    var pitch = is3d ? FX.lerp(62, 70, cp) : CAM.pitch;
-    var bearing = is3d ? FX.lerp(-30, -18, cp) : (CAM.bearing == null ? -20 : CAM.bearing);
-    var center = is3d ? [116.218, 39.920] : CAM.center.slice();
+    /* 场景二 SH-06：开场运镜（纯函数 f(内层时间)，拖动 / 暂停 / 回退都正确） */
+    var shot = (!is3d && e.scid === "SH-06" && s6CamAt) ? s6CamAt() : null;
+    var zoom = is3d ? FX.lerp(10.95, 11.25, cp) : (shot ? shot.zoom : CAM.zoom);
+    var pitch = is3d ? FX.lerp(62, 70, cp) : (shot ? shot.pitch : CAM.pitch);
+    var bearing = is3d ? FX.lerp(-30, -18, cp) : (shot ? shot.bearing : (CAM.bearing == null ? -20 : CAM.bearing));
+    var center = is3d ? [116.218, 39.920] : (shot ? shot.center.slice() : CAM.center.slice());
     /* 新任务区 80x80km：所有地图屏统一对着它 */
-    if (e.scid === "SH-06") { center = (CAM.center || [114.100, 39.880]).slice(); }
+    if (!shot && e.scid === "SH-06") { center = (CAM.center || [114.100, 39.880]).slice(); }
     /* 镜头跟随：平面版没有地形网格要重建，必须每帧跟着 t 动 ——
        原来 0.12 秒才跳一次 = 8fps 的镜头，肉眼看就是一格一格地卡。
        3D 版每次 jumpTo 都要重建地形网格，仍然保留 0.12 秒节流。 */
@@ -2730,6 +2950,7 @@ var SELCFG = window.getSelectedScenario ? window.getSelectedScenario() : null;
     else if (e && window.APP_STATE && window.APP_STATE.scenarioId) setAreaGraphics(e, true);
     /* 切到前台：先把共享画布挂到自己容器上（若它还在别的屏里），再校准一次 */
     if (e && e.scid === "SH-06" && window.PLAYER) window.PLAYER.pause();   /* 这一屏交给飞行演示的独立时钟 */
+    if (e && e.scid === "SH-06" && s6Start) s6Start();                      /* 进屏自动开播，不用人点播放 */
     if (e && e.host && e.needMap && window.MapViewShared) window.MapViewShared(e.host);
     if (e && e.needMap && window.MapViewSetBounds) window.MapViewSetBounds(e.mapBounds || null);
     if (e && e.needMap && window.MapViewSetZoomRange) window.MapViewSetZoomRange(e.minZoom || null, 17);

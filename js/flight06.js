@@ -1167,7 +1167,7 @@ window.FLIGHT06 = (function () {
       var d = D[i];
       if (d.attack && d.attack.tGone !== Infinity && t >= d.attack.tGone) continue;
       if (d.replan3 && t >= T003_RETURN) {
-        o.push({ type: d.type, pts: d.replan3.path.pts.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
+        o.push({ type: d.type, k: d.k, pts: d.replan3.path.pts.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
         continue;
       }
       if (d.track3 && t >= T003_ASSIGN) {
@@ -1192,24 +1192,24 @@ window.FLIGHT06 = (function () {
                        bp[1] + (d.track3.side * (bt[0]) * T003_SIDE) / M_LAT]);
           }
         }
-        o.push({ type: d.type, pts: tpts.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
+        o.push({ type: d.type, k: d.k, pts: tpts.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
         continue;
       }
       if (d.replan1 && t >= T003_REPLAN1) {
-        o.push({ type: d.type, pts: d.replan1.path.pts.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
+        o.push({ type: d.type, k: d.k, pts: d.replan1.path.pts.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
         continue;
       }
       if (d.replan2 && t >= T_REPLAN2) {
-        o.push({ type: d.type, pts: d.replan2.path.pts.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
+        o.push({ type: d.type, k: d.k, pts: d.replan2.path.pts.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
         continue;
       }
       if (d.orbit && t >= T_REASSIGN) {
-        o.push({ type: d.type, pts: d.orbit.track.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
+        o.push({ type: d.type, k: d.k, pts: d.orbit.track.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
         continue;
       }
       var P = (d.replan && t >= T_REPLAN) ? d.replan.path : d.path;
       if (!P || !P.pts) continue;
-      o.push({ type: d.type, pts: P.pts.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
+      o.push({ type: d.type, k: d.k, pts: P.pts.map(function (p) { return [+p[0].toFixed(5), +p[1].toFixed(5)]; }) });
     }
     return o;
   }
