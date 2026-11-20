@@ -392,6 +392,70 @@ window.S06_SHELL = (function () {
     ewar:  { dash: [0.6, 2.6], width: 3.0, opacity: 0.95 },
     comm:  { dash: [3.5, 2], width: 3.6, opacity: 0.95 }
   };
+  /* ---------- 场景一 SH-06：开场运镜 + 航路逐句揭示（与场景二同一套逻辑） ----------
+     3 句机型台词（S1_AI_EVENTS 里的 013/016/019）= 3 段镜头：
+       ① 画出该型的编组航线  ② 镜头从集结区沿这条航线推到任务区
+       ③ 拉回「任务区视角」  ④ 在这个视角下画出该型的规划航路（+ 对应侦察格网）
+     通信（编组4）没有台词：开局直接画；第 5 句「任务计划已下达」把镜头拉回总览。
+     全部是「内层时间 t 的纯函数」，拖动 / 暂停 / 回退都一致。 */
+  var S1_SHOT_IN = 0.22, S1_SHOT_GO = 0.72, S1_SHOT_OUT = 0.88;
+  /* 中段机位：10.4（≈100 km 视野）。不能再往上：相机 zoom ≥10.5 时 MapLibre 改取 z11/z12 瓦片，
+     而 z11/z12 在集结区以北（北纬 25.25 以上）没铺满，镜头朝北看海面会露出阶梯状补丁 */
+  var S1_SHOT_ZOOM = 10.4, S1_SHOT_PITCH = 44;
+  var S1_SHOTS = [
+    { audio: "assets/audio/s1/013.wav", route: "G1", items: ["photo"], grid: "photo" },   /* 光电 */
+    { audio: "assets/audio/s1/016.wav", route: "G2", items: ["sar", "gmti"], grid: "sar" },/* 雷达 */
+    { audio: "assets/audio/s1/019.wav", route: "G3", items: ["ewar"], grid: null }        /* 电子 */
+  ];
+  var S1_TAIL_AUDIO = "assets/audio/s1/022.wav";     /* 任务计划已下达：拉回总览 */
+  function s1Transit(routeId) {
+    var RS = window.ROUTES_S1;
+    if (!RS) return null;
+    for (var i = 0; i < (RS.transit || []).length; i++) if (RS.transit[i].id === routeId) return RS.transit[i];
+    return null;
+  }
+  /* 折线上按里程取点（编组航线是两点直线，这里也兼容多点） */
+  function s1RoutePt(pts, f) {
+    if (!pts || !pts.length) return null;
+    if (pts.length < 2) return [pts[0][0], pts[0][1]];
+    var segs = [], total = 0, i;
+    for (i = 1; i < pts.length; i++) {
+      var dx = (pts[i][0] - pts[i - 1][0]) * 111320 * Math.cos(pts[i][1] * Math.PI / 180);
+      var dy = (pts[i][1] - pts[i - 1][1]) * 111030;
+      var L = Math.hypot(dx, dy);
+      segs.push(L); total += L;
+    }
+    var want = Math.max(0, Math.min(1, f)) * total, acc = 0;
+    for (i = 0; i < segs.length; i++) {
+      if (acc + segs[i] >= want) {
+        var k = segs[i] > 0 ? (want - acc) / segs[i] : 0;
+        return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * k, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * k];
+      }
+      acc += segs[i];
+    }
+    return [pts[pts.length - 1][0], pts[pts.length - 1][1]];
+  }
+  /* 每句的时间窗：直接取自 S1_AI_SCHED（气泡与语音共用的那张真实时长表） */
+  function s1ShotWins() {
+    var win = {};
+    if (!S1_AI_SCHED.length) return win;
+    S1_AI_SCHED.forEach(function (it) {
+      var a = it.ev && it.ev.audio;
+      if (a && a.length) win[a[0]] = { start: it.start, end: it.end };
+    });
+    return win;
+  }
+  function s1CamCopy(c) {
+    return { center: [c.center[0], c.center[1]], zoom: c.zoom, pitch: c.pitch, bearing: c.bearing };
+  }
+  function s1CamMix(a, b, k) {
+    return {
+      center: [FX.lerp(a.center[0], b.center[0], k), FX.lerp(a.center[1], b.center[1], k)],
+      zoom: FX.lerp(a.zoom, b.zoom, k),
+      pitch: FX.lerp(a.pitch, b.pitch, k),
+      bearing: a.bearing
+    };
+  }
   /* 场景一机场：跑道 / 滑行道 / 目标（黄=疑似、红=确认） */
   var S1_BASE = window.BASE_S1;
   var S1_BASE_TIMES = null;
@@ -714,17 +778,19 @@ window.S06_SHELL = (function () {
   }
 
   function s1SetVisible(mv, acc, on, target) {
-    var vis = on ? "visible" : "none";
     var raw = null;
     try { raw = mv && mv.map && mv.map(); } catch (err) {}
+    var rev = acc && acc.rev;                 /* 逐句揭示：用户开关 AND 已揭示 */
     if (target === "routes" || target === undefined) {
       acc.ids.forEach(function (id) {
+        var vis = (on && (!rev || rev[String(id).replace("s1-route-", "")] !== false)) ? "visible" : "none";
         try { if (raw && raw.getLayer(id + "-l")) raw.setLayoutProperty(id + "-l", "visibility", vis); } catch (err) {}
       });
       acc.labels.forEach(function (h) { try { if (h && h.set) h.set(on ? 1 : 0); } catch (err) {} });
     }
     if (target === "plan" || target === undefined) {
       (acc.planIds || []).forEach(function (id) {
+        var vis = (on && (!rev || rev[String(id).replace(S1_PLAN_ID + "-", "")] !== false)) ? "visible" : "none";
         try { if (raw && raw.getLayer(id + "-l")) raw.setLayoutProperty(id + "-l", "visibility", vis); } catch (err) {}
       });
     }
@@ -1242,6 +1308,107 @@ window.S06_SHELL = (function () {
     var goBtn = ctl.querySelector(".s6-go"), tmLbl = ctl.querySelector(".s6-tm b"), totLbl = ctl.querySelector(".s6-tot");
     var spds = [].slice.call(ctl.querySelectorAll(".s6-spds b"));
     var st = { t: 0, speed: 1, run: false, last: 0, acc: 0, dead: false };
+
+    /* ---------- 场景一：机位（总览 / 任务区视角）+ 运镜 ---------- */
+    var S1_OVIEW = (cam && cam.center) ? {
+      center: [cam.center[0], cam.center[1]],
+      zoom: (cam.zoom == null ? 9.75 : cam.zoom),
+      pitch: (cam.pitch == null ? 30 : cam.pitch),
+      bearing: (cam.bearing == null ? -20 : cam.bearing)
+    } : null;
+    var S1_TASK = (function () {
+      var m = (cfg && cfg.area && cfg.area.mission) || null;
+      if (!S1_OVIEW || !m || m.length < 3) return null;
+      var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+      m.forEach(function (q) {
+        x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]);
+        y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]);
+      });
+      return { center: [(x0 + x1) / 2, (y0 + y1) / 2], zoom: 9.8, pitch: 30, bearing: S1_OVIEW.bearing };
+    })();
+    function s1CamAt() {
+      if (!S1_OVIEW) return null;
+      var t = st.t, win = s1ShotWins();
+      var from = S1_OVIEW;
+      for (var i = 0; i < S1_SHOTS.length; i++) {
+        var w = win[S1_SHOTS[i].audio];
+        if (!w) continue;
+        if (t >= w.end) { if (S1_TASK) from = S1_TASK; continue; }   /* 这一段已播完：画面停在任务区视角 */
+        if (t < w.start) break;
+        var r = s1Transit(S1_SHOTS[i].route);
+        if (!r || !r.pts) break;
+        var u = (t - w.start) / Math.max(0.001, w.end - w.start);
+        if (u < S1_SHOT_IN) {
+          return s1CamMix(from, { center: s1RoutePt(r.pts, 0), zoom: S1_SHOT_ZOOM, pitch: S1_SHOT_PITCH, bearing: from.bearing },
+                          FX.easeInOut(u / S1_SHOT_IN));
+        }
+        if (u < S1_SHOT_GO) {
+          return { center: s1RoutePt(r.pts, FX.easeInOut((u - S1_SHOT_IN) / (S1_SHOT_GO - S1_SHOT_IN))),
+                   zoom: S1_SHOT_ZOOM, pitch: S1_SHOT_PITCH, bearing: from.bearing };
+        }
+        if (u < S1_SHOT_OUT) {
+          return s1CamMix({ center: s1RoutePt(r.pts, 1), zoom: S1_SHOT_ZOOM, pitch: S1_SHOT_PITCH, bearing: from.bearing },
+                          S1_TASK || S1_OVIEW, FX.easeInOut((u - S1_SHOT_GO) / (S1_SHOT_OUT - S1_SHOT_GO)));
+        }
+        return s1CamCopy(S1_TASK || S1_OVIEW);        /* 88% 之后停在任务区视角 */
+      }
+      /* 不在任何段落里 */
+      if (S1_TASK && from === S1_TASK) {
+        var w2 = win[S1_TAIL_AUDIO];
+        if (w2 && t < w2.end + 0.001) {
+          return s1CamMix(S1_TASK, S1_OVIEW, FX.easeInOut((t - w2.start) / Math.max(0.001, w2.end - w2.start)));
+        }
+        return s1CamCopy(S1_OVIEW);
+      }
+      return s1CamCopy(S1_OVIEW);
+    }
+    /* 逐句揭示：G4（通信）+ comm 开局直接画；其余按台词出现 */
+    var s1RevSig = "";
+    function s1PlanChecked(g) {
+      var sub = lyrPanel && lyrPanel.querySelector('input[data-k="tracks-' + g + '"]');
+      return sub ? sub.checked : false;
+    }
+    function s1GridChecked(which) {
+      var cb = lyrPanel && lyrPanel.querySelector('input[data-k="s1grid-' + which + '"]');
+      return cb ? cb.checked : true;
+    }
+    function s1ApplyReveal() {
+      if (!mv || st.dead) return;
+      var win = s1ShotWins(), t = st.t;
+      /* 每个键都必须显式给值：未揭示 = false（漏写会变成 undefined，被判定为已揭示） */
+      var rev = { G1: false, G2: false, G3: false, G4: true, photo: false, sar: false, gmti: false, ewar: false, comm: true, gridPhoto: false, gridSar: false };
+      S1_SHOTS.forEach(function (s) {
+        var w = win[s.audio];
+        if (!w) return;
+        if (t + 1e-6 >= w.start) rev[s.route] = true;                              /* 气泡一开始 → 编组航线 */
+        if (t + 1e-6 >= w.start + S1_SHOT_OUT * (w.end - w.start)) {               /* 拉回之后 → 规划航路 + 格网 */
+          s.items.forEach(function (k) { rev[k] = true; });
+          if (s.grid === "photo") rev.gridPhoto = true;
+          if (s.grid === "sar") rev.gridSar = true;
+        }
+      });
+      var sig = [];
+      ["G1", "G2", "G3", "G4", "photo", "sar", "gmti", "ewar", "comm"].forEach(function (k) { sig.push(rev[k] ? 1 : 0); });
+      sig.push(rev.gridPhoto ? 1 : 0, rev.gridSar ? 1 : 0);
+      var sigS = sig.join("");
+      if (sigS === s1RevSig) return;
+      s1RevSig = sigS;
+      s1acc.rev = rev;
+      s1SetVisible(mv, s1acc, s1acc.showRoutes !== false, "routes");
+      PLAN_KEYS.forEach(function (g) { setPlanLayer(g, s1PlanChecked(g)); });
+      s1SetGridVisible(mv, rev.gridPhoto && s1GridChecked("photo"), "photo");
+      s1SetGridVisible(mv, rev.gridSar && s1GridChecked("sar"), "sar");
+    }
+    /* 进屏自动开播（只在本屏还没播过时点一次） */
+    function s1AutoStart() {
+      if (!hasMap || !goBtn) return;
+      if (st.run || st.t > 0.5) return;
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          if (!st.run && st.t <= 0.5) goBtn.click();
+        });
+      });
+    }
     totLbl.textContent = fmt(total);
     /* 场景一飞行仿真：按时间取机群位置与尾迹（与场景二 SH-06 同款数据流）
        地图数据更新比进度条贵得多，所以这里做两件事：
@@ -1387,6 +1554,12 @@ window.S06_SHELL = (function () {
       if (st.dead) return;
       requestAnimationFrame(loop);
       if (!root.classList.contains("on")) { st.last = now; return; }
+      /* 运镜 + 逐句揭示：外层播放器进本屏就暂停了，机位由这里每帧下发（3D 版保持静态机位） */
+      if (mv && mv.setView && !mv.is3d) {
+        var sc6 = s1CamAt();
+        if (sc6) mv.setView({ center: sc6.center, zoom: sc6.zoom, pitch: sc6.pitch, bearing: sc6.bearing });
+      }
+      s1ApplyReveal();
       if (!st.run) { st.last = now; s1vRender(st.t); s1AiAudioSync(st.t); return; }
       if (!st.last) { st.last = now; return; }
       var dt = Math.min(0.25, (now - st.last) / 1000);
@@ -1404,7 +1577,7 @@ window.S06_SHELL = (function () {
     root.__s6Refresh = function () { paint(); };
     var lyrPanel = root.querySelector(".s6-lyr-panel");
     var PLAN_KEYS = ["photo", "sar", "gmti", "ewar", "comm"];
-    function setPlanLayer(g, on) { s1SetLayers(mv, [S1_PLAN_ID + "-" + g + "-l"], on); }
+    function setPlanLayer(g, on) { s1SetLayers(mv, [S1_PLAN_ID + "-" + g + "-l"], on && (!s1acc.rev || s1acc.rev[g] !== false)); }
     function planSub(g) { return lyrPanel.querySelector('input[data-k="tracks-' + g + '"]'); }
     /* 总开关只反映“至少一个子开关开着” */
     function syncMaster() {
@@ -1427,9 +1600,9 @@ window.S06_SHELL = (function () {
       if (k === "s1routes") { s1acc.showRoutes = on; s1SetVisible(mv, s1acc, on, "routes"); }
       else if (k === "tracks") PLAN_KEYS.forEach(function (g) { setPlanLayer(g, on); });
       else if (k.indexOf("tracks-") === 0) setPlanLayer(k.slice(7), on);
-      else if (k === "s1grid") s1SetGridVisible(mv, on, "all");
-      else if (k === "s1grid-photo") s1SetGridVisible(mv, on, "photo");
-      else if (k === "s1grid-sar") s1SetGridVisible(mv, on, "sar");
+      else if (k === "s1grid") { s1SetGridVisible(mv, on && (!s1acc.rev || s1acc.rev.gridPhoto), "photo"); s1SetGridVisible(mv, on && (!s1acc.rev || s1acc.rev.gridSar), "sar"); }
+      else if (k === "s1grid-photo") s1SetGridVisible(mv, on && (!s1acc.rev || s1acc.rev.gridPhoto), "photo");
+      else if (k === "s1grid-sar") s1SetGridVisible(mv, on && (!s1acc.rev || s1acc.rev.gridSar), "sar");
       else if (k === "trails") s1SetLayers(mv, ["s1-trails-c", "s1-trails-l"], on);
       else if (S1_VIS[k]) s1SetGroupVisible(mv, k, on);
     }
@@ -1447,6 +1620,8 @@ window.S06_SHELL = (function () {
       if (!hasMap) return;
       s1Draw(mv, s1acc);
       applyAllToggleStates();
+      s1RevSig = "";              /* 图层重建过：逼 reveal 再套一遍 */
+      s1ApplyReveal();
       renderFlight(true);
     }
     [].slice.call(root.querySelectorAll("button[data-all]")).forEach(function (b) {
@@ -1499,8 +1674,11 @@ window.S06_SHELL = (function () {
         lyrBtn.classList.toggle("on", on);
       });
     }
+    /* 建屏即套一次揭示状态：开场只留通信（编组4），其余按台词出现 */
+    s1ApplyReveal();
     return { shell: true, st: st, root: root, aiLog: root.querySelector(".s6-ai-log"), mapView: window.__s6ShellMap || null, cam: window.__s6ShellCam || null,
       redraw: redrawS1,
+      autoplay: s1AutoStart,
       cleanup: function () { if (hasMap) { s1Clear(mv, s1acc); clearFlight(); } } };
   }
   return {

@@ -22,6 +22,8 @@ window.S06_SKELETON = {
     }
     /* 屏被缓存复用：回看本屏时 build 不再执行，航线由这里按当前开关状态重画 */
     if (e && e.redraw) { try { e.redraw(); } catch (err) {} }
+    /* 进屏自动开播（场景一：不用人点播放；已播过的会自己跳过） */
+    if (e && e.autoplay) { try { e.autoplay(); } catch (err) {} }
   },
   onHide: function (e) {
     if (e && e.st) e.st.dead = true;

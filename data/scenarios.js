@@ -95,8 +95,9 @@
   }
   var S2 = variant("scene-1", "敏捷拒止布控", "场景一", {
     region: "沿海岛屿任务区",
-    /* 场景一：镜头锁定 zoom 11（离线瓦片只到 z11~z13，且兜底图不覆盖该纬度） */
-    camera: { center: [121.073, 24.978], zoom: 11, pitch: 38, bearing: -20 },
+    /* 总览机位：任务区（西南）与我方集结区（东北）同框；SH-04/05/06 共用，
+       SH-06 的开场运镜从这个机位出发（见 scenes/s06-shell.js 的 S1_OVIEW） */
+    camera: { center: [121.073, 24.850], zoom: 9.75, pitch: 30, bearing: -20 },
     coordText: "121.07300, 24.97800",
     mapBounds: [[118.60, 23.20], [123.60, 26.80]],
     minZoom: 8.5,
