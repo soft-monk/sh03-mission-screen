@@ -73,17 +73,6 @@
     s5Audio: [
       { at: 0.5, srcs: ["assets/audio/s2/013.wav", "assets/audio/s2/014.wav", "assets/audio/s2/015.wav", "assets/audio/s2/016.wav", "assets/audio/s2/017.wav", "assets/audio/s2/018.wav"] }
     ],
-    s6Dialog: [
-      { key: "s6-06", who: "ai", at: 0.0, audio: ["assets/audio/s2/019.wav"], text: "根据任务需求和编组方案，已生成蜂群作战方案。" },
-      { key: "s6-07", who: "ai", at: 5.4, audio: ["assets/audio/s2/020.wav", "assets/audio/s2/021.wav"], text: "光电察打机10架<br>对于潜在目标区1网格化侦察<br>5分钟可完成区域遍历。" },
-      { key: "s6-10", who: "ai", at: 12.3, audio: ["assets/audio/s2/022.wav", "assets/audio/s2/023.wav"], text: "雷达侦察机2架<br>使用GMTI模式<br>对于潜在目标区1，4分钟可完成区域遍历。" },
-      { key: "s6-11", who: "ai", at: 19.2, audio: ["assets/audio/s2/024.wav", "assets/audio/s2/025.wav"], text: "雷达侦察机1架<br>使用SAR模式<br>对于潜在目标区1，40分钟可完成区域遍历。" },
-      { key: "s6-08", who: "ai", at: 25.8, audio: ["assets/audio/s2/026.wav", "assets/audio/s2/027.wav"], text: "光电察打机10架<br>对于潜在目标区2网格化侦察<br>5分钟可完成区域遍历。" },
-      { key: "s6-09", who: "ai", at: 32.3, audio: ["assets/audio/s2/028.wav", "assets/audio/s2/029.wav"], text: "电子侦察机6架<br>对于潜在目标区2广域协同搜索<br>6分钟可完成区域遍历。" }
-    ],
-    s6Audio: [
-      { src: "assets/audio/s2/001.wav" }, { src: "assets/audio/s2/002.wav" }, { src: "assets/audio/s2/003.wav" }, { src: "assets/audio/s2/004.wav" }, { src: "assets/audio/s2/005.wav" }, { src: "assets/audio/s2/006.wav" }, { src: "assets/audio/s2/007.wav" }, { src: "assets/audio/s2/008.wav" }, { src: "assets/audio/s2/009.wav" }, { src: "assets/audio/s2/010.wav" }, { src: "assets/audio/s2/011.wav" }, { src: "assets/audio/s2/012.wav" }, { src: "assets/audio/s2/013.wav" }, { src: "assets/audio/s2/014.wav" }, { src: "assets/audio/s2/015.wav" }, { src: "assets/audio/s2/016.wav" }, { src: "assets/audio/s2/017.wav" }, { src: "assets/audio/s2/018.wav" }, { src: "assets/audio/s2/019.wav" }, { src: "assets/audio/s2/020.wav" }, { src: "assets/audio/s2/021.wav" }, { src: "assets/audio/s2/022.wav" }, { src: "assets/audio/s2/023.wav" }, { src: "assets/audio/s2/024.wav" }, { src: "assets/audio/s2/025.wav" }, { src: "assets/audio/s2/026.wav" }, { src: "assets/audio/s2/027.wav" }, { src: "assets/audio/s2/028.wav" }, { src: "assets/audio/s2/029.wav" }, { src: "assets/audio/s2/031.wav" }, { src: "assets/audio/s2/032.wav" }, { src: "assets/audio/s2/033.wav" }, { src: "assets/audio/s2/034.wav" }, { src: "assets/audio/s2/035.wav" }, { src: "assets/audio/s2/036.wav" }, { src: "assets/audio/s2/037.wav" }, { src: "assets/audio/s2/038.wav" }, { src: "assets/audio/s2/039.wav" }, { src: "assets/audio/s2/040.wav" }, { src: "assets/audio/s2/041.wav" }, { src: "assets/audio/s2/042.wav" }, { src: "assets/audio/s2/043.wav" }, { src: "assets/audio/s2/044.wav" }, { src: "assets/audio/s2/045.wav" }, { src: "assets/audio/s2/051.wav" }, { src: "assets/audio/s2/052.wav" }, { src: "assets/audio/s2/046.wav" }
-    ],
     s6BlockUntil: 0,
     flow: ["SH-04", "SH-05", "SH-06"]
   };

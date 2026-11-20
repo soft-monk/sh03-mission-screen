@@ -119,6 +119,9 @@ function make(variant) {
       var who = arr[i].who || "ai";
       html += '<div class="s6-msg ' + who + '"><div class="s6-avatar">' + (who === "user" ? "用户" : "AI") + '</div><div class="s6-bubble">' + arr[i].text + '</div></div>';
     }
+    /* 内容没变就不重建 DOM：SH-04/05 每帧都会调到这里（60fps），重建 innerHTML 是纯浪费 */
+    if (el.__aiHtml === html) return;
+    el.__aiHtml = html;
     el.innerHTML = html;
     var sc = el.closest(".s6-chat-scroll");
     if (sc) {
@@ -153,10 +156,23 @@ function make(variant) {
   window.ensureScenarioAudioPreload = function () {
     window.APP_STATE = window.APP_STATE || {};
     if (window.APP_STATE.scenarioAudioPreload) return window.APP_STATE.scenarioAudioPreload;
-    var preMap = {}, count = 72;
+    var preMap = {}, count = 72, settled = 0, failed = 0;
     window.APP_STATE.scenarioAudioPreload = { map: preMap, count: count };
-    /* 方案 A：把 66 个 wav 直接取成 Blob 缓存成对象 URL。
+    /* 方案 A：把 72 个 wav 直接取成 Blob 缓存成对象 URL。
        播放时不再走网络，起播几乎零延迟；同时拿到真实时长，播放表可以精确排。 */
+    function preSettle(ok) {
+      settled++;
+      if (!ok) failed++;
+      var box = window.APP_STATE && window.APP_STATE.scenarioAudioPreload;
+      if (box) { box.settled = settled; box.failed = failed; }   /* 记状态：SH-06 建屏时可能早已结束 */
+      if (settled < count) return;
+      /* 全部结束（含失败）：若有一条没拿到时长，buildSchedule 会一直拒绝建表 →
+         这里强制按字数估算建一次，保证气泡和语音还能出来（不再整屏空白）。
+         注意：预载通常在 SH-04 就跑完，那时 SH-06 还没建屏、__s6SchedFinal 还不存在，
+         所以上面把 settled/failed 写到 box 上，SH-06 建屏时会按它决定要不要强制建表。 */
+      if (failed) console.warn("[s6] " + failed + " 条语音没加载成功，退回时长估算");
+      if (window.__s6SchedFinal) { try { window.__s6SchedFinal(); } catch (e) {} }
+    }
     for (var i = 1; i <= count; i++) {
       (function (src) {
         fetch(audioSrc(src)).then(function (r) { return r.blob(); }).then(function (blob) {
@@ -167,9 +183,11 @@ function make(variant) {
             try { AUDIO_DUR[src] = a.duration; } catch (e) {}
             preMap[src] = a;                      /* 之后所有播放都走 blob，不再联网 */
             if (window.__s6Rebuild) window.__s6Rebuild();
+            preSettle(true);
           }, { once: true });
+          a.addEventListener("error", function () { preSettle(false); }, { once: true });
           a.load();
-        }).catch(function () {});
+        }).catch(function () { preSettle(false); });
       })("assets/audio/s2/" + ("00" + i).slice(-3) + ".wav");
     }
     return window.APP_STATE.scenarioAudioPreload;
@@ -355,7 +373,6 @@ function make(variant) {
   /* 集结区：中心 115.95742 / 39.74206，4x4km */
     reserve: [[115.93399, 39.72405], [115.98085, 39.72405], [115.98085, 39.76007], [115.93399, 39.76007]]
   };
-  var AO = { lon: 116.218, lat: 39.920 };
 
   function row(k, v, c) {
     return '<div class="s3-row"><span>' + k + '</span><b style="color:' + c + '">' + v + '</b></div>';
@@ -500,12 +517,12 @@ function make(variant) {
 
     var SH06_VIDEO_HTML = (sc && sc.id === "SH-06")
       ? ('<div class="s6-video-source">' +
-          '<video class="s6-video-a" src="assets/video/goal002_A_ir.mp4" muted playsinline preload="auto"></video>' +
-          '<video class="s6-video-b" src="assets/video/goal002_B_ir.mp4" muted playsinline preload="auto"></video>' +
-          '<video class="s6-video-c" src="assets/video/goal001_A_ir.mp4" muted playsinline preload="auto"></video>' +
-          '<video class="s6-video-d" src="assets/video/goal001_B_ir.mp4" muted playsinline preload="auto"></video>' +
-          '<video class="s6-video-e" src="assets/video/goal003_A_ir.mp4" muted playsinline preload="auto"></video>' +
-          '<video class="s6-video-f" src="assets/video/goal003_B_ir.mp4" muted playsinline preload="auto"></video>' +
+          '<video class="s6-video-a" src="assets/video/goal002_A_ir.mp4" muted playsinline preload="none"></video>' +
+          '<video class="s6-video-b" src="assets/video/goal002_B_ir.mp4" muted playsinline preload="none"></video>' +
+          '<video class="s6-video-c" src="assets/video/goal001_A_ir.mp4" muted playsinline preload="none"></video>' +
+          '<video class="s6-video-d" src="assets/video/goal001_B_ir.mp4" muted playsinline preload="none"></video>' +
+          '<video class="s6-video-e" src="assets/video/goal003_A_ir.mp4" muted playsinline preload="none"></video>' +
+          '<video class="s6-video-f" src="assets/video/goal003_B_ir.mp4" muted playsinline preload="none"></video>' +
         '</div>' +
         '<section class="s6-video-smallbar">' +
           '<div class="s6-video-card s6-video-small-card" data-video="A">' +
@@ -690,6 +707,17 @@ function make(variant) {
         '<div class="s6-seglbls"></div>' +
       '</section>';
       root.insertAdjacentHTML("beforeend", ctlHTML);
+      /* 视频缓冲提示（到点没画面时暂停时钟，见 s6VideoGate） */
+      root.insertAdjacentHTML("beforeend", '<div class="s6-buf">视频缓冲中…</div>');
+      if (!document.getElementById("css-s6buf")) {
+        var stb = document.createElement("style");
+        stb.id = "css-s6buf";
+        stb.textContent = ".s6-buf{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);z-index:45;padding:10px 24px;border-radius:10px;" +
+          "background:rgba(6,18,32,.94);border:1px solid rgba(56,189,248,.4);color:#bfe9ff;font-size:15px;letter-spacing:3px;" +
+          "opacity:0;pointer-events:none;transition:opacity .15s}" +
+          ".s6-buf.on{opacity:1}";
+        document.head.appendChild(stb);
+      }
 
       var ctl = root.querySelector(".s6-ctl");
       var bar = ctl.querySelector(".s6-bar"), fill = bar.querySelector(".s6-fill"), knob = bar.querySelector(".s6-knob");
@@ -755,20 +783,15 @@ function make(variant) {
         var seg = g.cum[i] - g.cum[i - 1], k = seg > 0 ? (want - g.cum[i - 1]) / seg : 0;
         return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
       }
-      /* 每句的时间窗：与 buildSchedule 一致 —— t=0 的连播链首尾相接 */
+      /* 每句的时间窗：直接查 SCHED（气泡/语音共用的那张真表），不再自己用 clipDur 推算。
+         表没建好（时长未齐）就返回空 → 运镜和揭示都原地不动，避免“镜头跑了、气泡没来”。 */
       function s6ShotWins() {
-        var acc = 0, win = {};
-        for (var i = 0; i < AI_EVENTS.length; i++) {
-          var ev = AI_EVENTS[i];
-          if (ev.t > 0) break;
-          var d = 0.55;
-          if (ev.audio && ev.audio.length) {
-            d = 0;
-            ev.audio.forEach(function (x) { d += clipDur(x); });
-            win[ev.audio[0]] = { a: acc, b: acc + d };
-          }
-          acc += d;
-        }
+        var win = {};
+        if (!SCHED.length) return win;
+        SCHED.forEach(function (it) {
+          var a = it.ev && it.ev.audio;
+          if (a && a.length) win[a[0]] = { a: it.start, b: it.end };
+        });
         return win;
       }
       /* 任务区视角：展示"规划航路"时镜头停在这里 —— 中心=任务区中心，刚好看满整个任务区 */
@@ -835,12 +858,13 @@ function make(variant) {
       /* 比例尺：与 render() 里同一套算法；运镜期间 render() 不跑，这里得自己跟着 zoom 走 */
       var scaleBarEl = root.querySelector(".s3-scale b"), scaleTextEl = root.querySelector(".s3-scale span");
       var lastScaleZ = -1;
-      function applyScale(z) {
+      function applyScale(z, lat) {
         if (!scaleBarEl) return;
         var q = Math.round(z * 1000) / 1000;
         if (q === lastScaleZ) return;          /* 每帧都调，值没变就别写 DOM */
         lastScaleZ = q;
-        var mpp = 156543.03 * Math.cos(39.920 * Math.PI / 180) / Math.pow(2, z);
+        /* MapLibre 的地面分辨率：512 像素世界（原来用 256 的常数，标注距离是实际的 2 倍） */
+        var mpp = 40075016.686 * Math.cos((lat == null ? 39.9 : lat) * Math.PI / 180) / (512 * Math.pow(2, z));
         var cands = [1000, 2000, 5000, 10000, 20000], pick = cands[0];
         for (var i = 0; i < cands.length; i++) if (cands[i] / mpp <= 150) pick = cands[i];
         scaleBarEl.style.width = (pick / mpp).toFixed(0) + "px";
@@ -889,14 +913,21 @@ function make(variant) {
           if (map.setVis) map.setVis(["plan-" + key], show);
         }
       }
-      /* 自动开播：进入本屏即点一次播放（不用人点）；播过的 / 拖回去的不重开 */
+      /* 自动开播：进入本屏即点一次播放（不用人点）；播过的 / 拖回去的不重开。
+         先等 SCHED 建好（= 语音时长集齐），否则会出现“时钟跑了、气泡表还是空的”；
+         最多等 15 秒（预载失败时 __s6SchedFinal 会兜底建表，等不到也放行）。 */
       s6Start = function () {
-        if (st.started || st.t > 0.5) return;
-        requestAnimationFrame(function () {
+        if (st.dead || st.started || st.t > 0.5) return;
+        var waited = 0;
+        (function waitSched() {
+          if (st.dead || st.started || st.t > 0.5) return;
+          if (!SCHED.length && waited < 150) { waited++; setTimeout(waitSched, 100); return; }
           requestAnimationFrame(function () {
-            if (!st.started) goBtn.click();
+            requestAnimationFrame(function () {
+              if (!st.started) goBtn.click();
+            });
           });
-        });
+        })();
       };
 
 
@@ -1882,10 +1913,13 @@ function make(variant) {
           var dur = 0.55;             /* 无语音条目占 0.55 s，保持“一条一条” */
           if (ev.audio && ev.audio.length) {
             dur = 0;
+            var known = true;
             ev.audio.forEach(function (x) {
-              if (!clipKnown(x)) missing++;
+              if (!clipKnown(x)) { missing++; known = false; }
               dur += clipDur(x);
             });
+            /* force（预载全部结束、有文件失败）：这一句按字数估时长，总比整片没表强 */
+            if (!known && force) dur = Math.max(1.2, String(ev.text || "").replace(/<[^>]*>/g, "").length / 4 + 0.6);
           }
           out.push({ ev: ev, start: st0, end: st0 + dur });
           prev = st0 + dur;
@@ -1893,6 +1927,7 @@ function make(variant) {
         });
         if (missing && !force) { SCHED = []; return false; }
         SCHED = out;
+        SCHED.estimated = !!(missing && force);
         return true;
       }
       /* 播放失败（被浏览器策略拦截/被暂停打断）：标记失败，等下次 syncAudio 或用户手势重试 */
@@ -2003,7 +2038,14 @@ function make(variant) {
       }
       function renderAiLog(t) { renderLogAt(t); }
       window.__s6Rebuild = function () { if (logAudioOn) return; buildSchedule(); };   /* 播放中不重算，避免跳音 */
-      buildSchedule();
+      /* 预载全部结束（有文件失败时）：强制按字数估算建一次表，别让整屏气泡消失 */
+      window.__s6SchedFinal = function () {
+        if (logAudioOn) return;
+        if (buildSchedule(true)) { try { renderLogAt(st.t); renderPlanLayers(st.t); } catch (e) {} }
+      };
+      /* 预载通常在 SH-06 建屏之前就结束了（SH-04 就开始拉）：按 box 上的失败计数决定要不要强制建表 */
+      var pre0 = window.APP_STATE && window.APP_STATE.scenarioAudioPreload;
+      buildSchedule(!!(pre0 && pre0.failed && pre0.settled >= pre0.count));
 
       function fmt(s) { var m = Math.floor(s / 60), ss = Math.floor(s % 60); var mm = m < 10 ? "0" + m : String(m); return mm + ":" + ("0" + ss).slice(-2); }
       function paint() {
@@ -2044,6 +2086,61 @@ function make(variant) {
         videoJump.addEventListener("click", function () { st.t = Math.max(0, T_VIDEO_002 - 10); push(); syncMediaToTime(st.t); });
         segLbls.appendChild(videoJump);
       })();
+
+      /* ---------- 视频就绪：提前 90 s 预热 + 到点没画面就暂停时钟 ---------- */
+      var bufEl = root.querySelector(".s6-buf");
+      var vWarm = {}, vSkip = {};
+      var vHold = null;             /* { v, since, s0 }：正在等某一路视频就绪 */
+      function s6Buf(on) { if (bufEl) bufEl.classList.toggle("on", !!on); }
+      function s6WarmVideos() {
+        var pairs = [[T_VIDEO_002, videoA, videoB], [T_EXTRA_VIDEO, videoC, videoD], [T003_VIDEO, videoE, videoF]];
+        for (var i = 0; i < pairs.length; i++) {
+          var s0 = pairs[i][0];
+          if (st.t < s0 - 90) continue;                     /* 入点前 90 秒才开始拉，不一进屏就吞 300 MB */
+          for (var j = 1; j < 3; j++) {
+            var v = pairs[i][j], key = s0 + ":" + j;
+            if (!v || vWarm[key]) continue;
+            vWarm[key] = true;
+            try { v.preload = "auto"; v.load(); } catch (e) {}
+          }
+        }
+      }
+      function s6VideoGate() {
+        if (!bufEl) return;
+        if (vHold) {                                        /* 等待中：就绪或超时（10 s）就恢复 */
+          var ok = vHold.v && vHold.v.readyState >= 2;
+          var late = Date.now() - vHold.since > 10000;
+          if (ok || late) {
+            if (late && !ok) {                              /* 等不到就别把整场演示卡死 */
+              vSkip[vHold.s0] = true;
+              if (window.console) console.warn("[s6] 视频 10 秒未就绪，跳过等待继续播");
+            }
+            vHold = null; s6Buf(false);
+            if (!st.run) {
+              st.run = true; st.last = 0;
+              goBtn.classList.add("playing"); goBtn.setAttribute("aria-label", "暂停");
+              push();
+            }
+          }
+          return;
+        }
+        if (!st.run) return;
+        var need = [[T_VIDEO_002, videoA], [T_EXTRA_VIDEO, videoC], [T003_VIDEO, videoE]];
+        for (var i = 0; i < need.length; i++) {
+          var s0 = need[i][0], v = need[i][1];
+          if (!v || v.__dead || vSkip[s0]) continue;
+          if (st.t + 1e-6 < s0 || st.t > s0 + 3) continue;  /* 只在入点后 3 秒窗口里判一次 */
+          if (v.readyState >= 2) continue;
+          /* 到点了还没有画面：停表等它，避免"进度条跑过去了、小窗还是黑的" */
+          vHold = { v: v, since: Date.now(), s0: s0 };
+          st.run = false;
+          stopLogAudio();
+          s6Buf(true);
+          goBtn.classList.remove("playing"); goBtn.setAttribute("aria-label", "播放");
+          try { v.preload = "auto"; v.load(); } catch (e) {}
+          return;
+        }
+      }
 
       function push() {
         if (!st.started) { renderAiLog(-1); renderTargetState(-1); renderVideos(-1); map.fleet("fleet", []); map.trails("trails", []); if (map.tracks) map.tracks("tracks", []); if (map.scan) map.scan("scan", []); if (map.fan) { map.fan("rfan", []); map.fan("jfan", []); } if (map.beam) map.beam("sbeam", []); if (map.cover) { map.cover("cov-photo", []); map.cover("cov-gmti", []); map.cover("cov-sar", []); map.cover("cov-ewar", []); } renderPlanLayers(0); paint(); return; }
@@ -2153,9 +2250,11 @@ function make(variant) {
           var sc6 = s6CamAt();
           if (sc6) {
             map.setView({ center: sc6.center, zoom: sc6.zoom, pitch: sc6.pitch, bearing: sc6.bearing });
-            applyScale(sc6.zoom);      /* 比例尺跟着缩放走，别停在总览的数值上 */
+            applyScale(sc6.zoom, sc6.center[1]);      /* 比例尺跟着缩放走，别停在总览的数值上 */
           }
         }
+        /* 视频预热 + 缓冲门（必须在"暂停就 return"之前，否则停在缓冲时永远恢复不了） */
+        if (root.classList.contains("on")) { s6WarmVideos(); s6VideoGate(); }
         if (dragging || !st.run || !root.classList.contains("on")) { st.last = now; return; }
         if (!st.last) { st.last = now; return; }
         var dt = Math.min(0.25, (now - st.last) / 1000);
@@ -2685,7 +2784,6 @@ function make(variant) {
       minZoom: (SCFG && SCFG.minZoom) || null,
       areaEls: areaEls,
       labelEls: labelEls,
-      ao: GEO.px(AO.lon, AO.lat),
       menu: [].slice.call(root.querySelectorAll(".s3-mi")),
       toolbar: root.querySelector(".s3-toolbar"),
       side: root.querySelector(".s3-side"),
@@ -2755,10 +2853,15 @@ function make(variant) {
     /* 区域图元与标签在 build 时就已经是最终透明度，这里不再逐帧驱动（不做淡入） */
 
     /* 左下角坐标 */
-    e.coord.textContent = (SELCFG && SELCFG.coordText) ? SELCFG.coordText : "116.21800, 39.92000";
+    if (e.coord) {
+      var coordTxt = (SELCFG && SELCFG.coordText) ? SELCFG.coordText : "116.21800, 39.92000";
+      if (e.coord.__v !== coordTxt) { e.coord.__v = coordTxt; e.coord.textContent = coordTxt; }   /* 每帧写 DOM 是浪费 */
+    }
 
-    /* 比例尺：自动挑一个整数公里，条子落在 70~150px */
-    var mpp = 156543.03 * Math.cos(39.920 * Math.PI / 180) / Math.pow(2, zoom);
+    /* 比例尺：自动挑一个整数公里，条子落在 70~150px。
+       MapLibre 的地面分辨率按 512 像素世界算（原来用 256 的常数，标注距离是实际的 2 倍），
+       纬度取当前相机中心，不再写死 39.92（场景一在 25°N，差 18%） */
+    var mpp = 40075016.686 * Math.cos(center[1] * Math.PI / 180) / (512 * Math.pow(2, zoom));
     var cands = [1000, 2000, 5000, 10000, 20000];
     var pick = cands[0];
     for (var ci = 0; ci < cands.length; ci++) { if (cands[ci] / mpp <= 150) pick = cands[ci]; }

@@ -65,22 +65,69 @@ function makeServer() {
     }
     const f = path.join(ROOT, p);
     if (!f.startsWith(ROOT)) { res.writeHead(403); return res.end("403"); }
-    fs.readFile(f, (err, buf) => {
-      if (err) {
+    fs.stat(f, (serr, st) => {
+      if (serr || !st.isFile()) {
         if (process.env.LOG404) { try { fs.appendFileSync(path.join(ROOT, "_tools", "404.log"), p + "\n"); } catch (e) {} }
-          res.writeHead(404, { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" }); return res.end("404");
+        res.writeHead(404, { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" }); return res.end("404");
       }
       const ext = path.extname(f).toLowerCase();
-      const fresh = [".html", ".js", ".mjs", ".css", ".json", ".wav"].indexOf(ext) >= 0;  /* wav 也会被替换，不能缓存 */
-      let body = buf;
-      if (ext === ".html") body = Buffer.from(buf.toString("utf8").replace(/__V__/g, BUILD), "utf8");
-      res.writeHead(200, {
+      /* 代码类仍走 no-store（改完刷新必定生效）；媒体类只做协商缓存：
+         内容没变 → 304（不重下 68 MB 音频 / 338 MB 视频），换了文件 → mtime 变、ETag 变，必定生效 */
+      const fresh = [".html", ".js", ".mjs", ".css", ".json"].indexOf(ext) >= 0;
+      const etag = 'W/"' + st.size.toString(36) + "-" + Math.round(st.mtimeMs).toString(36) + '"';
+      /* 音视频走 no-cache+ETag（体积大，别每次重下）；图片保持原来的 5 分钟缓存；代码走 no-store */
+      const cache = fresh ? "no-store" : ([".wav", ".mp4"].indexOf(ext) >= 0 ? "no-cache" : "public, max-age=300");
+      if (!fresh && req.headers["if-none-match"] === etag) {
+        res.writeHead(304, { "ETag": etag, "Cache-Control": cache, "Access-Control-Allow-Origin": "*", "X-Build": BUILD });
+        return res.end();
+      }
+      const headers = {
         "Content-Type": MIME[ext] || "application/octet-stream",
         "Access-Control-Allow-Origin": "*",
-        "Cache-Control": fresh ? "no-store" : "public, max-age=300",
+        "Cache-Control": cache,
+        "Accept-Ranges": "bytes",
+        "ETag": etag,
         "X-Build": BUILD
-      });
-      res.end(body);
+      };
+      if (ext === ".html") {
+        fs.readFile(f, (err2, buf) => {
+          if (err2) { res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" }); return res.end("500"); }
+          const body = Buffer.from(buf.toString("utf8").replace(/__V__/g, BUILD), "utf8");
+          headers["Content-Length"] = String(body.length);
+          res.writeHead(200, headers);
+          res.end(body);
+        });
+        return;
+      }
+      /* Range：mp4/wav 拖动与定位时只取需要的字节段，不必整份下完 */
+      let start = 0, end = st.size - 1, code = 200;
+      const rng = req.headers["range"];
+      if (rng) {
+        const m = /^bytes=(\d*)-(\d*)$/.exec(String(rng).trim());
+        if (m) {
+          if (m[1] === "" && m[2] === "") { /* 无效 */ }
+          else if (m[1] === "") {                      /* bytes=-N：末尾 N 字节 */
+            start = Math.max(0, st.size - parseInt(m[2], 10));
+          } else {
+            start = parseInt(m[1], 10);
+            if (m[2] !== "") end = parseInt(m[2], 10);
+          }
+          start = Math.max(0, start);
+          end = Math.min(end, st.size - 1);
+          if (start > end) {
+            res.writeHead(416, { "Content-Range": "bytes */" + st.size, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": cache });
+            return res.end("416");
+          }
+          code = 206;
+          headers["Content-Range"] = "bytes " + start + "-" + end + "/" + st.size;
+        }
+      }
+      headers["Content-Length"] = String(end - start + 1);
+      res.writeHead(code, headers);
+      if (req.method === "HEAD") return res.end();
+      const stream = fs.createReadStream(f, { start, end });
+      stream.on("error", () => { try { res.destroy(); } catch (e) {} });
+      stream.pipe(res);
     });
   });
 }

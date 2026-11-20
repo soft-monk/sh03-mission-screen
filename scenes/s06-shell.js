@@ -161,7 +161,7 @@ window.S06_SHELL = (function () {
   }
   function htmlVideo(cards, sources) {
     var src = (sources || []).map(function (s) {
-      return "<video class=\"s6-video-" + s[0] + "\" src=\"assets/video/" + s[1] + "\" muted playsinline preload=\"auto\"></video>";
+      return "<video class=\"s6-video-" + s[0] + "\" src=\"assets/video/" + s[1] + "\" muted playsinline preload=\"none\"></video>";
     }).join("");
     var small = (cards || []).map(function (c) {
       return "<div class=\"s6-video-card s6-video-small-card" + (c.cls || "") + "\" data-video=\"" + c.k + "\"" + (c.hidden ? " style=\"display:none\"" : "") + ">" +
@@ -913,6 +913,22 @@ window.S06_SHELL = (function () {
       n.style.opacity = "1";
     });
     s1AiLog = root.querySelector(".s6-ai-log");
+    /* 视频缓冲提示（到点没画面时暂停时钟，见 s1VideoGate） */
+    var s1Buf = null;
+    if (hasMap && !document.getElementById("css-s1buf")) {
+      var s1b = document.createElement("style");
+      s1b.id = "css-s1buf";
+      s1b.textContent = ".s1-buf{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);z-index:45;padding:10px 24px;border-radius:10px;" +
+        "background:rgba(6,18,32,.94);border:1px solid rgba(56,189,248,.4);color:#bfe9ff;font-size:15px;letter-spacing:3px;" +
+        "opacity:0;pointer-events:none;transition:opacity .15s}.s1-buf.on{opacity:1}";
+      document.head.appendChild(s1b);
+    }
+    if (hasMap) {
+      s1Buf = document.createElement("div");
+      s1Buf.className = "s1-buf";
+      s1Buf.textContent = "视频缓冲中…";
+      root.appendChild(s1Buf);
+    }
     var s1SarWin = root.querySelector(".s1-sar-win");
     var s1Sum = root.querySelector(".s1-summary");
     var s1SumBuilt = false;
@@ -1202,13 +1218,6 @@ window.S06_SHELL = (function () {
     var s1AiAud = { idx: -1, gen: 0, on: false, els: [] };
     var S1_AI_AUDIO = null;
     function s1EvAudio(ev) { return ev && ev.audio && ev.audio.length ? ev.audio : null; }
-    function s1EvAudioDur(ev) {
-      var list = s1EvAudio(ev);
-      if (!list) return 0;
-      var d = 0;
-      for (var i = 0; i < list.length; i++) d += window.s1AudioDur ? window.s1AudioDur(list[i]) : 0;
-      return d;
-    }
     /* 语音表：按真实时长顺排（start = max(事件时刻, 上一条语音结束)）。
        气泡时刻不动；语音连续播、不叠音、也不会被下一句截断。 */
     /* 语音表：直接复用气泡表（同一份真实时长），保证"气泡出现"与"语音起播"逐条对齐 */
@@ -1362,6 +1371,20 @@ window.S06_SHELL = (function () {
       }
       return s1CamCopy(S1_OVIEW);
     }
+    /* 比例尺：原来 SH-06 一直是写死的 "2 km"，加了运镜后必须跟着 zoom 走 */
+    var s1ScaleBar = root.querySelector(".s3-scale b"), s1ScaleTxt = root.querySelector(".s3-scale span");
+    var s1ScaleZ = -1;
+    function s1ApplyScale(z, lat) {
+      if (!s1ScaleBar) return;
+      var q = Math.round(z * 1000) / 1000;
+      if (q === s1ScaleZ) return;
+      s1ScaleZ = q;
+      var mpp = 40075016.686 * Math.cos((lat == null ? 24.85 : lat) * Math.PI / 180) / (512 * Math.pow(2, z));
+      var cands = [1000, 2000, 5000, 10000, 20000], pick = cands[0];
+      for (var i = 0; i < cands.length; i++) if (cands[i] / mpp <= 150) pick = cands[i];
+      s1ScaleBar.style.width = (pick / mpp).toFixed(0) + "px";
+      if (s1ScaleTxt) s1ScaleTxt.textContent = (pick / 1000) + " km";
+    }
     /* 逐句揭示：G4（通信）+ comm 开局直接画；其余按台词出现 */
     var s1RevSig = "";
     function s1PlanChecked(g) {
@@ -1399,15 +1422,20 @@ window.S06_SHELL = (function () {
       s1SetGridVisible(mv, rev.gridPhoto && s1GridChecked("photo"), "photo");
       s1SetGridVisible(mv, rev.gridSar && s1GridChecked("sar"), "sar");
     }
-    /* 进屏自动开播（只在本屏还没播过时点一次） */
+    /* 进屏自动开播（只在本屏还没播过时点一次）。先等语音表建好，避免“时钟跑了、气泡没来” */
     function s1AutoStart() {
       if (!hasMap || !goBtn) return;
-      if (st.run || st.t > 0.5) return;
-      requestAnimationFrame(function () {
+      if (st.dead || st.run || st.t > 0.5) return;
+      var waited = 0;
+      (function waitSched() {
+        if (st.dead || st.run || st.t > 0.5) return;
+        if (!S1_AI_SCHED.length && waited < 150) { waited++; setTimeout(waitSched, 100); return; }
         requestAnimationFrame(function () {
-          if (!st.run && st.t <= 0.5) goBtn.click();
+          requestAnimationFrame(function () {
+            if (!st.run && st.t <= 0.5) goBtn.click();
+          });
         });
-      });
+      })();
     }
     totLbl.textContent = fmt(total);
     /* 场景一飞行仿真：按时间取机群位置与尾迹（与场景二 SH-06 同款数据流）
@@ -1550,6 +1578,49 @@ window.S06_SHELL = (function () {
     bar.addEventListener("pointermove", function (ev) { if (dragging) seekFromEvent(ev); });
     bar.addEventListener("pointerup", function () { dragging = false; requestFlight(true); });
     bar.addEventListener("pointercancel", function () { dragging = false; });
+    /* ---------- 视频就绪：提前 90 s 预热 + 到点没画面就暂停时钟 ---------- */
+    var s1VWarm = false, s1VHold = null, s1VGaveUp = false;
+    function s1VideoWarm() {
+      if (!hasMap || s1VWarm) return;
+      if (st.t < S1_VID_T0 - 90) return;                    /* 入点前 90 秒才开始拉 */
+      s1VWarm = true;
+      ["A", "B"].forEach(function (k) {
+        var v = s1vVid[k];
+        if (v) { try { v.preload = "auto"; v.load(); } catch (e) {} }
+      });
+    }
+    function s1VideoGate() {
+      if (!s1Buf) return;
+      if (s1VHold) {                                        /* 等待中：就绪或超时（10 s）就恢复 */
+        var v0 = s1VHold.v;
+        var ok0 = v0 && v0.readyState >= 2;
+        var late0 = Date.now() - s1VHold.since > 10000;
+        if (ok0 || late0) {
+          if (late0 && !ok0) {                              /* 等不到就别把整场演示卡死 */
+            s1VGaveUp = true;
+            if (window.console) console.warn("[s1] 视频 10 秒未就绪，跳过等待继续播");
+          }
+          s1VHold = null;
+          s1Buf.classList.remove("on");
+          if (!st.run) {
+            st.run = true; st.last = 0;
+            goBtn.classList.add("playing"); goBtn.setAttribute("aria-label", "暂停");
+            requestFlight(true);
+          }
+        }
+        return;
+      }
+      if (!st.run || s1VGaveUp) return;
+      if (st.t + 1e-6 < S1_VID_T0 || st.t > S1_VID_T0 + 3) return;   /* 只在入点后 3 秒窗口里判一次 */
+      var v1 = s1vVid.A || s1vVid.B;
+      if (!v1 || v1.readyState >= 2) return;
+      /* 到点了还没有画面：停表等它，避免"进度条跑过去了、小窗还是黑的" */
+      s1VHold = { v: v1, since: Date.now() };
+      st.run = false;
+      s1Buf.classList.add("on");
+      goBtn.classList.remove("playing"); goBtn.setAttribute("aria-label", "播放");
+      try { v1.preload = "auto"; v1.load(); } catch (e) {}
+    }
     (function loop(now) {
       if (st.dead) return;
       requestAnimationFrame(loop);
@@ -1557,9 +1628,14 @@ window.S06_SHELL = (function () {
       /* 运镜 + 逐句揭示：外层播放器进本屏就暂停了，机位由这里每帧下发（3D 版保持静态机位） */
       if (mv && mv.setView && !mv.is3d) {
         var sc6 = s1CamAt();
-        if (sc6) mv.setView({ center: sc6.center, zoom: sc6.zoom, pitch: sc6.pitch, bearing: sc6.bearing });
+        if (sc6) {
+          mv.setView({ center: sc6.center, zoom: sc6.zoom, pitch: sc6.pitch, bearing: sc6.bearing });
+          s1ApplyScale(sc6.zoom, sc6.center[1]);
+        }
       }
       s1ApplyReveal();
+      /* 视频预热 + 缓冲门（必须在"暂停就 return"之前，否则停在缓冲时永远恢复不了） */
+      s1VideoWarm(); s1VideoGate();
       if (!st.run) { st.last = now; s1vRender(st.t); s1AiAudioSync(st.t); return; }
       if (!st.last) { st.last = now; return; }
       var dt = Math.min(0.25, (now - st.last) / 1000);
