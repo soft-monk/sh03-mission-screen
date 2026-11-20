@@ -2542,11 +2542,14 @@ function make(variant) {
         ".s5-uc{flex:none;border-radius:9px;background:rgba(8,22,40,.9);border:1px solid rgba(56,189,248,.16);padding:9px 11px;display:flex;flex-direction:column;gap:6px}",
         ".s5-top{display:flex;align-items:center;gap:10px}",
         ".s5-top img{width:42px;height:auto;flex:none;filter:drop-shadow(0 0 7px rgba(var(--c),.6))}",
-        ".s5-info{flex:1;min-width:0}",
-        ".s5-info b{display:block;font-size:14px;color:#dbeafe;margin-bottom:4px;letter-spacing:.5px}",
-        ".s5-kv{display:flex;justify-content:flex-start;gap:10px;font-size:12px;color:#8fa8c4;line-height:1.5}",
-        ".s5-kv span{flex:none;width:56px}",
-        ".s5-kv em{font-style:normal;color:#cfe6ff;font-family:var(--num)}",
+        ".s5-info{flex:1;min-width:0;display:grid;grid-template-columns:max-content 1fr;column-gap:10px;align-items:baseline}",
+        ".s5-info b{display:block;grid-column:1 / -1;font-size:14px;color:#dbeafe;margin-bottom:4px;letter-spacing:.5px}",
+        /* 标签列 / 数值列做成同一个 grid 的两列（.s5-kv 用 display:contents 摊平），
+           列宽由最长的标签自动撑开：字号变大也不会折行，两行数字永远对齐。
+           原来写死 width:56px，浏览器最小字号一旦 ≥15px，「可用数量」就折成两行。 */
+        ".s5-kv{display:contents;font-size:12px;color:#8fa8c4;line-height:1.5}",
+        ".s5-kv span{white-space:nowrap}",
+        ".s5-kv em{font-style:normal;color:#cfe6ff;font-family:var(--num);font-variant-numeric:tabular-nums}",
         ".s5-cap{display:flex;align-items:center;gap:5px;font-size:12px;color:#7d95ae;white-space:nowrap}",
         ".s5-cap>span{flex:none}",
         ".s5-cap i{font-style:normal;padding:1px 7px;border-radius:3px;background:rgba(37,99,235,.22);border:1px solid rgba(56,189,248,.3);color:#bfe0ff;white-space:nowrap;flex:none}",
