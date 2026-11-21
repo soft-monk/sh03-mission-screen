@@ -1335,41 +1335,11 @@ window.S06_SHELL = (function () {
       });
       return { center: [(x0 + x1) / 2, (y0 + y1) / 2], zoom: 9.8, pitch: 30, bearing: S1_OVIEW.bearing };
     })();
+    /* 场景一 SH-06：不做运镜，全程锁定在"任务区视角"（能看清全貌）。
+       原来的逐句推近/拉回/俯仰变化已停用；航线与规划航路的揭示仍按台词时间窗独立驱动。 */
     function s1CamAt() {
       if (!S1_OVIEW) return null;
-      var t = st.t, win = s1ShotWins();
-      var from = S1_OVIEW;
-      for (var i = 0; i < S1_SHOTS.length; i++) {
-        var w = win[S1_SHOTS[i].audio];
-        if (!w) continue;
-        if (t >= w.end) { if (S1_TASK) from = S1_TASK; continue; }   /* 这一段已播完：画面停在任务区视角 */
-        if (t < w.start) break;
-        var r = s1Transit(S1_SHOTS[i].route);
-        if (!r || !r.pts) break;
-        var u = (t - w.start) / Math.max(0.001, w.end - w.start);
-        if (u < S1_SHOT_IN) {
-          return s1CamMix(from, { center: s1RoutePt(r.pts, 0), zoom: S1_SHOT_ZOOM, pitch: S1_SHOT_PITCH, bearing: from.bearing },
-                          FX.easeInOut(u / S1_SHOT_IN));
-        }
-        if (u < S1_SHOT_GO) {
-          return { center: s1RoutePt(r.pts, FX.easeInOut((u - S1_SHOT_IN) / (S1_SHOT_GO - S1_SHOT_IN))),
-                   zoom: S1_SHOT_ZOOM, pitch: S1_SHOT_PITCH, bearing: from.bearing };
-        }
-        if (u < S1_SHOT_OUT) {
-          return s1CamMix({ center: s1RoutePt(r.pts, 1), zoom: S1_SHOT_ZOOM, pitch: S1_SHOT_PITCH, bearing: from.bearing },
-                          S1_TASK || S1_OVIEW, FX.easeInOut((u - S1_SHOT_GO) / (S1_SHOT_OUT - S1_SHOT_GO)));
-        }
-        return s1CamCopy(S1_TASK || S1_OVIEW);        /* 88% 之后停在任务区视角 */
-      }
-      /* 不在任何段落里 */
-      if (S1_TASK && from === S1_TASK) {
-        var w2 = win[S1_TAIL_AUDIO];
-        if (w2 && t < w2.end + 0.001) {
-          return s1CamMix(S1_TASK, S1_OVIEW, FX.easeInOut((t - w2.start) / Math.max(0.001, w2.end - w2.start)));
-        }
-        return s1CamCopy(S1_OVIEW);
-      }
-      return s1CamCopy(S1_OVIEW);
+      return s1CamCopy(S1_TASK || S1_OVIEW);
     }
     /* 比例尺：原来 SH-06 一直是写死的 "2 km"，加了运镜后必须跟着 zoom 走 */
     var s1ScaleBar = root.querySelector(".s3-scale b"), s1ScaleTxt = root.querySelector(".s3-scale span");

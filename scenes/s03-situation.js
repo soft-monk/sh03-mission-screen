@@ -819,40 +819,9 @@ function make(variant) {
           bearing: a.bearing
         };
       }
-      /* 当前内层时间应处的机位（无运镜时 = 总览机位） */
+      /* 当前内层时间应处的机位：06 界面不做运镜，全程锁定在"总览机位"（任务区 + 我方集结区 + 全部编队航线都在画面内）。
+         原来的逐句推近/拉回/俯仰变化已停用；航线揭示等流程仍按台词时间窗独立驱动。 */
       s6CamAt = function () {
-        var t = st.t, win = s6ShotWins();
-        var from = S6_OVIEW;                 /* 每段"拉近"的起点：上一段停在哪就从哪出发 */
-        for (var i = 0; i < S6_SHOTS.length; i++) {
-          var w = win[S6_SHOTS[i].src];
-          if (!w) continue;
-          if (t >= w.b) { from = S6_TASK; continue; }   /* 这一段已播完：画面停在任务区视角 */
-          if (t < w.a) break;
-          var u = (t - w.a) / Math.max(0.001, w.b - w.a);
-          var g = ROUTE_GEO[S6_SHOTS[i].route];
-          if (u < S6_IN) {
-            return camMix(from, { center: routePt(g, 0), zoom: S6_ZOOM, pitch: S6_PITCH, bearing: S6_OVIEW.bearing },
-                          FX.easeInOut(u / S6_IN));
-          }
-          if (u < S6_GO) {
-            return { center: routePt(g, FX.easeInOut((u - S6_IN) / (S6_GO - S6_IN))),
-                     zoom: S6_ZOOM, pitch: S6_PITCH, bearing: S6_OVIEW.bearing };
-          }
-          if (u < S6_OUT) {
-            return camMix({ center: routePt(g, 1), zoom: S6_ZOOM, pitch: S6_PITCH, bearing: S6_OVIEW.bearing },
-                          S6_TASK, FX.easeInOut((u - S6_GO) / (S6_OUT - S6_GO)));
-          }
-          return camCopy(S6_TASK);           /* 88% 之后停在任务区视角，给规划航路留看的时间 */
-        }
-        /* 不在任何段落里 */
-        if (from === S6_TASK) {
-          /* 五段都放完：用第 7 句「任务计划已下达给各无人机」那 2.6 秒拉回总览 */
-          var w30 = win["assets/audio/s2/030.wav"];
-          if (w30 && t < w30.b + 0.001) {
-            return camMix(S6_TASK, S6_OVIEW, FX.easeInOut((t - w30.a) / Math.max(0.001, w30.b - w30.a)));
-          }
-          return camCopy(S6_OVIEW);
-        }
         return camCopy(S6_OVIEW);
       };
       /* 比例尺：与 render() 里同一套算法；运镜期间 render() 不跑，这里得自己跟着 zoom 走 */
