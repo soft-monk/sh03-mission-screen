@@ -474,7 +474,7 @@ function make(variant) {
               '<div class="s6-tb-body">' +
                 '<div class="s6-tb-row"><span>类型</span><b>雷达目标</b></div>' +
                 '<div class="s6-tb-row"><span>判定</span><b class="sus s6-tb-judge">疑似（未经确认）</b></div>' +
-                '<div class="s6-tb-row"><span>来源</span><b>电子干扰机-01</b></div>' +
+                '<div class="s6-tb-row"><span>来源</span><b>电子侦察机-01</b></div>' +
                 '<div class="s6-tb-row"><span>区域</span><b>潜在目标部署区-2</b></div>' +
                 '<div class="s6-tb-tags"><i>疑似雷达信号</i><i>待复核</i></div>' +
               '</div>' +
@@ -489,7 +489,7 @@ function make(variant) {
               '<div class="s6-tb-body">' +
                 '<div class="s6-tb-row"><span>类型</span><b>雷达目标</b></div>' +
                 '<div class="s6-tb-row"><span>判定</span><b class="sus s6-tb-judge">疑似（未经确认）</b></div>' +
-                '<div class="s6-tb-row"><span>来源</span><b>电子干扰机-01</b></div>' +
+                '<div class="s6-tb-row"><span>来源</span><b>电子侦察机-01</b></div>' +
                 '<div class="s6-tb-row"><span>区域</span><b>潜在目标部署区-2</b></div>' +
                 '<div class="s6-tb-tags"><i>疑似雷达信号</i><i>待复核</i></div>' +
               '</div>' +
@@ -1721,7 +1721,7 @@ function make(variant) {
           ["光电", "区-2", covCache.photo, "#38bdf8"],
           ["雷达 GMTI", "区-1", covCache.gmti, "#fbbf24"],
           ["雷达 SAR", "区-1", covCache.sar, "#fdba74"],
-          ["电子侦察", "区-2", covCache.ewar, "#c4b5fd"]
+          ["电子", "区-2", covCache.ewar, "#c4b5fd"]
         ];
         var bars = rows.map(function (r) {
           return '<div class="s6-sum-bar"><span>' + r[0] + '　' + r[1] + '</span>' +
@@ -2266,11 +2266,11 @@ function make(variant) {
           '<label class="s6-lyr"><input type="checkbox" checked data-k="tracks"><span>规划航迹</span></label>' +
           '<label class="s6-lyr"><input type="checkbox" checked data-k="trails"><span>无人机航迹</span></label>' +
           '<div class="s6-lyr-sec">扫描矩形 / 覆盖层</div>' +
-          [["光电扫描覆盖小格", "cov-photo"], ["GMTI 覆盖小格", "cov-gmti"], ["SAR 覆盖小格", "cov-sar"], ["电子干扰覆盖小格", "cov-ewar"]].map(function (o) {
+          [["光电覆盖小格", "cov-photo"], ["雷达GMTI覆盖小格", "cov-gmti"], ["雷达SAR覆盖小格", "cov-sar"], ["电子覆盖小格", "cov-ewar"]].map(function (o) {
             return '<label class="s6-lyr"><input type="checkbox" checked data-k="' + o[1] + '"><span>' + o[0] + '</span></label>';
           }).join("") +
           '<div class="s6-lyr-sec">扇形 / 扇区层</div>' +
-          [["光电扫描扇形", "scan"], ["雷达 GMTI 扇区", "rfan"], ["电子干扰扇区", "jfan"], ["SAR 扫描条带", "sbeam"]].map(function (o) {
+          [["光电扫描扇形", "scan"], ["雷达GMTI扫描扇区", "rfan"], ["电子扫描扇区", "jfan"], ["雷达SAR扫描条带", "sbeam"]].map(function (o) {
             return '<label class="s6-lyr"><input type="checkbox" checked data-k="' + o[1] + '"><span>' + o[0] + '</span></label>';
           }).join("") +
         '</section>');

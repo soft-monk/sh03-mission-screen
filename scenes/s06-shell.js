@@ -6,13 +6,13 @@ window.S06_SHELL = (function () {
     { k: "tracks", label: "规划航迹" },
     { k: "trails", label: "无人机航迹" },
     { sec: "扫描矩形 / 覆盖层" },
-    { k: "cov-photo", label: "光电扫描覆盖小格" },
-    { k: "cov-sar", label: "SAR 覆盖小格" },
-    { k: "cov-ewar", label: "电子干扰覆盖小格" },
+    { k: "cov-photo", label: "光电覆盖小格" },
+    { k: "cov-sar", label: "雷达SAR覆盖小格" },
+    { k: "cov-ewar", label: "电子覆盖小格" },
     { sec: "扇形 / 扇区层" },
     { k: "scan", label: "光电扫描扇形" },
-    { k: "jfan", label: "电子干扰扇区" },
-    { k: "sbeam", label: "SAR 扫描条带" }
+    { k: "jfan", label: "电子扫描扇区" },
+    { k: "sbeam", label: "雷达SAR扫描条带" }
   ];
   var EMPTY_VIDEO_CARDS = [
     { k: "A", title: "视频通道 A · 待接入" },
@@ -76,7 +76,7 @@ window.S06_SHELL = (function () {
         rows: [
           ["类型", o.kind === "radar" ? "雷达目标" : o.kind === "jet" ? "空中目标" : "地面目标"],
           ["判定", "疑似（未经确认）", "sus s6-tb-judge"],
-          ["来源", "雷达 SAR-01"],
+          ["来源", "雷达侦察机 SAR-01"],
           ["区域", "岸基机场"]
         ],
         tags: ["疑似目标", "待复核"]
@@ -858,10 +858,10 @@ window.S06_SHELL = (function () {
       LAYERS.forEach(function (o) {
         if (o.k === "tracks") {
           shellLayers.push({ k: "tracks", label: "规划航迹", children: [
-            { k: "tracks-photo", label: "光电侦察" },
-            { k: "tracks-sar", label: "雷达 SAR" },
-            { k: "tracks-ewar", label: "电子干扰" },
-            { k: "tracks-comm", label: "通信中继" }
+            { k: "tracks-photo", label: "光电察打机" },
+            { k: "tracks-sar", label: "雷达侦察机" },
+            { k: "tracks-ewar", label: "电子侦察机" },
+            { k: "tracks-comm", label: "中继通信机" }
           ] });
         } else shellLayers.push(o);
       });
@@ -881,8 +881,8 @@ window.S06_SHELL = (function () {
       "<div class=\"s3-coord\">" + ((cfg && cfg.coordText) || "--") + "</div>" +
       htmlRight(s1TargetCards()) +
       (hasMap ? htmlVideo([
-        { k: "A", title: "05号光电侦察无人机 ｜ 侦察确认" },
-        { k: "B", title: "06号光电侦察无人机 ｜ 侦察确认" }
+        { k: "A", title: "05号光电察打机 ｜ 侦察确认" },
+        { k: "B", title: "06号光电察打机 ｜ 侦察确认" }
       ], [["a", "scene1_A_ir.mp4"], ["b", "scene1_B_ir.mp4"]]) : "") +
       "<section class=\"s1-sar-win\"><img src=\"assets/img/s1-sar-airfield.jpg\" alt=\"\">" +
         "<div class=\"s1-sar-cap\">SAR 扫描影像 · 岸基机场</div></section>" +
@@ -945,10 +945,10 @@ window.S06_SHELL = (function () {
         '<div class="s1-sum-main">' +
           '<div class="s1-sum-panel"><h4>目标处置明细</h4><div class="s1-sum-rows">' + rows + "</div></div>" +
           '<div class="s1-sum-panel"><h4>资源使用统计</h4><div class="s1-sum-grid">' +
-            "<span>光电侦察无人机<b>34 架</b></span>" +
-            "<span>雷达侦察无人机<b>6 架</b></span>" +
-            "<span>电子侦察无人机<b>2 架</b></span>" +
-            "<span>通信中继无人机<b>4 架</b></span>" +
+            "<span>光电察打机<b>34 架</b></span>" +
+            "<span>雷达侦察机<b>6 架</b></span>" +
+            "<span>电子侦察机<b>2 架</b></span>" +
+            "<span>中继通信机<b>4 架</b></span>" +
           "</div><div class=\"s1-sum-loss\">无人机战损<b>0 架</b></div></div>" +
         "</div>";
       var back = s1Sum.querySelector(".s1-sum-back");
