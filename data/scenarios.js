@@ -3,7 +3,7 @@
 (function () {
   var BASE = {
     id: "scene-2",
-    name: "区域封控",
+    name: "区域封控察打",
     short: "场景二",
     enabled: true,
     region: "东部区域封控区",
@@ -82,7 +82,7 @@
     Object.keys(over || {}).forEach(function (k) { cfg[k] = over[k]; });
     return cfg;
   }
-  var S2 = variant("scene-1", "敏捷拒止布控", "场景一", {
+  var S2 = variant("scene-1", "敏捷侦察引导", "场景一", {
     region: "沿海岛屿任务区",
     /* 总览机位：任务区（西南）与我方集结区（东北）同框；SH-04/05/06 共用，
        SH-06 的开场运镜从这个机位出发（见 scenes/s06-shell.js 的 S1_OVIEW） */
