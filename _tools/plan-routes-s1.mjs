@@ -8,7 +8,7 @@
  *   3) 雷达 SAR（6 架）：南北向平行腿按腿数切成 6 段，每架在自己带内蛇形往返；
  *      腿距由西 2.4km 收到东 1.6km（稀疏 → 密集）。
  *   4) 雷达 GMTI：2026-11-23 起场景一改为 6 架全 SAR，GMTI_BUDGET = 0（不再生成跑道环）。
- *   5) 电子：南北长轴的正置跑道环，两架半圈错开；通信：中心中继环 + 走廊环，各两架。
+ *   5) 电子：任务区中心 6x10km 圆角矩形环（角半径 1km），两架半圈错开；通信：中心中继环 + 走廊环，各两架。
  *   6) 编组航线：二次贝塞尔曲线（向外张开），生成时自动降曲率直到两两不交叉。
  *
  *   node _tools/plan-routes-s1.mjs            生成并自检
@@ -185,7 +185,7 @@ const sarRoutes = [];
   }
 })();
 
-/* 正置跑道环（南北长轴）：电子 / 通信 */
+/* 正置跑道环（南北长轴）：通信 */
 function raceTrack(cx, cy, legM, rM, n = 12) {
   const pts = [];
   for (let a = -legM / 2; a <= legM / 2; a += legM / 4) pts.push([cx - rM, cy + a]);
@@ -198,6 +198,32 @@ function raceTrack(cx, cy, legM, rM, n = 12) {
     const ang = -(Math.PI * i) / n;
     pts.push([cx + rM * Math.cos(ang), cy - legM / 2 + rM * Math.sin(ang)]);
   }
+  return pts;
+}
+
+/* 圆角矩形环：四条直边 + 四个小圆弧角，绕矩形飞（电子侦察机 → 任务区中心） */
+function roundedRect(cx, cy, wM, hM, rM, n = 8) {
+  const hw = wM / 2, hh = hM / 2;
+  const pts = [];
+  const line = (x0, y0, x1, y1) => {
+    const steps = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / 1000));
+    for (let i = 0; i < steps; i++) pts.push([x0 + ((x1 - x0) * i) / steps, y0 + ((y1 - y0) * i) / steps]);
+  };
+  const arc = (ax, ay, a0, a1) => {
+    for (let i = 0; i < n; i++) {
+      const a = a0 + ((a1 - a0) * i) / n;
+      pts.push([ax + rM * Math.cos(a), ay + rM * Math.sin(a)]);
+    }
+  };
+  line(-hw + rM, -hh, hw - rM, -hh);                    /* 南边：西 → 东 */
+  arc(hw - rM, -hh + rM, -Math.PI / 2, 0);              /* 东南角 */
+  line(hw, -hh + rM, hw, hh - rM);                      /* 东边：南 → 北 */
+  arc(hw - rM, hh - rM, 0, Math.PI / 2);                /* 东北角 */
+  line(hw - rM, hh, -hw + rM, hh);                      /* 北边：东 → 西 */
+  arc(-hw + rM, hh - rM, Math.PI / 2, Math.PI);         /* 西北角 */
+  line(-hw, hh - rM, -hw, -hh + rM);                    /* 西边：北 → 南 */
+  arc(-hw + rM, -hh + rM, Math.PI, (3 * Math.PI) / 2);  /* 西南角 */
+  pts.push([pts[0][0], pts[0][1]]);
   return pts;
 }
 
@@ -227,9 +253,11 @@ const gmtiRoutes = Array.from({ length: GMTI_BUDGET }, (_, i) => {
   };
 });
 
+/* 电子侦察机（2 架）：任务区中心 6x10 km 圆角矩形（角半径 1 km），绕矩形飞、半圈错开；
+   放在中心是为了让矩形把通信中继的两个椭圆环（1.6x4 km）整个包在里面 */
 const ewarRoutes = [1, 2].map((i) => {
-  const raw = raceTrack(-4000, 4000, 3000, 1200, 12);
-  return { id: "E-" + String(i).padStart(2, "0"), group: "ewar", kind: "racetrack", zone: "east",
+  const raw = roundedRect(0, 0, 6000, 10000, 1000, 8);
+  return { id: "E-" + String(i).padStart(2, "0"), group: "ewar", kind: "racetrack", zone: "mid",
     color: COLOR.ewar, lenKm: lenKm(raw), pts: raw.map(([x, y]) => ll(x, y)) };
 });
 
@@ -568,7 +596,7 @@ function serialize() {
   const head = [
     "/* 由 _tools/plan-routes-s1.mjs 生成，勿手改坐标；要调疏密改脚本参数后重跑。",
     "   所有区内航段横平竖直：光电为多腿蛇形（疏密渐变、奇偶行错开）、SAR 为多腿蛇形（3x2 分块）、",
-    "   电子/通信为正置跑道环。格子由西北向东南收窄，闭环宽度随之变小 —— 西北稀、东南密。 */",
+    "   电子为任务区中心的圆角矩形环、通信为正置跑道环。格子由西北向东南收窄，闭环宽度随之变小 —— 西北稀、东南密。 */",
     "window.ROUTES_S1 = {",
     '  "meta": ' + JSON.stringify({
       taskArea: AREA,
