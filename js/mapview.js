@@ -371,7 +371,7 @@ window.MapView = function (host) {
             "icon-rotate": ["get", "r"]
           }
         });
-        /* 编号层：默认 visibility none，由图层面板的「无人机编号」开关打开 */
+        /* 编号层：默认显示，可由图层面板的「无人机编号」开关关掉 */
         map.addLayer({
           id: id + "-no", type: "symbol", source: id,
           layout: {
@@ -380,8 +380,7 @@ window.MapView = function (host) {
             "icon-anchor": "bottom",
             "icon-offset": [0, -10],
             "icon-allow-overlap": true,
-            "icon-ignore-placement": true,
-            "visibility": "none"
+            "icon-ignore-placement": true
           }
         });
       });

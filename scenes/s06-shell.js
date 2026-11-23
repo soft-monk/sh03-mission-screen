@@ -5,7 +5,7 @@ window.S06_SHELL = (function () {
   var LAYERS = [
     { k: "tracks", label: "规划航迹" },
     { k: "trails", label: "无人机航迹" },
-    { k: "fleetno", label: "无人机编号", off: true },
+    { k: "fleetno", label: "无人机编号" },
     { sec: "扫描矩形 / 覆盖层" },
     { k: "cov-photo", label: "光电覆盖小格" },
     { k: "cov-sar", label: "雷达SAR覆盖小格" },
