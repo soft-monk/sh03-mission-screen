@@ -501,14 +501,15 @@ window.S06_SHELL = (function () {
     return inside;
   }
 
-  /* 目标出现：980 s（16:20，SAR 条带首次进入机场圆）后，6 个疑似目标一起标绘 */
-  var S1_TGT_T0 = 980;
+  /* 目标出现：1030 s（17:10）后，6 个疑似目标一起标绘 */
+  var S1_TGT_T0 = 1030;
   /* 场景一 SH-06 剧情：SAR 发现 → 逐个入列 → 光电盘旋确认 → 远火打击 → 侦察确认毁伤
-     以 980 s 为锚：编队改回 400 m 车道后，SAR 首次进入机场圆从 1181 提前到 980（−201 s） */
-  var S1_SAR_IMG_T0 = 980;                  /* 980（16:20）：SAR 条带首次进入机场圆 */
+     说明：SAR 条带物理上仍在 980 s 首次进入机场圆；这里把「发现」的显示节奏整体后移 50 s
+     （980→1030 / 988→1038 / 992→1042），只动显示，不动飞行模型 */
+  var S1_SAR_IMG_T0 = 1030;                 /* 1030（17:10）：SAR 影像窗开始（窗长 7 s） */
   var S1_SAR_IMG_DUR = 7;
-  var S1_TGT_SUS = { "001": 980, "002": 980, "003": 980, "004": 980, "005": 980, "006": 980 };
-  var S1_TGT_CONF = { "001": 988, "002": 988, "003": 988, "004": 988, "005": 988, "006": 988 };
+  var S1_TGT_SUS = { "001": 1030, "002": 1030, "003": 1030, "004": 1030, "005": 1030, "006": 1030 };
+  var S1_TGT_CONF = { "001": 1038, "002": 1038, "003": 1038, "004": 1038, "005": 1038, "006": 1038 };
   var S1_TGT_DEST = 1234;                   /* 1234：视频播完、「目标被击中」气泡出现后，目标列表才变已摧毁 */
   var S1_VID_T0 = 1158;                     /* 1158（19:18）：05/06 抵达评估阵位，视频开始（打击在第 16 秒） */
   var S1_VID_DUR = 76;
@@ -521,9 +522,9 @@ window.S06_SHELL = (function () {
     { opening: true, text: "电子侦察机2架 对于任务区域进行广域协同搜索 遍历周期10分钟。", audio: ["assets/audio/s1/019.wav", "assets/audio/s1/020.wav", "assets/audio/s1/021.wav"] },
     { opening: true, text: "任务计划已下达给各无人机。", audio: ["assets/audio/s1/022.wav"] },
     { t: 363,   text: "各编组已经抵达任务区，开始执行侦察任务。", audio: ["assets/audio/s1/023.wav"] },
-    { t: 980,   text: "雷达侦察无人机 SAR-01 回传的 SAR 图像识别岸基机场存在 6 个目标：2 架作战飞机，2 部雷达，2 个单体机库，型号已完成识别匹配，置信度99%。", audio: ["assets/audio/s1/024.wav", "assets/audio/s1/025.wav", "assets/audio/s1/026.wav", "assets/audio/s1/027.wav", "assets/audio/s1/028.wav"] },
-    { t: 988,   text: "目标已编批，目标坐标已上报。", audio: ["assets/audio/s1/029.wav"] },
-    { t: 992,   text: "接收上级指令，三分钟后将对机场目标进行远程打击，已分配光电察打机 11、19 执行毁伤评估任务，预计 3 分钟后达到评估阵位。", audio: ["assets/audio/s1/030.wav", "assets/audio/s1/031.wav", "assets/audio/s1/032.wav"] },
+    { t: 1030,  text: "雷达侦察无人机 SAR-01 回传的 SAR 图像识别岸基机场存在 6 个目标：2 架作战飞机，2 部雷达，2 个单体机库，型号已完成识别匹配，置信度99%。", audio: ["assets/audio/s1/024.wav", "assets/audio/s1/025.wav", "assets/audio/s1/026.wav", "assets/audio/s1/027.wav", "assets/audio/s1/028.wav"] },
+    { t: 1038,  text: "目标已编批，目标坐标已上报。", audio: ["assets/audio/s1/029.wav"] },
+    { t: 1042,  text: "接收上级指令，三分钟后将对机场目标进行远程打击，已分配光电察打机 11、19 执行毁伤评估任务，预计 3 分钟后达到评估阵位。", audio: ["assets/audio/s1/030.wav", "assets/audio/s1/031.wav", "assets/audio/s1/032.wav"] },
     { t: 1158,  text: "光电察打机11已抵达评估阵位，开始回传视频。", audio: ["assets/audio/s1/033.wav"] },
     { t: 1164,  text: "光电察打机19已抵达评估阵位，开始回传视频。", audio: ["assets/audio/s1/034.wav"] },
     { t: 1234,  text: "目标被击中，图像已上传，正在进行毁伤效果判读评估。", audio: ["assets/audio/s1/035.wav", "assets/audio/s1/036.wav"] },
