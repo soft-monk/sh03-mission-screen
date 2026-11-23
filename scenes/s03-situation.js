@@ -2054,6 +2054,15 @@ function make(variant) {
         videoJump.innerHTML = "<b class=\"s6-lb-text\">光电察打</b>";
         videoJump.addEventListener("click", function () { st.t = Math.max(0, T_VIDEO_002 - 10); push(); syncMediaToTime(st.t); });
         segLbls.appendChild(videoJump);
+        /* 65:00（扫描发现目标）/ 75:00（GMTI 发现目标003）：沿用同一套标记外观，只读、不带跳转 */
+        [[T_SCAN, "目标发现"], [T003_SCAN, "目标发现"]].forEach(function (m) {
+          var mk = document.createElement("span");
+          mk.className = "s6-jump s6-mark";
+          mk.style.left = ((m[0] / FL.TOTAL) * 100).toFixed(4) + "%";
+          mk.style.pointerEvents = "none";           /* 纯标记：不响应鼠标、不显示手型 */
+          mk.innerHTML = "<b class=\"s6-lb-text\">" + m[1] + "</b>";
+          segLbls.appendChild(mk);
+        });
       })();
 
       /* ---------- 视频就绪：提前 90 s 预热 + 到点没画面就暂停时钟 ---------- */
