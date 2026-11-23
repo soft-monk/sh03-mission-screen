@@ -5,6 +5,7 @@ window.S06_SHELL = (function () {
   var LAYERS = [
     { k: "tracks", label: "规划航迹" },
     { k: "trails", label: "无人机航迹" },
+    { k: "fleetno", label: "无人机编号", off: true },
     { sec: "扫描矩形 / 覆盖层" },
     { k: "cov-photo", label: "光电覆盖小格" },
     { k: "cov-sar", label: "雷达SAR覆盖小格" },
@@ -197,7 +198,7 @@ window.S06_SHELL = (function () {
               }).join("") +
             "</div></div>";
         }
-        return "<label class=\"s6-lyr\"><input type=\"checkbox\" checked data-k=\"" + o.k + "\"><span>" + o.label + "</span></label>";
+        return "<label class=\"s6-lyr\"><input type=\"checkbox\"" + (o.off ? "" : " checked") + " data-k=\"" + o.k + "\"><span>" + o.label + "</span></label>";
       }).join("") +
     "</section>";
   }
@@ -522,12 +523,12 @@ window.S06_SHELL = (function () {
     { t: 363,   text: "各编组已经抵达任务区，开始执行侦察任务。", audio: ["assets/audio/s1/023.wav"] },
     { t: 980,   text: "雷达侦察无人机 SAR-01 回传的 SAR 图像识别岸基机场存在 6 个目标：2 架作战飞机，2 部雷达，2 个单体机库，型号已完成识别匹配，置信度99%。", audio: ["assets/audio/s1/024.wav", "assets/audio/s1/025.wav", "assets/audio/s1/026.wav", "assets/audio/s1/027.wav", "assets/audio/s1/028.wav"] },
     { t: 988,   text: "目标已编批，目标坐标已上报。", audio: ["assets/audio/s1/029.wav"] },
-    { t: 992,   text: "接收上级指令，三分钟后将对机场目标进行远程打击，已分配光电侦察无人机 5、6 执行毁伤评估任务，预计 3 分钟后达到评估阵位。", audio: ["assets/audio/s1/030.wav", "assets/audio/s1/031.wav", "assets/audio/s1/032.wav", "assets/audio/s1/033.wav"] },
-    { t: 1158,  text: "光电侦察无人机5已抵达评估阵位，开始回传视频。", audio: ["assets/audio/s1/034.wav"] },
-    { t: 1164,  text: "光电侦察无人机6已抵达评估阵位，开始回传视频。", audio: ["assets/audio/s1/035.wav"] },
-    { t: 1234,  text: "目标被击中，图像已上传，正在进行毁伤效果判读评估。", audio: ["assets/audio/s1/036.wav", "assets/audio/s1/037.wav"] },
-    { t: 1240,  text: "飞机目标003、004已被完全摧毁，雷达目标001、002已被完全摧毁，机库目标005、006被击中，打击效果良好，评估结果已上传。", audio: ["assets/audio/s1/038.wav", "assets/audio/s1/039.wav", "assets/audio/s1/040.wav", "assets/audio/s1/041.wav"] },
-    { t: 1246,  text: "光电侦察无人机5、6回归原侦察阵位。", audio: ["assets/audio/s1/042.wav", "assets/audio/s1/043.wav"] }
+    { t: 992,   text: "接收上级指令，三分钟后将对机场目标进行远程打击，已分配光电察打机 11、19 执行毁伤评估任务，预计 3 分钟后达到评估阵位。", audio: ["assets/audio/s1/030.wav", "assets/audio/s1/031.wav", "assets/audio/s1/032.wav"] },
+    { t: 1158,  text: "光电察打机11已抵达评估阵位，开始回传视频。", audio: ["assets/audio/s1/033.wav"] },
+    { t: 1164,  text: "光电察打机19已抵达评估阵位，开始回传视频。", audio: ["assets/audio/s1/034.wav"] },
+    { t: 1234,  text: "目标被击中，图像已上传，正在进行毁伤效果判读评估。", audio: ["assets/audio/s1/035.wav", "assets/audio/s1/036.wav"] },
+    { t: 1240,  text: "飞机目标003、004已被完全摧毁，雷达目标001、002已被完全摧毁，机库目标005、006被击中，打击效果良好，评估结果已上传。", audio: ["assets/audio/s1/037.wav", "assets/audio/s1/038.wav", "assets/audio/s1/039.wav", "assets/audio/s1/040.wav"] },
+    { t: 1246,  text: "光电察打机11、19回归原侦察阵位。", audio: ["assets/audio/s1/041.wav"] }
   ];
   /* 慢速语音估算：3 字/秒 + 标点 0.35 s + 起播 0.6 s（后续接真实语音时替换） */
   function s1VoiceDur(text) {
@@ -583,12 +584,12 @@ window.S06_SHELL = (function () {
   /* 预载全部结束（有文件失败时）：退回估算，保证演示不至于整屏没气泡没声音 */
   window.__s1SchedFinal = function () { s1BuildAiSched(true); };
   s1BuildAiSched(false);   /* 若预载已完成（如热重载），立刻建表 */
-  /* ---------- 场景一语音：42 条 wav 全部预取成 blob（照场景二 ensureScenarioAudioPreload） ----------
+  /* ---------- 场景一语音：41 条 wav 全部预取成 blob（照场景二 ensureScenarioAudioPreload） ----------
      播放时直接用内存里的 Audio，不再"到点才请求"，避免起播失败/延后 */
   window.ensureS1AudioPreload = function () {
     window.APP_STATE = window.APP_STATE || {};
     if (window.APP_STATE.s1AudioPreload) return window.APP_STATE.s1AudioPreload;
-    var map = {}, dur = {}, count = 43, settled = 0;
+    var map = {}, dur = {}, count = 41, settled = 0;
     var box = window.APP_STATE.s1AudioPreload = { map: map, dur: dur, count: count };
     function settledOne() {
       settled++;
@@ -881,8 +882,8 @@ window.S06_SHELL = (function () {
       "<div class=\"s3-coord\">" + ((cfg && cfg.coordText) || "--") + "</div>" +
       htmlRight(s1TargetCards()) +
       (hasMap ? htmlVideo([
-        { k: "A", title: "05号光电察打机 ｜ 侦察确认" },
-        { k: "B", title: "06号光电察打机 ｜ 侦察确认" }
+        { k: "A", title: "11号光电察打机 ｜ 侦察确认" },
+        { k: "B", title: "19号光电察打机 ｜ 侦察确认" }
       ], [["a", "scene1_A_ir.mp4"], ["b", "scene1_B_ir.mp4"]]) : "") +
       "<section class=\"s1-sar-win\"><img src=\"assets/img/s1-sar-airfield.jpg\" alt=\"\">" +
         "<div class=\"s1-sar-cap\">SAR 扫描影像 · 岸基机场</div></section>" +
@@ -1416,7 +1417,7 @@ window.S06_SHELL = (function () {
       lastFlightT = st.t;
       var f = FL.simulate(st.t);
       mv.fleet("s1-fleet", f.map(function (d) {
-        return { type: d.type, color: d.color, lon: d.lon, lat: d.lat, r: d.r };
+        return { type: d.type, color: d.color, lon: d.lon, lat: d.lat, r: d.r, no: d.no, g: d.g };
       }));
       mv.trails("s1-trails", f.filter(function (d) { return d.trail && d.trail.length > 1; })
         .map(function (d) { return { color: d.color, pts: d.trail }; }));
@@ -1647,6 +1648,7 @@ window.S06_SHELL = (function () {
       else if (k === "s1grid-photo") s1SetGridVisible(mv, on && (!s1acc.rev || s1acc.rev.gridPhoto), "photo");
       else if (k === "s1grid-sar") s1SetGridVisible(mv, on && (!s1acc.rev || s1acc.rev.gridSar), "sar");
       else if (k === "trails") s1SetLayers(mv, ["s1-trails-c", "s1-trails-l"], on);
+      else if (k === "fleetno") s1SetLayers(mv, ["s1-fleet-no"], on);
       else if (S1_VIS[k]) s1SetGroupVisible(mv, k, on);
     }
     /* 回看重绘后按当前勾选状态恢复各图层 */

@@ -12,6 +12,8 @@ window.FLIGHT06 = (function () {
   var TJOIN = T_LIFT + TOFF;                    /* park -> route start handover */
   var HIST_DT = 5, HIST_N = 60;                 /* 300 秒历史，5 秒一点 */
   var M_LAT = 111030, M_LON = 111320 * Math.cos(39.85 * Math.PI / 180);
+  /* 地图编号的机型前缀（同类序号 = k + 1） */
+  var NO_PREFIX = { blue: "光电机", yellow: "雷达机", red: "电子机", green: "中继机" };
 
   var ASSEMBLY = [115.9050, 39.7450];
   var ASM_C    = [115.95742, 39.74206];         /* 集结区几何中心 */
@@ -832,7 +834,7 @@ window.FLIGHT06 = (function () {
         var q = posOf(d, tt);
         trail.push([+q.lon.toFixed(5), +q.lat.toFixed(5)]);
       }
-      out.push({ type: d.type, lon: +p.lon.toFixed(5), lat: +p.lat.toFixed(5), r: Math.round(p.r || 0), trail: trail.length > 1 ? trail : [] });
+      out.push({ type: d.type, no: d.k + 1, g: NO_PREFIX[d.type] || "", lon: +p.lon.toFixed(5), lat: +p.lat.toFixed(5), r: Math.round(p.r || 0), trail: trail.length > 1 ? trail : [] });
     }
     return out;
   }

@@ -171,6 +171,38 @@ window.MapView = function (host) {
 
   function when(fn) { if (ready) { try { fn(); } catch (e) { console.error("[MapView]", e); } } else pend.push(fn); }
 
+  /* 无人机编号小图：离线 style 没有 glyphs，只能把文字画进 canvas 当图标用。
+     颜色 = 机型色（描边），文字白色；高 32px，配 icon-size 0.6 ≈ 19px。
+     注意：本工程的 maplibre 构建接受 ImageData / {width,height,data}，不接受 canvas 元素。 */
+  function makeNoCanvas(text, color) {
+    var fs = 20, padX = 8, padY = 6;
+    var cv = document.createElement("canvas");
+    var c0 = cv.getContext("2d");
+    c0.font = "700 " + fs + "px 'Microsoft YaHei UI','Microsoft YaHei',sans-serif";
+    var w = Math.ceil(c0.measureText(text).width) + padX * 2;
+    var h = fs + padY * 2;
+    cv.width = w; cv.height = h;
+    var c = cv.getContext("2d");
+    c.font = "700 " + fs + "px 'Microsoft YaHei UI','Microsoft YaHei',sans-serif";
+    c.textAlign = "center"; c.textBaseline = "middle";
+    var r = 5, x = 0.75, y = 0.75, ww = w - 1.5, hh = h - 1.5;
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + ww, y, x + ww, y + hh, r);
+    c.arcTo(x + ww, y + hh, x, y + hh, r);
+    c.arcTo(x, y + hh, x, y, r);
+    c.arcTo(x, y, x + ww, y, r);
+    c.closePath();
+    c.fillStyle = "rgba(6,18,32,.85)";
+    c.fill();
+    c.strokeStyle = color;
+    c.lineWidth = 1.5;
+    c.stroke();
+    c.fillStyle = "#eaf6ff";
+    c.fillText(text, w / 2, h / 2 + 1);
+    return c.getImageData(0, 0, w, h);
+  }
+
   /* 通用：一个 geojson 源 + 一个图层，存在就只换数据 */
   function setGeom(lid, type, feats, paint) {
     var data = { type: "FeatureCollection", features: feats };
@@ -291,15 +323,27 @@ window.MapView = function (host) {
         }
       });
     },
-    /* 机群：一次 setData 更新一堆点。features: [{ type, lon, lat }] */
+    /* 机群：一次 setData 更新一堆点。
+       features: [{ type, color, lon, lat, r, no, g }]，no=同类序号、g=机型前缀（"光电机"…）。
+       编号做成 canvas 小图贴在机标上方（离线 style 没有 glyphs，不能用 text-field），默认隐藏。 */
     fleet: function (id, features) {
+      var fl = features || [];
+      var labels = [];
       var data = {
         type: "FeatureCollection",
-        features: (features || []).map(function (f) {
-          return { type: "Feature", properties: { t: f.type, r: f.r || 0, c: f.color || "#38bdf8" }, geometry: { type: "Point", coordinates: [f.lon, f.lat] } };
+        features: fl.map(function (f) {
+          var lab = (f.g && f.no) ? (f.g + (f.no < 10 ? "0" + f.no : "" + f.no)) : "";
+          var nimg = lab ? ("uavno-" + lab) : "";
+          if (nimg) labels.push({ name: nimg, text: lab, color: f.color || "#38bdf8" });
+          return { type: "Feature", properties: { t: f.type, r: f.r || 0, c: f.color || "#38bdf8", n: f.no || 0, g: f.g || "", img: nimg }, geometry: { type: "Point", coordinates: [f.lon, f.lat] } };
         })
       };
       when(function () {
+        /* 编号小图先补齐（源已存在时也要补，首帧是空数组的情况很常见） */
+        labels.forEach(function (L) {
+          if (map.hasImage(L.name)) return;
+          try { map.addImage(L.name, makeNoCanvas(L.text, L.color)); } catch (e) {}
+        });
         var src = map.getSource(id);
         if (src) { src.setData(data); return; }
         map.addSource(id, { type: "geojson", data: data });
@@ -325,6 +369,19 @@ window.MapView = function (host) {
             "icon-rotation-alignment": "map",
             /* 机头朝向飞行方向（feature.r，度，0=北 顺时针） */
             "icon-rotate": ["get", "r"]
+          }
+        });
+        /* 编号层：默认 visibility none，由图层面板的「无人机编号」开关打开 */
+        map.addLayer({
+          id: id + "-no", type: "symbol", source: id,
+          layout: {
+            "icon-image": ["get", "img"],
+            "icon-size": 0.6,
+            "icon-anchor": "bottom",
+            "icon-offset": [0, -10],
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            "visibility": "none"
           }
         });
       });

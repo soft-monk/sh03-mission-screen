@@ -21,6 +21,8 @@ window.FLIGHT_S1 = (function () {
 
   var ICON = { photo: "blue", sar: "yellow", gmti: "yellow", ewar: "red", comm: "green" };
   var COLOR = { blue: "#38bdf8", yellow: "#facc15", red: "#f87171", green: "#4ade80" };
+  /* 地图编号的机型前缀（同类序号由 build 时分配） */
+  var NO_PREFIX = { photo: "光电机", sar: "雷达机", gmti: "雷达机", ewar: "电子机", comm: "中继机" };
 
   /* 任务区（用于覆盖网格与扇区判定） */
   var TA = (window.ROUTES_S1 && window.ROUTES_S1.meta && window.ROUTES_S1.meta.taskArea) ||
@@ -85,6 +87,7 @@ window.FLIGHT_S1 = (function () {
     /* 停机位：集结区内 8 列方阵 */
     var PARK_COLS = 8, PARK_GAP = 350;
     var parked = 0;
+    var groupNo = {};                    /* 每类自己的序号（1 开始），用于地图编号 */
 
     var laneCache = {};
     (RS.area || []).forEach(function (r) {
@@ -140,6 +143,7 @@ window.FLIGHT_S1 = (function () {
 
       drones.push({
         icon: icon, color: color, group: r.group, kind: r.kind,
+        no: (groupNo[r.group] = (groupNo[r.group] || 0) + 1),   /* 同类序号：光电机01…34 / 雷达机01…06 / 电子机01…02 / 中继机01…04 */
         park: [parkLon, parkLat],
         lead: lead, orbit: orbit, pingpong: pingpong,
         leadLen: lead.len, orbitLen: orbit.len
@@ -314,6 +318,7 @@ window.FLIGHT_S1 = (function () {
       }
       out.push({
         type: d.icon, color: d.color,
+        no: d.no, g: NO_PREFIX[d.group] || "",
         lon: +p.lon.toFixed(5), lat: +p.lat.toFixed(5),
         r: Math.round(headingOf(d, t)),
         trail: trail.length > 1 ? trail : []
