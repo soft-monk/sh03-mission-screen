@@ -404,9 +404,10 @@ window.S06_SHELL = (function () {
   var S1_SHOTS = [
     { audio: "assets/audio/s1/013.wav", route: "G1", items: ["photo"], grid: "photo" },   /* 光电 */
     { audio: "assets/audio/s1/016.wav", route: "G2", items: ["sar", "gmti"], grid: "sar" },/* 雷达 */
-    { audio: "assets/audio/s1/019.wav", route: "G3", items: ["ewar"], grid: null }        /* 电子 */
+    { audio: "assets/audio/s1/019.wav", route: "G3", items: ["ewar"], grid: null },       /* 电子 */
+    { audio: "assets/audio/s1/022.wav", route: "G4", items: ["comm"], grid: null }        /* 中继：说话时才画 */
   ];
-  var S1_TAIL_AUDIO = "assets/audio/s1/022.wav";     /* 任务计划已下达：拉回总览 */
+  var S1_TAIL_AUDIO = "assets/audio/s1/023.wav";     /* 任务计划已下达：拉回总览 */
   function s1Transit(routeId) {
     var RS = window.ROUTES_S1;
     if (!RS) return null;
@@ -520,16 +521,17 @@ window.S06_SHELL = (function () {
     { opening: true, text: "光电侦察无人机34架 根据目标预测概率执行分块遍历搜索，最大遍历周期8分钟。", audio: ["assets/audio/s1/013.wav", "assets/audio/s1/014.wav", "assets/audio/s1/015.wav"] },
     { opening: true, text: "雷达侦察无人机6架 采用编队协同搜索模式对任务区域进行SAR条带成像侦察，遍历周期20分钟。", audio: ["assets/audio/s1/016.wav", "assets/audio/s1/017.wav", "assets/audio/s1/018.wav"] },
     { opening: true, text: "电子侦察机2架 对于任务区域进行广域协同搜索 遍历周期10分钟。", audio: ["assets/audio/s1/019.wav", "assets/audio/s1/020.wav", "assets/audio/s1/021.wav"] },
-    { opening: true, text: "任务计划已下达给各无人机。", audio: ["assets/audio/s1/022.wav"] },
-    { t: 363,   text: "各编组已经抵达任务区，开始执行侦察任务。", audio: ["assets/audio/s1/023.wav"] },
-    { t: 1030,  text: "雷达侦察无人机 SAR-01 回传的 SAR 图像识别岸基机场存在 6 个目标：2 架作战飞机，2 部雷达，2 个单体机库，型号已完成识别匹配，置信度99%。", audio: ["assets/audio/s1/024.wav", "assets/audio/s1/025.wav", "assets/audio/s1/026.wav", "assets/audio/s1/027.wav", "assets/audio/s1/028.wav"] },
-    { t: 1038,  text: "目标已编批，目标坐标已上报。", audio: ["assets/audio/s1/029.wav"] },
-    { t: 1042,  text: "接收上级指令，三分钟后将对机场目标进行远程打击，已分配光电察打机 11、19 执行毁伤评估任务，预计 3 分钟后达到评估阵位。", audio: ["assets/audio/s1/030.wav", "assets/audio/s1/031.wav", "assets/audio/s1/032.wav"] },
-    { t: 1158,  text: "光电察打机11已抵达评估阵位，开始回传视频。", audio: ["assets/audio/s1/033.wav"] },
-    { t: 1164,  text: "光电察打机19已抵达评估阵位，开始回传视频。", audio: ["assets/audio/s1/034.wav"] },
-    { t: 1234,  text: "目标被击中，图像已上传，正在进行毁伤效果判读评估。", audio: ["assets/audio/s1/035.wav", "assets/audio/s1/036.wav"] },
-    { t: 1240,  text: "飞机目标003、004已被完全摧毁，雷达目标001、002已被完全摧毁，机库目标005、006被击中，打击效果良好，评估结果已上传。", audio: ["assets/audio/s1/037.wav", "assets/audio/s1/038.wav", "assets/audio/s1/039.wav", "assets/audio/s1/040.wav"] },
-    { t: 1246,  text: "光电察打机11、19回归原侦察阵位。", audio: ["assets/audio/s1/041.wav"] }
+    { opening: true, text: "中继通信机4架，双阵位保障编队链路畅通。", audio: ["assets/audio/s1/022.wav"] },
+    { opening: true, text: "任务计划已下达给各无人机。", audio: ["assets/audio/s1/023.wav"] },
+    { t: 363,   text: "各编组已经抵达任务区，开始执行侦察任务。", audio: ["assets/audio/s1/024.wav"] },
+    { t: 1030,  text: "雷达侦察无人机 SAR-01 回传的 SAR 图像识别岸基机场存在 6 个目标：2 架作战飞机，2 部雷达，2 个单体机库，型号已完成识别匹配，置信度99%。", audio: ["assets/audio/s1/025.wav", "assets/audio/s1/026.wav", "assets/audio/s1/027.wav", "assets/audio/s1/028.wav", "assets/audio/s1/029.wav"] },
+    { t: 1038,  text: "目标已编批，目标坐标已上报。", audio: ["assets/audio/s1/030.wav"] },
+    { t: 1042,  text: "接收上级指令，三分钟后将对机场目标进行远程打击，已分配光电察打机 11、19 执行毁伤评估任务，预计 3 分钟后达到评估阵位。", audio: ["assets/audio/s1/031.wav", "assets/audio/s1/032.wav", "assets/audio/s1/033.wav"] },
+    { t: 1158,  text: "光电察打机11已抵达评估阵位，开始回传视频。", audio: ["assets/audio/s1/034.wav"] },
+    { t: 1164,  text: "光电察打机19已抵达评估阵位，开始回传视频。", audio: ["assets/audio/s1/035.wav"] },
+    { t: 1234,  text: "目标被击中，图像已上传，正在进行毁伤效果判读评估。", audio: ["assets/audio/s1/036.wav", "assets/audio/s1/037.wav"] },
+    { t: 1240,  text: "飞机目标003、004已被完全摧毁，雷达目标001、002已被完全摧毁，机库目标005、006被击中，打击效果良好，评估结果已上传。", audio: ["assets/audio/s1/038.wav", "assets/audio/s1/039.wav", "assets/audio/s1/040.wav", "assets/audio/s1/041.wav"] },
+    { t: 1246,  text: "光电察打机11、19回归原侦察阵位。", audio: ["assets/audio/s1/042.wav"] }
   ];
   /* 慢速语音估算：3 字/秒 + 标点 0.35 s + 起播 0.6 s（后续接真实语音时替换） */
   function s1VoiceDur(text) {
@@ -585,12 +587,12 @@ window.S06_SHELL = (function () {
   /* 预载全部结束（有文件失败时）：退回估算，保证演示不至于整屏没气泡没声音 */
   window.__s1SchedFinal = function () { s1BuildAiSched(true); };
   s1BuildAiSched(false);   /* 若预载已完成（如热重载），立刻建表 */
-  /* ---------- 场景一语音：41 条 wav 全部预取成 blob（照场景二 ensureScenarioAudioPreload） ----------
+  /* ---------- 场景一语音：42 条 wav 全部预取成 blob（照场景二 ensureScenarioAudioPreload） ----------
      播放时直接用内存里的 Audio，不再"到点才请求"，避免起播失败/延后 */
   window.ensureS1AudioPreload = function () {
     window.APP_STATE = window.APP_STATE || {};
     if (window.APP_STATE.s1AudioPreload) return window.APP_STATE.s1AudioPreload;
-    var map = {}, dur = {}, count = 41, settled = 0;
+    var map = {}, dur = {}, count = 42, settled = 0;
     var box = window.APP_STATE.s1AudioPreload = { map: map, dur: dur, count: count };
     function settledOne() {
       settled++;
@@ -1368,7 +1370,7 @@ window.S06_SHELL = (function () {
       if (!mv || st.dead) return;
       var win = s1ShotWins(), t = st.t;
       /* 每个键都必须显式给值：未揭示 = false（漏写会变成 undefined，被判定为已揭示） */
-      var rev = { G1: false, G2: false, G3: false, G4: true, photo: false, sar: false, gmti: false, ewar: false, comm: true, gridPhoto: false, gridSar: false };
+      var rev = { G1: false, G2: false, G3: false, G4: false, photo: false, sar: false, gmti: false, ewar: false, comm: false, gridPhoto: false, gridSar: false };
       S1_SHOTS.forEach(function (s) {
         var w = win[s.audio];
         if (!w) return;
