@@ -103,13 +103,13 @@
     res: [{ k: "光电", img: "uav-blue.png", v: "48", c: "56,189,248" }, { k: "雷达", img: "uav-yellow.png", v: "24", c: "250,204,21" }, { k: "电子", img: "uav-red.png", v: "24", c: "248,113,113" }, { k: "通信", img: "uav-green.png", v: "24", c: "74,222,128" }],
     uavs: [
       { k: "光电无人机", name: "光电察打机", img: "uav-blue.png", c: "56,189,248", total: 48, avail: 48, caps: ["光电成像侦察", "跟踪", "打击"], used: 34, rest: 14 },
-      { k: "雷达无人机", name: "雷达侦察机", img: "uav-yellow.png", c: "250,204,21", total: 24, avail: 24, caps: ["SAR 成像侦察", "GMTI 动目标侦察"], used: 8, rest: 16 },
+      { k: "雷达无人机", name: "雷达侦察机", img: "uav-yellow.png", c: "250,204,21", total: 24, avail: 24, caps: ["SAR 成像侦察", "GMTI 动目标侦察"], used: 6, rest: 18 },
       { k: "电子无人机", name: "电子侦察机", img: "uav-red.png", c: "248,113,113", total: 24, avail: 24, caps: ["电子侦察", "干扰诱骗"], used: 2, rest: 22 },
       { k: "通信无人机", name: "中继通信机", img: "uav-green.png", c: "74,222,128", total: 24, avail: 24, caps: ["中继", "通信", "数据"], used: 4, rest: 20 }
     ],
     groups: [
       { n: "编组1", k: "光电察打机", img: "uav-blue.png", v: 34 },
-      { n: "编组2", k: "雷达侦察机", img: "uav-yellow.png", v: 8 },
+      { n: "编组2", k: "雷达侦察机", img: "uav-yellow.png", v: 6 },
       { n: "编组3", k: "电子侦察机", img: "uav-red.png", v: 2 },
       { n: "编组4", k: "中继通信机", img: "uav-green.png", v: 4 }
     ],

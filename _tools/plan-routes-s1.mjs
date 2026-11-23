@@ -7,7 +7,7 @@
  *      画面上西北稀、东南密。
  *   3) 雷达 SAR（6 架）：南北向平行腿按腿数切成 6 段，每架在自己带内蛇形往返；
  *      腿距由西 2.4km 收到东 1.6km（稀疏 → 密集）。
- *   4) 雷达 GMTI（2 架）：东南山地区一条东西向跑道环，两架半圈错开。
+ *   4) 雷达 GMTI：2026-11-23 起场景一改为 6 架全 SAR，GMTI_BUDGET = 0（不再生成跑道环）。
  *   5) 电子：南北长轴的正置跑道环，两架半圈错开；通信：中心中继环 + 走廊环，各两架。
  *   6) 编组航线：二次贝塞尔曲线（向外张开），生成时自动降曲率直到两两不交叉。
  *
@@ -37,7 +37,7 @@ const SCAN_R = 2800;                  // 光电扫描半径（同场景二）
 const OVERLAP = 0.85;                 // 排版系数：有效半径 = 扫描半径 × 该系数（<1 表示相邻带重叠）
 const R_EFF = Math.round(SCAN_R * OVERLAP);
 /* 光电格子（km，从西到东 / 从北到南），合计 40km；西北大、东南小 */
-const GMTI_BUDGET = 2;                // 雷达 GMTI：2 架，同一条东西向跑道环
+const GMTI_BUDGET = 0;                // 雷达 GMTI：0 架（场景一雷达改为 6 架全 SAR）
 const LEG_MIN = 800, LEG_MAX = 4400;
 
 /* ---------- 坐标换算 ---------- */
@@ -217,7 +217,7 @@ function raceTrackEW(cx, cy, legM, rM, n = 12) {
   return pts;
 }
 
-/* 雷达 GMTI（2 架）：东南山地区一条东西向跑道，两架半圈错开 */
+/* 雷达 GMTI（GMTI_BUDGET 架，当前 0 架 → 不生成）：东南山地区一条东西向跑道，两架半圈错开 */
 const gmtiRoutes = Array.from({ length: GMTI_BUDGET }, (_, i) => {
   const raw = raceTrackEW(8000, 9000, 16000, 1200, 12);
   return {
@@ -471,7 +471,7 @@ function verify() {
     if (r.group === "sar" && legs < 3) errs.push(r.id + " 蛇形腿数不足（" + legs + " 条）");
   }
 
-  /* 4b) GMTI：两架必须同一条跑道，且跑道在任务区内 */
+  /* 4b) GMTI：同一条跑道（GMTI_BUDGET = 0 时为空集合，不做校验） */
   const gmti = D.area.filter((r) => r.group === "gmti");
   if (gmti.length === GMTI_BUDGET) {
     const sig = (r) => JSON.stringify(r.pts);
@@ -481,7 +481,7 @@ function verify() {
   /* 5) 计数 */
   const count = (g) => D.area.filter((r) => r.group === g).length;
   const wantPhoto = PHOTO_G.cols * PHOTO_G.rows - PHOTO_CITY.length + PHOTO_CITY.length * 4;
-  const want = { photo: wantPhoto, sar: 6, gmti: 2, ewar: 2, comm: 4 };
+  const want = { photo: wantPhoto, sar: 6, gmti: GMTI_BUDGET, ewar: 2, comm: 4 };
   for (const g of Object.keys(want)) if (count(g) !== want[g]) errs.push("数量不符: " + g + "=" + count(g) + " 期望 " + want[g]);
 
   /* 6) 覆盖 */
@@ -567,7 +567,7 @@ function serialize() {
 
   const head = [
     "/* 由 _tools/plan-routes-s1.mjs 生成，勿手改坐标；要调疏密改脚本参数后重跑。",
-    "   所有区内航段横平竖直：光电为多腿蛇形（疏密渐变、奇偶行错开）、SAR 为多腿蛇形（3x2 分块）、GMTI 为东西向跑道环、",
+    "   所有区内航段横平竖直：光电为多腿蛇形（疏密渐变、奇偶行错开）、SAR 为多腿蛇形（3x2 分块）、",
     "   电子/通信为正置跑道环。格子由西北向东南收窄，闭环宽度随之变小 —— 西北稀、东南密。 */",
     "window.ROUTES_S1 = {",
     '  "meta": ' + JSON.stringify({

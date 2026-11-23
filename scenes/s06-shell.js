@@ -7,12 +7,10 @@ window.S06_SHELL = (function () {
     { k: "trails", label: "无人机航迹" },
     { sec: "扫描矩形 / 覆盖层" },
     { k: "cov-photo", label: "光电扫描覆盖小格" },
-    { k: "cov-gmti", label: "GMTI 覆盖小格" },
     { k: "cov-sar", label: "SAR 覆盖小格" },
     { k: "cov-ewar", label: "电子干扰覆盖小格" },
     { sec: "扇形 / 扇区层" },
     { k: "scan", label: "光电扫描扇形" },
-    { k: "rfan", label: "雷达 GMTI 扇区" },
     { k: "jfan", label: "电子干扰扇区" },
     { k: "sbeam", label: "SAR 扫描条带" }
   ];
@@ -862,7 +860,6 @@ window.S06_SHELL = (function () {
           shellLayers.push({ k: "tracks", label: "规划航迹", children: [
             { k: "tracks-photo", label: "光电侦察" },
             { k: "tracks-sar", label: "雷达 SAR" },
-            { k: "tracks-gmti", label: "雷达 GMTI" },
             { k: "tracks-ewar", label: "电子干扰" },
             { k: "tracks-comm", label: "通信中继" }
           ] });
