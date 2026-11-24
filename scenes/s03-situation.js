@@ -1844,6 +1844,7 @@ function make(variant) {
       var logAudioIdx = -1;           /* 当前正在播的条目下标 */
       var logAudioOn = false;         /* 是否正在出声 */
       var logAudioGen = 0;            /* 播放代际：停止/跳转后旧回调作废 */
+      var logDefer = false;           /* 因为等上一条播完而推迟起播：下次从头播 */
       var logFailAt = 0;              /* 上次播放失败时间（节流重试） */
 
       function logAudioState() {
@@ -1875,12 +1876,14 @@ function make(variant) {
                ② 其余条目最多比标称时刻晚 CAP 秒，超了就把上一条语音截断，保证跟得上画面；
                ③ 相邻两条至少隔 MIN 秒，避免同一时刻多条挤在一起互相截断。
          时长没全部就绪时先不排表（SCHED 留空），等预载事件驱动重算，避免用 3.0 占位把整片排错。 */
+      var SCHED_GAP = 0.25;          /* 相邻两条气泡/语音之间的最小间隔（秒） */
       function buildSchedule(force) {
-        var out = [], prev = -1e9, prevStart = -1e9, CAP = 8, MIN = 1.2, missing = 0;
+        var out = [], prev = -1e9, missing = 0;
         AI_EVENTS.forEach(function (ev) {
-          var st0 = Math.max(ev.t, prev);
-          if (ev.t > 0 && st0 > ev.t + CAP) st0 = ev.t + CAP;
-          if (st0 < prevStart + MIN) st0 = prevStart + MIN;
+          /* 顺序排：上一条语音播完后再隔 SCHED_GAP 起下一条。
+             原来这里用 CAP=8 把晚到的条目硬拉到 ev.t+8，结果「推荐行动方案…」这种长语音
+             会被后面的「方案确认。」截断；MIN=1.2 又让末尾几条挤在一起。 */
+          var st0 = prev > -1e8 ? Math.max(ev.t, prev + SCHED_GAP) : ev.t;
           var dur = 0.55;             /* 无语音条目占 0.55 s，保持“一条一条” */
           if (ev.audio && ev.audio.length) {
             dur = 0;
@@ -1894,7 +1897,6 @@ function make(variant) {
           }
           out.push({ ev: ev, start: st0, end: st0 + dur });
           prev = st0 + dur;
-          prevStart = st0;
         });
         if (missing && !force) { SCHED = []; return false; }
         SCHED = out;
@@ -1923,6 +1925,7 @@ function make(variant) {
         st6.audios = [];
         logAudioOn = false;
         logAudioIdx = -1;
+        logDefer = false;
       }
       /* 从某条的中间开始播：offset 是该条已经过去的秒数 */
       function startLogAudio(idx, offset) {
@@ -1978,9 +1981,16 @@ function make(variant) {
         if (idx < 0) { if (logAudioOn) stopLogAudio(); return; }
         var it = SCHED[idx];
         if (logAudioIdx === idx) { if (!logAudioOn) return; return; }   /* 播过/在播，不重启 */
+        /* 无语音的条目（如用户回话「方案确认。」）：只更新下标，绝不打断正在播的上一条 */
+        if (!it.ev.audio || !it.ev.audio.length) { logAudioIdx = idx; return; }
         if (t + 1e-6 >= it.end) { if (logAudioOn) stopLogAudio(); return; }   /* 两条之间：静音 */
-        if (!it.ev.audio || !it.ev.audio.length) { if (logAudioOn) stopLogAudio(); return; }
-        startLogAudio(idx, Math.max(0, t - it.start));
+        /* 上一条还在播（多段拼接会晚几十~几百毫秒）：等它播完再切，最多多等 4 s */
+        if (logAudioOn && logAudioIdx >= 0 && logAudioIdx !== idx) {
+          var pv = SCHED[logAudioIdx];
+          if (pv && t < pv.end + 4.0) { logDefer = true; return; }
+        }
+        startLogAudio(idx, logDefer ? 0 : Math.max(0, t - it.start));
+        logDefer = false;
       }
       /* 气泡：上面是 SH-04/05 已经说过的（只读），下面按进度追加本屏的；
          拖进度条只增删本屏那部分，前面两屏的始终保留 */
