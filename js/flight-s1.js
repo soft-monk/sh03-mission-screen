@@ -173,20 +173,23 @@ window.FLIGHT_S1 = (function () {
         b.slowT0 = t0b;
       }
     });
-    /* ---------- 机场盘旋侦察：16:32（992）受领，最近的 2 架光电飞往机场 2.5km 圆，
+    /* ---------- 机场盘旋侦察：17:22（1042）受领，11、19 两架光电飞往机场 2.5km 圆，
        绕圈侦察到 20:40（1240，视频放完 + 毁伤评估之后）再回原航路 ---------- */
     var AIR = AIRFIELD;
-    var DETOUR_T0 = 992;
+    var DETOUR_T0 = 1042;                     /* 受领时刻：随 SH-06 文本整体 +50 s（原 992） */
+    var DETOUR_PICK = [11, 19];               /* 台词点名的两架：固定选择，不再按“最近”自动挑 */
     (function airportOrbit() {
       var photo = drones.filter(function (d) { return d.group === "photo"; });
       if (photo.length < 2) return;
       var cand = [];
       photo.forEach(function (d) {
-        if (DETOUR_T0 <= T_LIFT + d.leadLen / V) return;      /* 992 还没到位的排除 */
+        if (DETOUR_T0 <= T_LIFT + d.leadLen / V) return;      /* 受领时还没到位的排除 */
+        if (DETOUR_PICK && DETOUR_PICK.indexOf(d.no) < 0) return;
         var p = posOf(d, DETOUR_T0);
         var dx = (p.lon - AIR.lon) * M_LON, dy = (p.lat - AIR.lat) * M_LAT;
         var D = Math.hypot(dx, dy);
-        if (D <= AIR.r + 150) return;                         /* 已经在圆内，没有盘旋余量 */
+        /* 自动挑机时才排除“已经在圆内”的；点名的那两架允许从圈内起飞（如 #11 在 2.39km） */
+        if (!DETOUR_PICK && D <= AIR.r + 150) return;
         cand.push({ d: d, p: p, dist: D });
       });
       cand.sort(function (a, b) { return a.dist - b.dist; });  /* 只取当时最近的两架 */
