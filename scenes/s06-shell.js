@@ -70,6 +70,7 @@ window.S06_SHELL = (function () {
   function s1TargetCards() {
     if (!S1_BASE) return [];
     return S1_BASE.targets.map(function (o, i) {
+      var second = (o.no === "007" || o.no === "008");
       return {
         no: o.no,
         name: o.name,
@@ -77,8 +78,8 @@ window.S06_SHELL = (function () {
         rows: [
           ["类型", o.kind === "radar" ? "雷达目标" : o.kind === "jet" ? "空中目标" : "地面目标"],
           ["判定", "疑似（未经确认）", "sus s6-tb-judge"],
-          ["来源", "雷达侦察机 SAR-01"],
-          ["区域", "岸基机场"]
+          ["来源", second ? "光电侦察机 06" : "雷达侦察机 SAR-01"],
+          ["区域", second ? "任务区东侧" : "岸基机场"]
         ],
         tags: ["疑似目标", "待复核"]
       };
@@ -458,6 +459,16 @@ window.S06_SHELL = (function () {
   }
   /* 场景一机场：跑道 / 滑行道 / 目标（黄=疑似、红=确认） */
   var S1_BASE = window.BASE_S1;
+  /* 第二波目标（光电机06 在 36:40 扫描外弧中点发现）：007 导弹发射车 / 008 火控雷达。
+     007 就落在该点，008 向东 250 m、向南 150 m，避免图标重叠 */
+  (function addSecondWaveTargets() {
+    if (!S1_BASE || !S1_BASE.targets) return;
+    if (S1_BASE.targets.some(function (t) { return t.no === "007"; })) return;
+    S1_BASE.targets.push(
+      { id: "tel-1", no: "007", kind: "tel", name: "007导弹发射车", pos: [121.123070, 24.926122] },
+      { id: "radar-3", no: "008", kind: "radar", name: "008火控雷达", pos: [121.125550, 24.924771] }
+    );
+  })();
   var S1_BASE_TIMES = null;
   /* 场景一扫描/覆盖图层分组：mapview 每个 source 对应一个 <id>-l 图层 */
   var S1_VIS = {
@@ -509,11 +520,14 @@ window.S06_SHELL = (function () {
      （980→1030 / 988→1038 / 992→1042），只动显示，不动飞行模型 */
   var S1_SAR_IMG_T0 = 1030;                 /* 1030（17:10）：SAR 影像窗开始（窗长 7 s） */
   var S1_SAR_IMG_DUR = 7;
-  var S1_TGT_SUS = { "001": 1030, "002": 1030, "003": 1030, "004": 1030, "005": 1030, "006": 1030 };
-  var S1_TGT_CONF = { "001": 1038, "002": 1038, "003": 1038, "004": 1038, "005": 1038, "006": 1038 };
+  var S1_TGT_SUS = { "001": 1030, "002": 1030, "003": 1030, "004": 1030, "005": 1030, "006": 1030, "007": 2200, "008": 2200 };
+  var S1_TGT_CONF = { "001": 1038, "002": 1038, "003": 1038, "004": 1038, "005": 1038, "006": 1038, "007": 2212, "008": 2212 };
   var S1_TGT_DEST = 1234;                   /* 1234：视频播完、「目标被击中」气泡出现后，目标列表才变已摧毁 */
+  var S1_TGT_DEST2 = { "007": 2420, "008": 2420 };   /* 第二波（光电机06 跟踪打击）的摧毁时刻 */
   var S1_VID_T0 = 1158;                     /* 1158（19:18）：05/06 抵达评估阵位，视频开始（打击在第 16 秒） */
   var S1_VID_DUR = 76;
+  var S1_VID_T1 = 2200;                     /* 2200（36:40）：光电机06 跟踪打击视频开播（4:40） */
+  var S1_VID_DUR1 = 280.6;
   var S1_AI_EVENTS = [
     /* 起场 4 句：没有语音，按 4 字/秒串行（不写 t，由 S1_AI_SCHED 按字数串出来）；
        第一句落在 0.01 s，进屏时时钟还是 0，所以点播放 / 拖动进度条之后才出现。 */
@@ -531,7 +545,13 @@ window.S06_SHELL = (function () {
     { t: 1164,  text: "光电察打机19已抵达评估阵位，开始回传视频。", audio: ["assets/audio/s1/035.wav"] },
     { t: 1234,  text: "目标被击中，图像已上传，正在进行毁伤效果判读评估。", audio: ["assets/audio/s1/036.wav", "assets/audio/s1/037.wav"] },
     { t: 1240,  text: "飞机目标003、004已被完全摧毁，雷达目标001、002已被完全摧毁，机库目标005、006被击中，打击效果良好，评估结果已上传。", audio: ["assets/audio/s1/038.wav", "assets/audio/s1/039.wav", "assets/audio/s1/040.wav", "assets/audio/s1/041.wav"] },
-    { t: 1246,  text: "光电察打机11、19回归原侦察阵位。", audio: ["assets/audio/s1/042.wav"] }
+    { t: 1246,  text: "光电察打机11、19回归原侦察阵位。", audio: ["assets/audio/s1/042.wav"] },
+    /* ---- 第二波：光电机06 跟踪打击（2200 = 36:40 起，视频 4:40） ---- */
+    { t: 2200,  text: "光电侦察无人机6发现疑似目标，视频已回传，光电侦察无人机6转入跟踪目标。", audio: ["assets/audio/s1/043.wav", "assets/audio/s1/044.wav"] },
+    { t: 2212,  text: "光电侦察无人机6识别导弹发射车、火控雷达目标，置信度95%，目标信息已编批上报。", audio: ["assets/audio/s1/045.wav", "assets/audio/s1/046.wav", "assets/audio/s1/047.wav"] },
+    { t: 2222,  text: "接收上级指令，空中打击单元三分钟后将对目标进行打击，光电侦察无人机6执行毁伤评估任务。", audio: ["assets/audio/s1/048.wav", "assets/audio/s1/049.wav", "assets/audio/s1/050.wav"] },
+    { t: 2420,  text: "目标被击中，图像已上传，正在进行毁伤效果判读评估。", audio: ["assets/audio/s1/051.wav", "assets/audio/s1/052.wav"] },
+    { t: 2426,  text: "目标007、008已被完全摧毁，打击效果良好，评估结果已上传。", audio: ["assets/audio/s1/053.wav", "assets/audio/s1/054.wav"] }
   ];
   /* 慢速语音估算：3 字/秒 + 标点 0.35 s + 起播 0.6 s（后续接真实语音时替换） */
   function s1VoiceDur(text) {
@@ -592,7 +612,7 @@ window.S06_SHELL = (function () {
   window.ensureS1AudioPreload = function () {
     window.APP_STATE = window.APP_STATE || {};
     if (window.APP_STATE.s1AudioPreload) return window.APP_STATE.s1AudioPreload;
-    var map = {}, dur = {}, count = 42, settled = 0;
+    var map = {}, dur = {}, count = 54, settled = 0;
     var box = window.APP_STATE.s1AudioPreload = { map: map, dur: dur, count: count };
     function settledOne() {
       settled++;
@@ -625,7 +645,7 @@ window.S06_SHELL = (function () {
     if (S1_BASE_TIMES) return S1_BASE_TIMES;
     var out = {};
     if (S1_BASE) S1_BASE.targets.forEach(function (o) {
-      out[o.id] = { sus: S1_TGT_SUS[o.no] || S1_TGT_T0, conf: S1_TGT_CONF[o.no] || 0, dest: S1_TGT_DEST };
+      out[o.id] = { sus: S1_TGT_SUS[o.no] || S1_TGT_T0, conf: S1_TGT_CONF[o.no] || 0, dest: S1_TGT_DEST2[o.no] || S1_TGT_DEST };
       out[o.no] = out[o.id];                 /* 目标列表按编号（001…006）查时间 */
     });
     S1_BASE_TIMES = out;
@@ -642,6 +662,8 @@ window.S06_SHELL = (function () {
       mv.image("base-hangar-r", "assets/img/hangar-red.png");
       mv.image("base-jet-y", "assets/img/jet-yellow.png");
       mv.image("base-jet-r", "assets/img/jet-red.png");
+      mv.image("base-tel-y", "assets/img/tel-yellow.png");
+      mv.image("base-tel-r", "assets/img/tel-red.png");
     } catch (e) {}
     try { mv.path("base-runway", [B.runway.a, B.runway.b], { color: "#94a3b8", width: 14, opacity: 0.95 }); } catch (e) {}
     try { mv.path("base-taxiway", [B.taxiway.a, B.taxiway.b], { color: "#64748b", width: 5, opacity: 0.9 }); } catch (e) {}
@@ -886,8 +908,9 @@ window.S06_SHELL = (function () {
       htmlRight(s1TargetCards()) +
       (hasMap ? htmlVideo([
         { k: "A", title: "11号光电察打机 ｜ 侦察确认" },
-        { k: "B", title: "19号光电察打机 ｜ 侦察确认" }
-      ], [["a", "scene1_A_ir.mp4"], ["b", "scene1_B_ir.mp4"]]) : "") +
+        { k: "B", title: "19号光电察打机 ｜ 侦察确认" },
+        { k: "C", title: "光电机06 ｜ 跟踪打击" }
+      ], [["a", "scene1_A_ir.mp4"], ["b", "scene1_B_ir.mp4"], ["c", "scene1_2_ir.mp4"]]) : "") +
       "<section class=\"s1-sar-win\"><img src=\"assets/img/s1-sar-airfield.jpg\" alt=\"\">" +
         "<div class=\"s1-sar-cap\">SAR 扫描影像 · 岸基机场</div></section>" +
       "<section class=\"s1-summary\"><div class=\"s1-sum-head\"><b>任务总结</b></div>" +
@@ -943,7 +966,7 @@ window.S06_SHELL = (function () {
       }).join("");
       body.innerHTML =
         '<div class="s1-sum-kpis">' +
-          '<div class="s1-sum-kpi"><span>目标处置</span><b>6 / 6</b><em>全部摧毁</em></div>' +
+          '<div class="s1-sum-kpi"><span>目标处置</span><b>' + tg.length + " / " + tg.length + '</b><em>全部摧毁</em></div>' +
           '<div class="s1-sum-kpi cy"><span>任务闭环</span><b>已达成</b><em>发现 → 确认 → 打击 → 评估</em></div>' +
         '</div>' +
         '<div class="s1-sum-main">' +
@@ -965,19 +988,20 @@ window.S06_SHELL = (function () {
        隐藏 <video> 源 → canvas 镜像 → 底部小窗；点小窗开上方大窗（同一时刻只开一个），点大窗收起；
        播放由飞行时钟驱动（到点起播、倍速跟随、暂停跟随、拖动跟着 seek）；
        两路都是“侦察确认”，播完按侦察态收小卡。 */
-    var S1V_START = { A: S1_VID_T0, B: S1_VID_T0 };
+    var S1V_START = { A: S1_VID_T0, B: S1_VID_T0, C: S1_VID_T1 };
+    var S1V_DUR = { A: S1_VID_DUR, B: S1_VID_DUR, C: S1_VID_DUR1 };
     var s1vBar = root.querySelector(".s6-video-smallbar");
     var s1vLarge = root.querySelector(".s6-video-large");
     var s1vGrid = root.querySelector(".s6-video-grid");
-    var s1vVid = { A: root.querySelector(".s6-video-a"), B: root.querySelector(".s6-video-b") };
+    var s1vVid = { A: root.querySelector(".s6-video-a"), B: root.querySelector(".s6-video-b"), C: root.querySelector(".s6-video-c") };
     var s1vCard = {}, s1vCanvas = {};
-    ["A", "B"].forEach(function (k) {
+    ["A", "B", "C"].forEach(function (k) {
       s1vCard[k] = root.querySelector('.s6-video-small-card[data-video="' + k + '"]');
       s1vCanvas[k] = root.querySelector('.s6-video-small-canvas[data-video="' + k + '"]');
     });
     var s1vExpanded = [], s1vLargeMap = {}, s1vRemoved = {};
     var s1vStarted = false, s1vMirrorGen = 0, s1vLastT = -1;
-    function s1vKeys() { return ["A", "B"]; }
+    function s1vKeys() { return ["A", "B", "C"]; }
     function s1vTitle(k) {
       var el = s1vCard[k] && s1vCard[k].querySelector(".s6-video-title");
       return el ? el.textContent : k;
@@ -1143,7 +1167,7 @@ window.S06_SHELL = (function () {
         if (!v) return;
         var t0 = S1V_START[k];
         if (t + 1e-6 < t0) { try { v.pause(); v.currentTime = 0; } catch (e) {} return; }
-        var dur = isFinite(v.duration) && v.duration > 0 ? v.duration : S1_VID_DUR;
+        var dur = isFinite(v.duration) && v.duration > 0 ? v.duration : (S1V_DUR[k] || S1_VID_DUR);
         var endT = t0 + dur;
         if (s1vRemoved[k] && t + 1e-6 < endT - 0.5) s1vOpen(k);
         if (s1vRemoved[k]) { try { v.pause(); } catch (e) {} return; }
@@ -1151,7 +1175,7 @@ window.S06_SHELL = (function () {
         if (mt >= dur - 0.05) { s1vSeekVid(v, dur - 0.05, false); return; }   /* 已经播完：只定格末帧，不起播 */
         s1vSeekVid(v, mt, play);
       });
-      s1vPaintKey("A"); s1vPaintKey("B");
+      s1vKeys().forEach(function (k) { s1vPaintKey(k); });
     }
     function s1vReset() {
       s1vMirrorGen++;
@@ -1178,18 +1202,25 @@ window.S06_SHELL = (function () {
         s1vStarted = true;
         s1vRemoved = {};
         s1vExpanded = []; s1vReflow();
-        s1vKeys().forEach(function (k) { s1vOpen(k); });
+        /* 每一路按自己的起点开：C（光电机06 跟踪打击）要到 2200 才出现 */
+        s1vKeys().forEach(function (k) { if (S1V_START[k] <= t + 1e-6) s1vOpen(k); else s1vClose(k); });
         s1vStartMirrors();
         /* 不在激活时从 0 起播：定位交给 s1vSeekTo，播放由本函数末尾的“掉线补播”兜底 */
       } else {
         s1vSetRate();
       }
+      /* 晚开的那一路（C：2200 起）：到点自动把卡片重新打开 —— 正常播放时不会触发 seek，只能在这里补 */
+      s1vKeys().forEach(function (k) {
+        var t0 = S1V_START[k];
+        if (!s1vRemoved[k] || t + 1e-6 < t0) return;
+        if (t < t0 + (S1V_DUR[k] || S1_VID_DUR) - 0.5) s1vOpen(k);
+      });
       if (s1vLastT < 0 || Math.abs(t - s1vLastT) > 0.5) s1vSeekTo(t, st.run);
       s1vLastT = t;
       s1vKeys().forEach(function (k) {
         var v = s1vVid[k];
         if (!v || s1vRemoved[k]) return;
-        var dur = isFinite(v.duration) && v.duration > 0 ? v.duration : S1_VID_DUR;
+        var dur = isFinite(v.duration) && v.duration > 0 ? v.duration : (S1V_DUR[k] || S1_VID_DUR);
         if (t - S1V_START[k] >= dur - 0.05) s1vClose(k);
       });
       if (!st.run) s1vPause();
@@ -1199,7 +1230,7 @@ window.S06_SHELL = (function () {
         if (need) s1vPlay();
       }
       s1vUpdateBar();
-      s1vPaintKey("A"); s1vPaintKey("B");
+      s1vKeys().forEach(function (k) { s1vPaintKey(k); });
     }
     if (s1vBar) {
       s1vKeys().forEach(function (k) {
@@ -1550,14 +1581,17 @@ window.S06_SHELL = (function () {
     bar.addEventListener("pointerup", function () { dragging = false; requestFlight(true); });
     bar.addEventListener("pointercancel", function () { dragging = false; });
     /* ---------- 视频就绪：提前 90 s 预热 + 到点没画面就暂停时钟 ---------- */
-    var s1VWarm = false, s1VHold = null, s1VGaveUp = false;
+    var s1VWarm = {}, s1VHold = null, s1VGaveUp = false;
+    /* 两段视频各自的入点：A/B 在 1158，C（光电机06 跟踪打击）在 2200 */
+    var S1V_ENTRY = [{ t: S1_VID_T0, k: "A" }, { t: S1_VID_T1, k: "C" }];
     function s1VideoWarm() {
-      if (!hasMap || s1VWarm) return;
-      if (st.t < S1_VID_T0 - 90) return;                    /* 入点前 90 秒才开始拉 */
-      s1VWarm = true;
-      ["A", "B"].forEach(function (k) {
-        var v = s1vVid[k];
-        if (v) { try { v.preload = "auto"; v.load(); } catch (e) {} }
+      if (!hasMap) return;
+      S1V_ENTRY.forEach(function (e) {
+        if (s1VWarm[e.k]) return;
+        if (st.t < e.t - 90) return;                    /* 入点前 90 秒才开始拉 */
+        s1VWarm[e.k] = true;
+        var v = s1vVid[e.k];
+        if (v) { try { v.preload = "auto"; v.load(); } catch (err) {} }
       });
     }
     function s1VideoGate() {
@@ -1582,8 +1616,13 @@ window.S06_SHELL = (function () {
         return;
       }
       if (!st.run || s1VGaveUp) return;
-      if (st.t + 1e-6 < S1_VID_T0 || st.t > S1_VID_T0 + 3) return;   /* 只在入点后 3 秒窗口里判一次 */
-      var v1 = s1vVid.A || s1vVid.B;
+      var ent = null;
+      for (var ei = 0; ei < S1V_ENTRY.length; ei++) {
+        var e0 = S1V_ENTRY[ei];
+        if (st.t + 1e-6 >= e0.t && st.t <= e0.t + 3) { ent = e0; break; }   /* 只在入点后 3 秒窗口里判一次 */
+      }
+      if (!ent) return;
+      var v1 = s1vVid[ent.k] || s1vVid.A || s1vVid.B;
       if (!v1 || v1.readyState >= 2) return;
       /* 到点了还没有画面：停表等它，避免"进度条跑过去了、小窗还是黑的" */
       s1VHold = { v: v1, since: Date.now() };
