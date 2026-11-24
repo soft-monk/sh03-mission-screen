@@ -542,11 +542,11 @@ function make(variant) {
             '<canvas class="s6-video-small-canvas" data-video="D"></canvas>' +
           '</div>' +
           '<div class="s6-video-card s6-video-small-card s6-video-third" data-video="E" style="display:none">' +
-            '<div class="s6-video-title">09光电-攻击｜003运动目标</div>' +
+            '<div class="s6-video-title">01光电-攻击｜003运动目标</div>' +
             '<canvas class="s6-video-small-canvas" data-video="E"></canvas>' +
           '</div>' +
           '<div class="s6-video-card s6-video-small-card s6-video-third" data-video="F" style="display:none">' +
-            '<div class="s6-video-title">10光电-侦察｜003运动目标</div>' +
+            '<div class="s6-video-title">02光电-侦察｜003运动目标</div>' +
             '<canvas class="s6-video-small-canvas" data-video="F"></canvas>' +
           '</div>' +
         '</section>' +
@@ -1124,7 +1124,7 @@ function make(variant) {
       var thirdStarted = false;
       var assigned003 = null;
       var mirrorGen = 0;
-      var VIDEO_TITLES = { A: "14光电-攻击｜002火控雷达", B: "15光电-侦察｜002火控雷达", C: "17光电-攻击｜001预警雷达", D: "18光电-侦察｜001预警雷达", E: "09光电-攻击｜003运动目标", F: "10光电-侦察｜003运动目标" };
+      var VIDEO_TITLES = { A: "14光电-攻击｜002火控雷达", B: "15光电-侦察｜002火控雷达", C: "17光电-攻击｜001预警雷达", D: "18光电-侦察｜001预警雷达", E: "01光电-攻击｜003运动目标", F: "02光电-侦察｜003运动目标" };
       /* 攻击动画仍按视频进度（41 s）触发，但不再产生 AI 消息；
          三条「已被摧毁」改为飞行时间轴触发（timelineRules）。 */
       var videoAiRules = [
@@ -1172,7 +1172,7 @@ function make(variant) {
         var atk = picks[0], rec = picks[1] || picks[0];
         assigned003 = { attack: atk, recon: rec };
         FLIGHT06.assign003(atk, rec, T003_ASSIGN);
-        var a = "09", r = "10";        /* 气泡与视频标题统一显示 09、10（实际执行仍用 atk/rec） */
+        var a = (atk < 10 ? "0" : "") + atk, r = (rec < 10 ? "0" : "") + rec;   /* 实际执行的两架机号（01、02），与地图编号一致 */
         VIDEO_TITLES.E = a + "光电-攻击｜003运动目标";
         VIDEO_TITLES.F = r + "光电-侦察｜003运动目标";
         thirdCards.forEach(function (card) {
@@ -1326,7 +1326,7 @@ function make(variant) {
           var k = card.getAttribute("data-video");
           card.style.display = (k === "A" || k === "B") ? "" : "none";
         });
-        VIDEO_TITLES.E = "09光电-攻击｜003运动目标"; VIDEO_TITLES.F = "10光电-侦察｜003运动目标";
+        VIDEO_TITLES.E = "01光电-攻击｜003运动目标"; VIDEO_TITLES.F = "02光电-侦察｜003运动目标";
         resetDestroyedState();
         if (window.FLIGHT06 && FLIGHT06.resetAttacks) FLIGHT06.resetAttacks();
         expanded = [];
@@ -1829,7 +1829,7 @@ function make(variant) {
         { t: 4500.00, who: "ai", audio: ["assets/audio/s2/058.wav", "assets/audio/s2/059.wav"], text: "推荐行动方案：<br>派出两架光电察打机对目标003进行侦察<br>目标确认后直接打击。" },
         { t: 4502.00, who: "user", text: "方案确认。" },
         { t: 4508.00, who: "ai", audio: ["assets/audio/s2/062.wav", "assets/audio/s2/063.wav"], text: "对“潜在目标部署区-1”重新进行区域划分<br>8架光电察打机预计遍历时间7分钟。" },
-        { t: T003_CONFIRM, who: "ai", audio: ["assets/audio/s2/065.wav", "assets/audio/s2/066.wav", "assets/audio/s2/067.wav"], text: "接收目标003图像，识别确认为敌远程火箭发射车<br>由9号光电察打机执行攻击。" },
+        { t: T003_CONFIRM, who: "ai", audio: ["assets/audio/s2/065.wav", "assets/audio/s2/066.wav", "assets/audio/s2/067.wav"], text: "接收目标003图像，识别确认为敌远程火箭发射车<br>由01号光电察打机执行攻击。" },
         { t: 4295.80, who: "ai", audio: ["assets/audio/s2/050.wav", "assets/audio/s2/051.wav"], text: "根据打击前后图像比对评估，目标002火控雷达已被摧毁" },
         { t: 4330.13, who: "ai", audio: ["assets/audio/s2/052.wav", "assets/audio/s2/053.wav"], text: "根据打击前后图像比对评估，目标001预警雷达已被摧毁" },
         { t: 4820.00, who: "ai", audio: ["assets/audio/s2/070.wav", "assets/audio/s2/071.wav"], text: "根据打击前后图像比对评估，目标003已被摧毁。" },
