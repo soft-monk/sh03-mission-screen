@@ -244,6 +244,58 @@ window.FLIGHT_S1 = (function () {
       })();
     })();
 
+    /* ---------- 第二波跟踪（对齐场景二 SH-06 光电六号的流程）：
+       36:40（2200）播「转入跟踪目标」→ 绕 007/008 号目标顺时针盘旋，盘旋期间扫描由扇形换成
+       「跟踪方框」；41:30（2490）结束盘旋、气泡「回归原侦察阵位」，然后平滑滑回原规划航线。
+       角度递减 = 顺时针（与场景二 orbitPoint 递增方向相反）。 ---------- */
+    var TRACK_T0 = 2200;
+    var TRACK_T1 = 2490;                                  /* 41:30：结束盘旋 */
+    var TRACK_NO = 6;
+    var TRACK_C = { lon: 121.124310, lat: 24.925450 };   /* 007（导弹发射车）/ 008（火控雷达）中点 */
+    var TRACK_R = 2000;                                   /* 盘旋半径 2 km */
+    var TRACK_BOX = 400;                                  /* 跟踪方框半边长 400 m（800×800 m，罩住两个目标） */
+    (function trackOrbit() {
+      var d = null;
+      for (var i = 0; i < drones.length; i++) {
+        if (drones[i].group === "photo" && drones[i].no === TRACK_NO) { d = drones[i]; break; }
+      }
+      if (!d || d.detour) return;
+      var p0 = posOf(d, TRACK_T0);                        /* 2200 时刻的位置：目标正北 2.8 km、机头正南 */
+      var dx = (p0.lon - TRACK_C.lon) * M_LON, dy = (p0.lat - TRACK_C.lat) * M_LAT;
+      var d0 = Math.hypot(dx, dy);
+      if (d0 <= TRACK_R + 100) return;                    /* 已经在圈内就不折腾 */
+      function ptAt(a) {
+        return [TRACK_C.lon + (TRACK_R * Math.cos(a)) / M_LON, TRACK_C.lat + (TRACK_R * Math.sin(a)) / M_LAT];
+      }
+      var a0 = Math.atan2(dy, dx);                        /* p0 相对圆心的方位（正北≈π/2） */
+      var E = ptAt(a0);                                   /* 径向切入圆的点 */
+      var legIn = Math.hypot((E[0] - p0.lon) * M_LON, (E[1] - p0.lat) * M_LAT);
+      /* 圆弧扫过的角度：让 进入腿 + 圆弧 = V*(2490-2200)，即正好在 2490 结束 */
+      var sweep = (V * (TRACK_T1 - TRACK_T0) - legIn) / TRACK_R;
+      var pts = [[p0.lon, p0.lat], E];
+      var N = Math.max(72, Math.ceil((sweep / (2 * Math.PI)) * 72));
+      for (var k = 1; k <= N; k++) pts.push(ptAt(a0 - (k / N) * sweep));   /* 顺时针：角度递减 */
+      var path = makePath(pts);
+      d.detour = { path: path, t0: TRACK_T0, dur: path.len / V, slow: false, tBox: TRACK_T0 };
+      d.detour.t1 = TRACK_T0 + d.detour.dur;
+      /* 跟踪方框：进圈后开启（≈2218），盘旋结束时关闭，之后自然回到扇形 */
+      d.trackBox = { on: TRACK_T0 + legIn / V, off: d.detour.t1, c: [TRACK_C.lon, TRACK_C.lat], half: TRACK_BOX };
+      /* 平滑回归：从盘旋终点直线滑到「原规划航线上最近的点」，再沿原航线继续飞 */
+      var endP = path.pts[path.pts.length - 1];
+      var bestOff = 0, bestD = Infinity;
+      for (var s = 0; s <= d.orbit.len; s += 20) {
+        var q = pointAt(d.orbit, s);
+        var dd = Math.hypot((q.lon - endP[0]) * M_LON, (q.lat - endP[1]) * M_LAT);
+        if (dd < bestD) { bestD = dd; bestOff = s; }
+      }
+      var q0 = pointAt(d.orbit, bestOff);
+      d.ret = {
+        t0: d.detour.t1, start: [endP[0], endP[1]], target: [q0.lon, q0.lat],
+        tTrans: Math.max(1e-6, bestD / V), off: bestOff
+      };
+      d.ret.tOn = d.ret.t0 + d.ret.tTrans;
+    })();
+
     T_IN = Math.ceil(T_IN);
     MAX_ORBIT = Math.ceil(MAX_ORBIT);
     /* 最晚“跑完一圈”的时刻：减速段/绕飞段都要算进去 */
@@ -262,6 +314,20 @@ window.FLIGHT_S1 = (function () {
 
   function posOf(d, t) {
     if (t <= T_LIFT) return { lon: d.park[0], lat: d.park[1], dx: 0, dy: 0 };
+    /* 盘旋结束后的平滑回归：先直线滑到原规划航线上最近的点，再沿原航线飞 */
+    if (d.ret && t >= d.ret.t0) {
+      if (t < d.ret.tOn) {
+        var fr = Math.max(0, Math.min(1, (t - d.ret.t0) / d.ret.tTrans));
+        var ex = (d.ret.target[0] - d.ret.start[0]) * M_LON;
+        var ey = (d.ret.target[1] - d.ret.start[1]) * M_LAT;
+        return {
+          lon: d.ret.start[0] + (d.ret.target[0] - d.ret.start[0]) * fr,
+          lat: d.ret.start[1] + (d.ret.target[1] - d.ret.start[1]) * fr,
+          dx: ex, dy: ey
+        };
+      }
+      return pointAt(d.orbit, (d.ret.off + (t - d.ret.tOn) * V) % d.orbitLen);
+    }
     var tt = t;
     if (d.detour) {
       if (t >= d.detour.t0 && t < d.detour.t1) {
@@ -375,6 +441,18 @@ window.FLIGHT_S1 = (function () {
     };
   }
 
+  /* 跟踪方框：固定画在目标处，轴向取「机 → 目标」方位，另加两条从机到框边的连线（同场景二） */
+  function boxAt(p, c, half) {
+    var dx = (p.lon - c[0]) * M_LON, dy = (p.lat - c[1]) * M_LAT;
+    var ang = Math.atan2(dx, dy);
+    var fx = Math.sin(ang), fy = Math.cos(ang), sx = Math.cos(ang), sy = -Math.sin(ang);
+    function fp(a, b) { return [c[0] + (fx * a + sx * b) / M_LON, c[1] + (fy * a + sy * b) / M_LAT]; }
+    return {
+      box: [fp(half, -half), fp(half, half), fp(-half, half), fp(-half, -half), fp(half, -half)],
+      links: [[[p.lon, p.lat], fp(0, -half)], [[p.lon, p.lat], fp(0, half)]]
+    };
+  }
+
   function scans(t) {
     var out = [];
     if (t < T_LIFT) return out;
@@ -383,8 +461,14 @@ window.FLIGHT_S1 = (function () {
       if (d.group !== "photo") continue;
       if (t < tOnOf(d)) continue;                 /* 未到位不开机 */
       var p = posOf(d, t);
-      /* 机场盘旋侦察：扇形换成方框（到位→返航），归位后自然恢复扇形 */
+      /* 跟踪阶段：扇形换成方框（框画在目标处），盘旋结束自动回到扇形 */
+      if (d.trackBox && t + 1e-6 >= d.trackBox.on && t + 1e-6 < d.trackBox.off) {
+        var tb = boxAt(p, d.trackBox.c, d.trackBox.half);
+        out.push({ box: tb.box, links: tb.links, k: Math.max(0, Math.min(1, (t - d.trackBox.on) / SCAN.fade)) });
+        continue;
+      }
       if (d.detour && t + 1e-6 >= d.detour.tBox && t + 1e-6 < T_RETURN) {
+        /* 机场盘旋侦察：扇形换成方框（到位→返航），归位后自然恢复扇形 */
         var bx = boxAround(p, AIRFIELD);
         out.push({ box: bx.box, links: bx.links, k: Math.max(0, Math.min(1, (t - d.detour.tBox) / SCAN.fade)) });
         continue;

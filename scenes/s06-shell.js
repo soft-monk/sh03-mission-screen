@@ -551,7 +551,8 @@ window.S06_SHELL = (function () {
     { t: 2212,  text: "光电侦察无人机6识别导弹发射车、火控雷达目标，置信度95%，目标信息已编批上报。", audio: ["assets/audio/s1/045.wav", "assets/audio/s1/046.wav", "assets/audio/s1/047.wav"] },
     { t: 2222,  text: "接收上级指令，空中打击单元三分钟后将对目标进行打击，光电侦察无人机6执行毁伤评估任务。", audio: ["assets/audio/s1/048.wav", "assets/audio/s1/049.wav", "assets/audio/s1/050.wav"] },
     { t: 2420,  text: "目标被击中，图像已上传，正在进行毁伤效果判读评估。", audio: ["assets/audio/s1/051.wav", "assets/audio/s1/052.wav"] },
-    { t: 2426,  text: "目标007、008已被完全摧毁，打击效果良好，评估结果已上传。", audio: ["assets/audio/s1/053.wav", "assets/audio/s1/054.wav"] }
+    { t: 2426,  text: "目标007、008已被完全摧毁，打击效果良好，评估结果已上传。", audio: ["assets/audio/s1/053.wav", "assets/audio/s1/054.wav"] },
+    { t: 2490,  text: "光电察打机06回归原侦察阵位。", audio: ["assets/audio/s1/055.wav"] }
   ];
   /* 慢速语音估算：3 字/秒 + 标点 0.35 s + 起播 0.6 s（后续接真实语音时替换） */
   function s1VoiceDur(text) {
@@ -571,6 +572,7 @@ window.S06_SHELL = (function () {
      造成气泡与语音错位、同一句被反复起播）。预载彻底结束（含失败）才允许估算兜底。 */
   var S1_AI_SCHED = [];
   var s1SchedBuilt = false;
+  var S1_AI_GAP = 0.25;                 /* 气泡/语音之间的最小间隔（秒），要求 ≥ 200 ms */
   function s1BuildAiSched(force) {
     if (s1SchedBuilt) return true;
     var out = [], prevEnd = -1, missing = 0;
@@ -584,9 +586,15 @@ window.S06_SHELL = (function () {
           dur += d;
         }
       }
-      if (!list || missEv) { dur = s1VoiceDur(ev.text); missing++; }   /* 缺时长：按字数估算（仅兜底时采用） */
+      if (!list || missEv) {
+        dur = s1VoiceDur(ev.text);                        /* 缺时长：按字数估算 */
+        if (!ev.silent) missing++;                        /* 显式标记 silent 的事件不算“缺语音” */
+      }
       var base = typeof ev.t === "number" ? ev.t : (prevEnd >= 0 ? prevEnd : 0.01);
-      var start = prevEnd >= 0 ? Math.max(base, prevEnd) : base;
+      /* 相邻气泡/语音之间至少留 S1_AI_GAP 的间隔：
+         原来 start = max(base, prevEnd)，两条挨着的事件会「上一条刚读完、下一条立刻起播」，
+         甚至因为播放起播/多段拼接的几十毫秒延迟，把上一条的尾音切掉。 */
+      var start = prevEnd >= 0 ? Math.max(base, prevEnd + S1_AI_GAP) : base;
       out.push({ ev: ev, start: start, dur: dur, end: start + dur });
       prevEnd = start + dur;
     });
@@ -612,7 +620,7 @@ window.S06_SHELL = (function () {
   window.ensureS1AudioPreload = function () {
     window.APP_STATE = window.APP_STATE || {};
     if (window.APP_STATE.s1AudioPreload) return window.APP_STATE.s1AudioPreload;
-    var map = {}, dur = {}, count = 54, settled = 0;
+    var map = {}, dur = {}, count = 55, settled = 0;
     var box = window.APP_STATE.s1AudioPreload = { map: map, dur: dur, count: count };
     function settledOne() {
       settled++;
@@ -1209,10 +1217,15 @@ window.S06_SHELL = (function () {
       } else {
         s1vSetRate();
       }
-      /* 晚开的那一路（C：2200 起）：到点自动把卡片重新打开 —— 正常播放时不会触发 seek，只能在这里补 */
+      /* 每一路按自己的窗口判定：到点打开；进度条拖回起点之前则收起
+         （不做这一步的话，拖过 2200 再往回拖，C 路小窗会一直挂着——场景二用每组 started 标志兜的就是这件事） */
       s1vKeys().forEach(function (k) {
         var t0 = S1V_START[k];
-        if (!s1vRemoved[k] || t + 1e-6 < t0) return;
+        if (t + 1e-6 < t0) {
+          if (!s1vRemoved[k]) s1vClose(k);            /* 还没到点：收起卡片/大窗，bar 按剩余卡片重算 */
+          return;
+        }
+        if (!s1vRemoved[k]) return;
         if (t < t0 + (S1V_DUR[k] || S1_VID_DUR) - 0.5) s1vOpen(k);
       });
       if (s1vLastT < 0 || Math.abs(t - s1vLastT) > 0.5) s1vSeekTo(t, st.run);
@@ -1247,7 +1260,7 @@ window.S06_SHELL = (function () {
       });
     }
     /* ---------- SH-06 语音：跟着飞行时钟播（照场景二 syncAudio：暂停/拖动/重进都对得上） ---------- */
-    var s1AiAud = { idx: -1, gen: 0, on: false, els: [] };
+    var s1AiAud = { idx: -1, gen: 0, on: false, els: [], defer: false };
     var S1_AI_AUDIO = null;
     function s1EvAudio(ev) { return ev && ev.audio && ev.audio.length ? ev.audio : null; }
     /* 语音表：按真实时长顺排（start = max(事件时刻, 上一条语音结束)）。
@@ -1309,8 +1322,17 @@ window.S06_SHELL = (function () {
       if (idx < 0) { if (s1AiAud.on) s1AiAudioStop(); return; }
       var it = sch[idx];
       if (s1AiAud.on && s1AiAud.idx === idx) return;
+      /* 上一条语音还在播（多段拼接时每换一段都有几十~几百毫秒延迟，实际结束晚于表上时刻）：
+         等它自然播完再切下一条，最多多等 4 s；否则会把上一条的尾音切掉。 */
+      if (s1AiAud.on && s1AiAud.idx >= 0) {
+        var prev = sch[s1AiAud.idx];
+        if (prev && t < prev.end + 4.0) { s1AiAud.defer = true; return; }
+      }
       if (t >= it.end) { if (s1AiAud.on) s1AiAudioStop(); return; }
-      s1AiAudioStart(idx, t - it.start);
+      /* 因为等上一条而晚开：从头播，别把下一条的开头跳掉 */
+      var off = s1AiAud.defer ? 0 : Math.max(0, t - it.start);
+      s1AiAud.defer = false;
+      s1AiAudioStart(idx, off);
     }
     if (s1SarWin) s1SarWin.addEventListener("click", function () { s1SarWin.classList.toggle("zoom"); });
     s1SyncAi(0);
@@ -1584,9 +1606,11 @@ window.S06_SHELL = (function () {
     var s1VWarm = {}, s1VHold = null, s1VGaveUp = false;
     /* 两段视频各自的入点：A/B 在 1158，C（光电机06 跟踪打击）在 2200 */
     var S1V_ENTRY = [{ t: S1_VID_T0, k: "A" }, { t: S1_VID_T1, k: "C" }];
+    /* 预热名单：所有通道各自按自己的入点提前 90 s 拉流（A/B 同属第一段，C 是第二段） */
+    var S1V_WARM = [{ t: S1_VID_T0, k: "A" }, { t: S1_VID_T0, k: "B" }, { t: S1_VID_T1, k: "C" }];
     function s1VideoWarm() {
       if (!hasMap) return;
-      S1V_ENTRY.forEach(function (e) {
+      S1V_WARM.forEach(function (e) {
         if (s1VWarm[e.k]) return;
         if (st.t < e.t - 90) return;                    /* 入点前 90 秒才开始拉 */
         s1VWarm[e.k] = true;
