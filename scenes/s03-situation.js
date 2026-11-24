@@ -2037,12 +2037,14 @@ function make(variant) {
         knob.style.left = (r * 100).toFixed(2) + "%";
         tmLbl.textContent = fmt(st.t);
       }
-      /* 分段：集结待命 / 编队飞行 / 侦察，按仿真时间比例铺在进度条上 */
+      /* 分段：集结待命 / 侦察（「编队飞行」标签已删除），按仿真时间比例铺在进度条上 */
       (function buildSegs() {
         var t1 = FL.T_LIFT || 0;
         var t2 = Math.min.apply(null, FL.T_ARR || [t1 * 2]);
         if (!(t2 > t1)) t2 = t1 * 2;
-        var marks = [[0, "集结待命"], [t1, "编队飞行"], [t2, "侦察"]];
+        /* [标签时刻, 名称, 点击跳转时刻]。
+           侦察段标签仍显示在 57:31 附近，但点击跳到 39:47（2387 s）。 */
+        var marks = [[0, "集结待命", 0], [t2, "侦察", 2387]];
         segsBox.innerHTML = "";
         segLbls.innerHTML = "";
         for (var i = 0; i < marks.length; i++) {
@@ -2058,21 +2060,35 @@ function make(variant) {
           var lb = document.createElement("span");
           lb.style.left = L + "%";
           lb.textContent = marks[i][1];
+          lb.style.pointerEvents = "auto";
+          lb.style.cursor = "pointer";
+          (function (jt) {
+            lb.addEventListener("click", function (e) {
+              e.stopPropagation();
+              st.t = Math.max(0, Math.min(FL.TOTAL, jt));
+              push();
+              syncMediaToTime(st.t);
+            });
+          })(marks[i][2] == null ? from : marks[i][2]);
           segLbls.appendChild(lb);
         }
         var videoJump = document.createElement("span");
         videoJump.className = "s6-jump";
-        videoJump.style.left = (((T_VIDEO_002 - 10) / FL.TOTAL) * 100).toFixed(4) + "%";
+        videoJump.style.left = (((T_VIDEO_002 - 5) / FL.TOTAL) * 100).toFixed(4) + "%";
+        videoJump.style.pointerEvents = "auto";       /* 容器是 pointer-events:none，这里必须显式放开 */
+        videoJump.style.cursor = "pointer";
         videoJump.innerHTML = "<b class=\"s6-lb-text\">光电察打</b>";
-        videoJump.addEventListener("click", function () { st.t = Math.max(0, T_VIDEO_002 - 10); push(); syncMediaToTime(st.t); });
+        videoJump.addEventListener("click", function () { st.t = Math.max(0, T_VIDEO_002 - 5); push(); syncMediaToTime(st.t); });
         segLbls.appendChild(videoJump);
-        /* 65:00（扫描发现目标）/ 75:00（GMTI 发现目标003）：沿用同一套标记外观，只读、不带跳转 */
-        [[T_SCAN, "目标发现"], [T003_SCAN, "目标发现"]].forEach(function (m) {
+        /* 65:00（扫描发现目标）/ 75:00（GMTI 发现目标003）：沿用同一套标记外观，可点击跳到语音前 5 s */
+        [[T_SCAN, "目标发现", T_SCAN - 5], [T003_SCAN, "目标发现", T003_SCAN - 5]].forEach(function (m) {
           var mk = document.createElement("span");
           mk.className = "s6-jump s6-mark";
           mk.style.left = ((m[0] / FL.TOTAL) * 100).toFixed(4) + "%";
-          mk.style.pointerEvents = "none";           /* 纯标记：不响应鼠标、不显示手型 */
+          mk.style.pointerEvents = "auto";
+          mk.style.cursor = "pointer";
           mk.innerHTML = "<b class=\"s6-lb-text\">" + m[1] + "</b>";
+          mk.addEventListener("click", function () { st.t = Math.max(0, m[2]); push(); syncMediaToTime(st.t); });
           segLbls.appendChild(mk);
         });
       })();

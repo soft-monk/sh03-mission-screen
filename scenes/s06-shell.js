@@ -1555,9 +1555,10 @@ window.S06_SHELL = (function () {
       requestFlight();
     }
     (function buildSegs() {
+      /* [标签时刻, 名称, 点击跳转时刻]：跳转时刻比该段引导的那句语音早 5 s，跳过去正好从头听 */
       var marks = FL
-        ? [[0, "集结"], [S1_SAR_IMG_T0, "目标侦察"]]
-        : [[0, "集结待命"], [total * 0.2, "编队飞行"], [total * 0.45, "侦察"]];
+        ? [[0, "集结", 0], [S1_SAR_IMG_T0, "目标侦察", Math.max(0, S1_SAR_IMG_T0 - 5)], [S1_VID_T1, "跟踪打击", Math.max(0, S1_VID_T1 - 5)]]
+        : [[0, "集结待命", 0], [total * 0.2, "编队飞行", total * 0.2], [total * 0.45, "侦察", total * 0.45]];
       segsBox.innerHTML = "";
       segLbls.innerHTML = "";
       for (var i = 0; i < marks.length; i++) {
@@ -1573,6 +1574,18 @@ window.S06_SHELL = (function () {
         var lb = document.createElement("span");
         lb.style.left = Math.max(0.5, Math.min(97, L + (W < 6 ? 0.6 : 0))) + "%";
         lb.textContent = marks[i][1];
+        /* 标签可点：等同点进度条同一位置（跳到 marks[i][2]） */
+        lb.style.pointerEvents = "auto";
+        lb.style.cursor = "pointer";
+        (function (jt) {
+          lb.addEventListener("click", function (e) {
+            e.stopPropagation();
+            st.t = Math.max(0, Math.min(total, jt));
+            dragging = false;
+            paint();
+            requestFlight(true);
+          });
+        })(marks[i][2] == null ? from : marks[i][2]);
         segLbls.appendChild(lb);
       }
     })();
