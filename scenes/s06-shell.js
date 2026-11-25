@@ -917,7 +917,7 @@ window.S06_SHELL = (function () {
       (hasMap ? htmlVideo([
         { k: "A", title: "11号光电察打机 ｜ 侦察确认" },
         { k: "B", title: "19号光电察打机 ｜ 侦察确认" },
-        { k: "C", title: "光电机06 ｜ 跟踪打击" }
+        { k: "C", title: "光电机06 ｜ 跟踪监视" }
       ], [["a", "scene1_A_ir.mp4"], ["b", "scene1_B_ir.mp4"], ["c", "scene1_2_ir.mp4"]]) : "") +
       "<section class=\"s1-sar-win\"><img src=\"assets/img/s1-sar-airfield.jpg\" alt=\"\">" +
         "<div class=\"s1-sar-cap\">SAR 扫描影像 · 岸基机场</div></section>" +
@@ -1557,7 +1557,7 @@ window.S06_SHELL = (function () {
     (function buildSegs() {
       /* [标签时刻, 名称, 点击跳转时刻]：跳转时刻比该段引导的那句语音早 5 s，跳过去正好从头听 */
       var marks = FL
-        ? [[0, "集结", 0], [S1_SAR_IMG_T0, "目标侦察", Math.max(0, S1_SAR_IMG_T0 - 5)], [S1_VID_T1, "跟踪打击", Math.max(0, S1_VID_T1 - 5)]]
+        ? [[0, "集结", 0], [S1_SAR_IMG_T0, "目标侦察", Math.max(0, S1_SAR_IMG_T0 - 5)], [S1_VID_T1, "跟踪监视", Math.max(0, S1_VID_T1 - 5)]]
         : [[0, "集结待命", 0], [total * 0.2, "编队飞行", total * 0.2], [total * 0.45, "侦察", total * 0.45]];
       segsBox.innerHTML = "";
       segLbls.innerHTML = "";
