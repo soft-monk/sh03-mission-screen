@@ -90,18 +90,58 @@ window.MapView = function (host) {
   /* 默认拖拽边界（场景二用）；场景一通过 MapViewSetBounds 临时切换到自己的范围 */
   var DEFAULT_BOUNDS = [[112.3, 35.5], [119.8, 42.9]];
   var pendingBounds = null;   /* 建图前调用的边界先记下，等地图实例起来再套用 */
+  var keepViewportInside = false, lastBoundsView = "";
+  function applyBounds() {
+    if (!map || !pendingBounds) return;
+    var width = root.clientWidth, height = root.clientHeight;
+    if (!keepViewportInside || !width || !height) {
+      map.setMaxBounds(pendingBounds);
+      return;
+    }
+    var zoom = map.getZoom();
+    var key = [width, height, zoom, map.getPitch(), map.getBearing()].join("/");
+    if (key === lastBoundsView) return;
+    lastBoundsView = key;
+    /* MapLibre 的 maxBounds 按平视视口约束。再扣除俯仰和旋转增加的可见范围。 */
+    var mercator = maplibregl.MercatorCoordinate;
+    var center = mercator.fromLngLat(map.getCenter()), visible = map.getBounds();
+    var viewSW = mercator.fromLngLat(visible.getSouthWest()), viewNE = mercator.fromLngLat(visible.getNorthEast());
+    var limitSW = mercator.fromLngLat(pendingBounds[0]), limitNE = mercator.fromLngLat(pendingBounds[1]);
+    var worldSize = 512 * Math.pow(2, zoom);
+    var halfWidth = width / (2 * worldSize), halfHeight = height / (2 * worldSize);
+    limitSW.x += Math.max(0, center.x - viewSW.x - halfWidth);
+    limitNE.x -= Math.max(0, viewNE.x - center.x - halfWidth);
+    limitSW.y -= Math.max(0, viewSW.y - center.y - halfHeight);
+    limitNE.y += Math.max(0, center.y - viewNE.y - halfHeight);
+    map.setMaxBounds([limitSW.toLngLat(), limitNE.toLngLat()]);
+  }
   window.MapViewSetBounds = function (bb) {
     pendingBounds = bb || DEFAULT_BOUNDS;
-    if (!map || !map.setMaxBounds) return;
-    try { map.setMaxBounds(pendingBounds); } catch (e) {}
+    lastBoundsView = "";
+    applyBounds();
   };
 
-  /* 可切换的缩放上下限：场景二缩到 10 就到底，避免露出没有瓦片的深色底 */
+  /* 场景专用的平面地图限制，随共享画布一起切换。 */
   var pendingZoomRange = null;
+  var pendingMaxPitch = 75;
+  function applyZoomRange() {
+    if (!map || !pendingZoomRange) return;
+    try {
+      map.setMinZoom(pendingZoomRange[0]);
+      map.setMaxZoom(pendingZoomRange[1]);
+      if (!IS3D) map.setMaxPitch(pendingMaxPitch);
+    } catch (e) {}
+  }
   window.MapViewSetZoomRange = function (minZ, maxZ) {
     pendingZoomRange = [minZ == null ? 8.5 : minZ, maxZ == null ? 17 : maxZ];
-    if (!map) return;
-    try { map.setMinZoom(pendingZoomRange[0]); map.setMaxZoom(pendingZoomRange[1]); } catch (e) {}
+    applyZoomRange();
+  };
+  window.MapViewSetScenario = function (cfg) {
+    var flat = !IS3D && cfg && cfg.flatMap;
+    keepViewportInside = !!flat;
+    pendingMaxPitch = flat ? flat.maxPitch : 75;
+    window.MapViewSetBounds(flat ? flat.bounds : cfg && cfg.mapBounds);
+    window.MapViewSetZoomRange(flat ? flat.minZoom : cfg && cfg.minZoom, 17);
   };
 
   function boot() {
@@ -126,8 +166,8 @@ window.MapView = function (host) {
       opts.maxBounds = DEFAULT_BOUNDS;
     }
     map = new maplibregl.Map(opts);
-    if (pendingBounds) { try { map.setMaxBounds(pendingBounds); } catch (e) {} }
-    if (pendingZoomRange) { try { map.setMinZoom(pendingZoomRange[0]); map.setMaxZoom(pendingZoomRange[1]); } catch (e) {} }
+    applyBounds();
+    applyZoomRange();
     applyPixelRatio();
     var prRaf = 0;
     onResize = function () {
@@ -154,6 +194,9 @@ window.MapView = function (host) {
     map.on("load", function () { applyPixelRatio(); });
     map.on("style.load", flush);
     map.on("load", flush);
+    function fitViewport() { if (keepViewportInside) applyBounds(); }
+    map.on("move", fitViewport);
+    map.on("resize", fitViewport);
     map.on("error", function (e) {
       var msg = e && e.error ? (e.error.message || String(e.error)) : JSON.stringify(e);
       /* 个别瓦片缺失 / 解码失败属于取景边缘的常见情况，只打日志，不弹红条 */
@@ -170,6 +213,121 @@ window.MapView = function (host) {
   boot();
 
   function when(fn) { if (ready) { try { fn(); } catch (e) { console.error("[MapView]", e); } } else pend.push(fn); }
+
+  /* SH-06：先淡出图层再推近，回到总览后恢复图层。用同一帧时钟处理跳播和退出。 */
+  function createVideoCloseup(prefixes, setPanel) {
+    var cameraMs = 1300, fadeMs = 380, staggerMs = 90;
+    var opacity = { line: "line-opacity", fill: "fill-opacity", circle: "circle-opacity" };
+    var layers = [], phase = "overview", until = 0, fadeStart = 0;
+    var current = null, from = null, target = null, panelActive = false;
+
+    function togglePanel(active) {
+      if (panelActive === active) return;
+      panelActive = active;
+      setPanel(active);
+    }
+    function clearFade() {
+      if (map) layers.forEach(function (layer) {
+        if (map.getLayer(layer.id)) map.setPaintProperty(layer.id, layer.prop + "-transition", layer.transition);
+      });
+      layers = [];
+    }
+    function fade(show, now) {
+      layers.forEach(function (layer, i) {
+        var elapsed = now - fadeStart - i * staggerMs;
+        if (elapsed < 0 || layer.done || !map.getLayer(layer.id)) return;
+        if (Array.isArray(layer.value)) {
+          /* 扇区和条带的透明度含要素表达式，MapLibre 不会为它们插值。 */
+          var k = elapsed >= fadeMs ? 1 : Math.floor(elapsed / 32) * 32 / fadeMs;
+          var factor = FX.lerp(layer.from, show ? 1 : 0, k);
+          if (factor !== layer.factor) {
+            var value = factor === 1 ? layer.value : (factor === 0 ? 0 : ["*", layer.value, factor]);
+            map.setPaintProperty(layer.id, layer.prop, value);
+            layer.factor = factor;
+          }
+          layer.done = k === 1;
+          return;
+        }
+        map.setPaintProperty(layer.id, layer.prop + "-transition", { duration: fadeMs, delay: 0 });
+        map.setPaintProperty(layer.id, layer.prop, show ? layer.value : 0);
+        layer.done = true;
+      });
+    }
+    function startFade(now) {
+      fadeStart = now;
+      layers.forEach(function (layer) {
+        layer.done = false;
+        layer.from = layer.factor == null ? 1 : layer.factor;
+        if (Array.isArray(layer.value) && map.getLayer(layer.id)) {
+          map.setPaintProperty(layer.id, layer.prop + "-transition", { duration: 0, delay: 0 });
+        }
+      });
+      return now + Math.max(0, layers.length - 1) * staggerMs + fadeMs;
+    }
+    function mix(to, progress) {
+      var k = FX.easeInOut(progress);
+      return {
+        center: [FX.lerp(from.center[0], to.center[0], k), FX.lerp(from.center[1], to.center[1], k)],
+        zoom: FX.lerp(from.zoom, to.zoom, k),
+        pitch: FX.lerp(from.pitch, to.pitch, k),
+        bearing: FX.lerp(from.bearing, to.bearing, k)
+      };
+    }
+    return {
+      camera: function (now, overview, next) {
+        if (!map || !ready || !overview) return overview;
+        if (next !== target) {
+          from = current || overview;
+          if (!next) {
+            phase = "out"; until = now + cameraMs;
+          } else if (!panelActive || phase === "out") {
+            if (!layers.length) layers = map.getStyle().layers.filter(function (layer) {
+              return opacity[layer.type] && prefixes.some(function (prefix) { return layer.id.indexOf(prefix) === 0; });
+            }).map(function (layer) {
+              var prop = opacity[layer.type];
+              return { id: layer.id, prop: prop, value: map.getPaintProperty(layer.id, prop),
+                transition: map.getPaintProperty(layer.id, prop + "-transition") };
+            });
+            togglePanel(true);
+            phase = "hide"; until = startFade(now);
+          } else if (phase !== "hide") {
+            phase = "in"; until = now + cameraMs;
+          }
+          target = next;
+        }
+        if (phase === "hide") {
+          fade(false, now);
+          if (now < until + 200) return (current = from);
+          phase = "in"; until = now + cameraMs;
+        }
+        if (phase === "in" || phase === "out") {
+          var progress = Math.max(0, Math.min(1, 1 - (until - now) / cameraMs));
+          if (progress < 1) return (current = mix(target || overview, progress));
+          if (target) phase = "close";
+          else {
+            togglePanel(false);
+            phase = "show"; until = startFade(now);
+          }
+        }
+        if (phase === "show") {
+          fade(true, now);
+          if (now >= until) { clearFade(); phase = "overview"; }
+        }
+        return (current = target || overview);
+      },
+      reset: function () {
+        if (map) layers.forEach(function (layer) {
+          if (!map.getLayer(layer.id)) return;
+          map.setPaintProperty(layer.id, layer.prop + "-transition", { duration: 0, delay: 0 });
+          map.setPaintProperty(layer.id, layer.prop, layer.value);
+        });
+        clearFade();
+        togglePanel(false);
+        phase = "overview";
+        current = from = target = null;
+      }
+    };
+  }
 
   /* 无人机编号小图：离线 style 没有 glyphs，只能把文字画进 canvas 当图标用。
      颜色 = 机型色（描边），文字白色；高 32px，配 icon-size 0.6 ≈ 19px。
@@ -246,13 +404,14 @@ window.MapView = function (host) {
       Object.keys(labelCache).forEach(function (k) { if (labelCache[k].refresh) labelCache[k].refresh(); });
       Object.keys(iconCache).forEach(function (k) { if (iconCache[k].refresh) iconCache[k].refresh(); });
     },
-    setView: function (c) {
+    createVideoCloseup: createVideoCloseup,
+    setView: function (c, quiet) {
       lastCam = c;
       var key = c.center[0].toFixed(5) + "," + c.center[1].toFixed(5) + "," + c.zoom.toFixed(4) + "," + (c.pitch || 0).toFixed(2) + "," + (c.bearing || 0).toFixed(2);
       root.setAttribute("data-cam", c.zoom.toFixed(2) + "/" + c.center[0].toFixed(3) + "," + c.center[1].toFixed(3) + "/p" + (c.pitch||0));
       if (key === lastView) return;
       lastView = key;
-      when(function () { map.jumpTo(c); });
+      when(function () { map.jumpTo(c, quiet ? { quietCamera: true } : undefined); });
     },
     /* 复位：把相机拉回"当前时间点"应有的机位。
        render(t) 每帧都会下发同一组参数，这里只要清掉去重缓存再下发一次即可。 */
@@ -261,7 +420,8 @@ window.MapView = function (host) {
       when(function () {
         if (map.__camHooked) return;
         map.__camHooked = true;
-        map.on("moveend", function () {
+        map.on("moveend", function (event) {
+          if (event && event.quietCamera) return;
           var c = map.getCenter(), z = map.getZoom(), p = map.getPitch();
           var txt = z.toFixed(2) + "/" + c.lng.toFixed(3) + "," + c.lat.toFixed(3) + "/p" + Math.round(p);
           try { root.setAttribute("data-cam", txt); } catch (e) {}

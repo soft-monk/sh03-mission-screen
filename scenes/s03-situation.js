@@ -380,6 +380,7 @@ function make(variant) {
 
   function build(root, sc) {
     var SCFG = (window.getSelectedScenario && window.getSelectedScenario()) || null;
+    if (!IS_SELECT && SCFG && SCFG.flatMap) root.classList.add("s3-scene-menu");
     if (SCFG) {
       ACTIVE_VOICE = SCFG.voice || VOICE;
       ACTIVE_UAVS = SCFG.uavs || UAVS;
@@ -579,8 +580,8 @@ function make(variant) {
     /* 地图只在场景二创建；场景 1/3 暂挂空地图层：界面照常，地图区留空 */
     var NEED_MAP = !!mapHost && (!window.APP_STATE || !window.APP_STATE.scenarioId || window.APP_STATE.scenarioId === "scene-2" || window.APP_STATE.scenarioId === "scene-1");
     var map = NEED_MAP ? MapViewShared(mapHost) : NULL_MAP;
-    if (NEED_MAP && window.MapViewSetBounds) window.MapViewSetBounds((SCFG && SCFG.mapBounds) ? SCFG.mapBounds : null);
-    if (NEED_MAP && window.MapViewSetZoomRange) window.MapViewSetZoomRange((SCFG && SCFG.minZoom) || null, 17);
+    var flatMap = NEED_MAP && !IS_SELECT && !map.is3d && SCFG && SCFG.flatMap;
+    if (NEED_MAP && window.MapViewSetScenario) window.MapViewSetScenario(IS_SELECT ? null : SCFG);
     var mapEmptyEl = root.querySelector(".s3-map-empty");
     if (mapEmptyEl && NEED_MAP) mapEmptyEl.style.display = "none";
     if (map.onMoveEnd) map.onMoveEnd(root);
@@ -695,7 +696,7 @@ function make(variant) {
     if (sc && sc.id === "SH-06" && window.FLIGHT06) {
       ["blue", "yellow", "red", "green"].forEach(function (c) { map.image("uav-" + c, "assets/img/uav-" + c + ".png"); });
       var FL = window.FLIGHT06;
-      var ctlHTML = '<section class="s6-ctl">' +
+      var ctlHTML = '<section class="s6-ctl s6-scene2">' +
         '<div class="s6-line">' +
           '<button class="s6-go" aria-label="播放"><img class="s6-ic-play" src="assets/img/play.png" alt=""><img class="s6-ic-pause" src="assets/img/pause.png" alt=""></button>' +
           '<div class="s6-spds">' + [1, 2, 4].map(function (v) {
@@ -737,12 +738,13 @@ function make(variant) {
          中继也有台词（第 6 句 030）：说到才画编队航路 + 规划航路，不做运镜。
          五段放完由第 7 句（031）拉回总览，之后一直停在总览。
          全部是「内层时间 t 的纯函数」，拖进度条 / 暂停 / 回退都一致。 */
-      var S6_CAM0 = (SCFG && SCFG.camera) || null;        /* 总览机位：与 SH-04/05 共用 data/scenarios.js 的那一份 */
+      var S6_CAM0 = (SCFG && SCFG.camera) || null;
       var S6_OVIEW = {
-        center: (S6_CAM0 && S6_CAM0.center ? S6_CAM0.center : [115.030, 39.970]).slice(),
-        zoom: (S6_CAM0 && S6_CAM0.zoom != null) ? S6_CAM0.zoom : 8.5,
+        /* 平面版总览兼顾两个疑似区和航线末端。 */
+        center: flatMap ? [114.20, 39.90] : (S6_CAM0 && S6_CAM0.center ? S6_CAM0.center : [115.030, 39.970]).slice(),
+        zoom: flatMap ? flatMap.minZoom : ((S6_CAM0 && S6_CAM0.zoom != null) ? S6_CAM0.zoom : 8.5),
         pitch: (S6_CAM0 && S6_CAM0.pitch != null) ? S6_CAM0.pitch : 30,
-        bearing: (S6_CAM0 && S6_CAM0.bearing != null) ? S6_CAM0.bearing : -20
+        bearing: (S6_CAM0 && S6_CAM0.bearing != null) ? S6_CAM0.bearing : 0
       };
       var S6_ZOOM = 11.3, S6_PITCH = 44;          /* 运镜中段：贴着航路走 */
       var S6_IN = 0.22, S6_GO = 0.72, S6_OUT = 0.88;   /* 拉近 / 走航路 / 拉回 的分界 */
@@ -798,7 +800,7 @@ function make(variant) {
       /* 任务区视角：展示"规划航路"时镜头停在这里 —— 中心=任务区中心，刚好看满整个任务区 */
       var S6_TASK = (function () {
         var m = (ACTIVE_AREA && ACTIVE_AREA.mission) || null;
-        var b = (S6_CAM0 && S6_CAM0.bearing != null) ? S6_CAM0.bearing : -20;
+        var b = (S6_CAM0 && S6_CAM0.bearing != null) ? S6_CAM0.bearing : 0;
         if (m && m.length >= 3) {
           var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
           m.forEach(function (q) {
@@ -2247,16 +2249,26 @@ function make(variant) {
       bar.addEventListener("pointerup", endDrag);
       bar.addEventListener("pointercancel", endDrag);
 
+      var firstCloseup = { center: [114.28, 40.08], zoom: 12, pitch: 30, bearing: 0 };
+      var thirdCloseup = { center: [113.8627, 39.7052], zoom: 12, pitch: 30, bearing: 0 };
+      var closeupDuration = 68.72;  /* UOS：以每组主视频的实测时长为准。 */
+      function closeupAt(t) {
+        if (t >= T003_VIDEO && t < T003_VIDEO + closeupDuration) return thirdCloseup;
+        if (t >= T_VIDEO_002 && t < T_EXTRA_VIDEO + closeupDuration) return firstCloseup;
+        return null;
+      }
+
       function loop(now) {
         if (st.dead) return;                  /* 已退场：不再续命 */
         requestAnimationFrame(loop);
         /* 运镜：外层播放器进本屏就暂停了（render() 不再每帧跑），这里自己每帧下发机位。
            setView 内部按"中心/zoom/pitch/bearing"去重，值没变时是空操作。 */
         if (map.setView && s6CamAt && root.classList.contains("on")) {
-          var sc6 = s6CamAt();
-          if (sc6) {
-            map.setView({ center: sc6.center, zoom: sc6.zoom, pitch: sc6.pitch, bearing: sc6.bearing });
-            applyScale(sc6.zoom, sc6.center[1]);      /* 比例尺跟着缩放走，别停在总览的数值上 */
+          var overview = s6CamAt();
+          var cam = videoCloseup ? videoCloseup.camera(now, overview, st.started ? closeupAt(st.t) : null) : overview;
+          if (cam) {
+            map.setView(cam, cam !== overview);
+            applyScale(cam.zoom, cam.center[1]);
           }
         }
         /* 视频预热 + 缓冲门（必须在"暂停就 return"之前，否则停在缓冲时永远恢复不了） */
@@ -2332,6 +2344,24 @@ function make(variant) {
         map.setVis(["jfan"], visState.jfan);
         map.setVis(["sbeam"], visState.sbeam);
       }
+      var savedCloseupVis;
+      var videoCloseup = flatMap && map.createVideoCloseup([
+        "tracks", "plan-", "trails", "cov-", "rfan", "jfan", "sbeam"
+      ], function (active) {
+        if (active) {
+          savedCloseupVis = Object.assign({}, visState);
+          lyrBoxes.forEach(function (cb) {
+            var k = cb.getAttribute("data-k");
+            cb.checked = k === "fleetno" || k === "scan";
+          });
+          visState.fleetno = true;
+          visState.scan = true;
+        } else {
+          visState = savedCloseupVis;
+          lyrBoxes.forEach(function (cb) { cb.checked = !!visState[cb.getAttribute("data-k")]; });
+        }
+        applyVis();
+      });
       lyrBoxes.forEach(function (cb) {
         cb.addEventListener("change", function () {
           visState[cb.getAttribute("data-k")] = cb.checked;
@@ -2362,6 +2392,7 @@ function make(variant) {
       /* 退场：停掉自驱循环，并清掉本屏画在共享地图上的动态图层 */
       hideHook = function () {
         st.dead = true;
+        if (videoCloseup) videoCloseup.reset();
         hideSummary();
         stopLogAudio();
         window.__s6Rebuild = null;
@@ -2461,6 +2492,7 @@ function make(variant) {
         "  background:linear-gradient(180deg,rgba(9,20,34,.97),rgba(5,12,22,.99));border-right:1px solid rgba(56,189,248,.16);z-index:14}",
         ".s3-mi{width:76px;margin:0 auto;height:74px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;",
         "  border-radius:9px;color:#6f8aa8;font-size:12px;letter-spacing:1px;opacity:0;border:1px solid transparent}",
+        ".s3-scene-menu .s3-mi{font-size:14px;font-weight:700}",
         ".s3-mi.on{color:#bfe9ff;background:linear-gradient(180deg,rgba(56,189,248,.22),rgba(56,189,248,.05));",
         "  border-color:rgba(56,189,248,.55);box-shadow:0 0 20px rgba(56,189,248,.25) inset}",
         ".s3-toprow{position:absolute;left:116px;top:88px;height:46px;display:flex;align-items:stretch;gap:18px;z-index:13}",
@@ -2731,6 +2763,11 @@ function make(variant) {
         ".s6-seglbls .s6-jump{pointer-events:auto;cursor:pointer;color:#fbbf24;text-shadow:0 1px 4px rgba(0,0,0,.9)}",
         ".s6-seglbls .s6-jump .s6-lb-text{left:12px}",
         ".s6-seglbls .s6-jump:before{background:#f59e0b;box-shadow:0 0 7px rgba(245,158,11,.75)}",
+        ".s6-ctl.s6-scene2{bottom:44px;padding-bottom:0}",
+        ".s6-scene2 .s6-seglbls{height:36px;margin-top:8px}",
+        ".s6-scene2 .s6-seglbls span:not(.s6-jump),.s6-scene2 .s6-seglbls .s6-lb-text{font-size:14px;line-height:22px;padding:6px 10px}",
+        ".s6-scene2 .s6-seglbls .s6-jump{color:#9fb6d4}",
+        ".s6-scene2 .s6-seglbls .s6-jump:before{background:rgba(125,211,252,.7);box-shadow:0 0 5px rgba(56,189,248,.7)}",
         ".s6-col .st.b{color:#60a5fa}",        ".s5-confirm:hover{filter:brightness(1.12)}",        ".s5-m b i{font-style:normal;font-size:12px;margin-left:1px}",        ".s4-mic{width:104px;height:104px;flex:none;border-radius:50%;display:grid;place-items:center;color:#eaf6ff;",
         "  background:radial-gradient(circle at 50% 35%,#2563eb,#0a1d3c 72%);border:1px solid rgba(96,165,250,.55);",
         "  box-shadow:0 0 34px rgba(37,99,235,.55),0 0 0 7px rgba(37,99,235,.12)}",
@@ -2790,8 +2827,8 @@ function make(variant) {
       map: map,
       host: mapHost,
       needMap: NEED_MAP,
-      mapBounds: (SCFG && SCFG.mapBounds) ? SCFG.mapBounds : null,
-      minZoom: (SCFG && SCFG.minZoom) || null,
+      scenario: IS_SELECT ? null : SCFG,
+      flatMap: flatMap,
       areaEls: areaEls,
       labelEls: labelEls,
       menu: [].slice.call(root.querySelectorAll(".s3-mi")),
@@ -2833,7 +2870,8 @@ function make(variant) {
     var CAM = e.scid === "SH-03" ? CAM03 : ((SELCFG && SELCFG.camera) ? SELCFG.camera : CAM03);
     /* 场景二 SH-06：开场运镜（纯函数 f(内层时间)，拖动 / 暂停 / 回退都正确） */
     var shot = (!is3d && e.scid === "SH-06" && s6CamAt) ? s6CamAt() : null;
-    var zoom = is3d ? FX.lerp(10.95, 11.25, cp) : (shot ? shot.zoom : CAM.zoom);
+    var flatZoom = e.flatMap ? Math.max(e.flatMap.minZoom, CAM.zoom) : CAM.zoom;
+    var zoom = is3d ? FX.lerp(10.95, 11.25, cp) : (shot ? shot.zoom : flatZoom);
     var pitch = is3d ? FX.lerp(62, 70, cp) : (shot ? shot.pitch : CAM.pitch);
     var bearing = is3d ? FX.lerp(-30, -18, cp) : (shot ? shot.bearing : (CAM.bearing == null ? -20 : CAM.bearing));
     var center = is3d ? [116.218, 39.920] : (shot ? shot.center.slice() : CAM.center.slice());
@@ -3065,8 +3103,7 @@ function make(variant) {
     if (e && e.scid === "SH-06" && window.PLAYER) window.PLAYER.pause();   /* 这一屏交给飞行演示的独立时钟 */
     if (e && e.scid === "SH-06" && s6Start) s6Start();                      /* 进屏自动开播，不用人点播放 */
     if (e && e.host && e.needMap && window.MapViewShared) window.MapViewShared(e.host);
-    if (e && e.needMap && window.MapViewSetBounds) window.MapViewSetBounds(e.mapBounds || null);
-    if (e && e.needMap && window.MapViewSetZoomRange) window.MapViewSetZoomRange(e.minZoom || null, 17);
+    if (e && e.needMap && window.MapViewSetScenario) window.MapViewSetScenario(e.scenario);
     if (e && e.needMap) e._camLast = null;   /* 边界变了，强制下一帧重新应用相机 */
     /* 进入屏：AI 聊天区滚到底。屏挂载时还是 display:none，滚动赋值会失效，所以等两帧再设。
        SH-04/05 走 e.root 里的 .s6-ai-log；场景二 SH-06 直接用 e.aiChat；场景一 SH-06 的外壳两者都可能没有，回退到 root 查找 */

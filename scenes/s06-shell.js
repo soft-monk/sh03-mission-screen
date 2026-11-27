@@ -859,6 +859,7 @@ window.S06_SHELL = (function () {
     ensureS1Css();
     var uavs = (cfg && cfg.uavs) || [];
     var hasMap = !!(cfg && cfg.mapBounds);   /* 场景一有自己的一套瓦片与边界 */
+    if (hasMap) root.classList.add("s3-scene-menu");
     var mapHost = null;
     var s1acc = { ids: [], labels: [], plan: false, planIds: [], base: false, grid: false, showRoutes: true };
     var s1AiLog = null, s1AiLen = -1, s1AiArrLen = -1;
@@ -1337,9 +1338,9 @@ window.S06_SHELL = (function () {
     if (s1SarWin) s1SarWin.addEventListener("click", function () { s1SarWin.classList.toggle("zoom"); });
     s1SyncAi(0);
     if (hasMap && window.MapViewShared) {
-      if (window.MapViewSetBounds) window.MapViewSetBounds(cfg.mapBounds);
       mapHost = root.querySelector(".s3-map");
       var mv = window.MapViewShared(mapHost);
+      if (window.MapViewSetScenario) window.MapViewSetScenario(cfg);
       /* 机群图标（与场景二同名：uav-blue/yellow/red/green） */
       ["blue", "yellow", "red", "green"].forEach(function (c) { mv.image("uav-" + c, "assets/img/uav-" + c + ".png"); });
       var cam = cfg.camera || null;
@@ -1377,7 +1378,7 @@ window.S06_SHELL = (function () {
       center: [cam.center[0], cam.center[1]],
       zoom: (cam.zoom == null ? 9.75 : cam.zoom),
       pitch: (cam.pitch == null ? 30 : cam.pitch),
-      bearing: (cam.bearing == null ? -20 : cam.bearing)
+      bearing: (cam.bearing == null ? 0 : cam.bearing)
     } : null;
     var S1_TASK = (function () {
       var m = (cfg && cfg.area && cfg.area.mission) || null;
@@ -1387,7 +1388,8 @@ window.S06_SHELL = (function () {
         x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]);
         y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]);
       });
-      return { center: [(x0 + x1) / 2, (y0 + y1) / 2], zoom: 9.8, pitch: 30, bearing: S1_OVIEW.bearing };
+      var zoom = cfg.flatMap && !mv.is3d ? Math.max(9.8, cfg.flatMap.minZoom) : 9.8;
+      return { center: [(x0 + x1) / 2, (y0 + y1) / 2], zoom: zoom, pitch: 30, bearing: S1_OVIEW.bearing };
     })();
     /* 场景一 SH-06：不做运镜，全程锁定在"任务区视角"（能看清全貌）。
        原来的逐句推近/拉回/俯仰变化已停用；航线与规划航路的揭示仍按台词时间窗独立驱动。 */
@@ -1668,16 +1670,48 @@ window.S06_SHELL = (function () {
       goBtn.classList.remove("playing"); goBtn.setAttribute("aria-label", "播放");
       try { v1.preload = "auto"; v1.load(); } catch (e) {}
     }
-    (function loop(now) {
+    var lyrPanel = root.querySelector(".s6-lyr-panel");
+    var closeupBoxes = [].slice.call(lyrPanel.querySelectorAll("input[data-k]"));
+    var savedCloseupChecks;
+    var videoCloseup = mv && !mv.is3d && mv.createVideoCloseup([
+      "s1-grid", "s1-route", "tracks-s1", "s1-trails", "cov-", "rfan", "jfan", "sbeam"
+    ], function (active) {
+      if (active) {
+        savedCloseupChecks = closeupBoxes.map(function (cb) { return cb.checked; });
+        closeupBoxes.forEach(function (cb) {
+          var k = cb.getAttribute("data-k");
+          cb.checked = k === "fleetno" || k === "scan";
+        });
+        applyLayerToggle("fleetno", true);
+        applyLayerToggle("scan", true);
+      } else {
+        closeupBoxes.forEach(function (cb, i) { cb.checked = savedCloseupChecks[i]; });
+        applyAllToggleStates();
+      }
+    });
+    var runway = window.BASE_S1 && window.BASE_S1.runway;
+    var airfieldCloseup = {
+      center: runway && runway.a && runway.b
+        ? [(runway.a[0] + runway.b[0]) / 2, (runway.a[1] + runway.b[1]) / 2] : [121.09, 24.93],
+      zoom: 12, pitch: 30, bearing: 0
+    };
+    var trackingCloseup = { center: [121.1243, 24.9254], zoom: 12, pitch: 30, bearing: 0 };
+    function closeupAt(t) {
+      if (t >= S1V_START.C && t < S1V_START.C + S1V_DUR.C) return trackingCloseup;
+      if (t >= S1V_START.A && t < S1V_START.A + S1V_DUR.A) return airfieldCloseup;
+      return null;
+    }
+    requestAnimationFrame(function loop(now) {
       if (st.dead) return;
       requestAnimationFrame(loop);
       if (!root.classList.contains("on")) { st.last = now; return; }
       /* 运镜 + 逐句揭示：外层播放器进本屏就暂停了，机位由这里每帧下发（3D 版保持静态机位） */
       if (mv && mv.setView && !mv.is3d) {
-        var sc6 = s1CamAt();
-        if (sc6) {
-          mv.setView({ center: sc6.center, zoom: sc6.zoom, pitch: sc6.pitch, bearing: sc6.bearing });
-          s1ApplyScale(sc6.zoom, sc6.center[1]);
+        var overview = s1CamAt();
+        var cam1 = videoCloseup ? videoCloseup.camera(now, overview, closeupAt(st.t)) : overview;
+        if (cam1) {
+          mv.setView(cam1, cam1 !== overview);
+          s1ApplyScale(cam1.zoom, cam1.center[1]);
         }
       }
       s1ApplyReveal();
@@ -1695,10 +1729,9 @@ window.S06_SHELL = (function () {
       s1vRender(st.t);
       s1AiAudioSync(st.t);
       if (st.acc >= 0.08) { st.acc = 0; requestFlight(); }
-    })(performance.now());
+    });
     root.__onSpace = function () { goBtn.click(); };
     root.__s6Refresh = function () { paint(); };
-    var lyrPanel = root.querySelector(".s6-lyr-panel");
     var PLAN_KEYS = ["photo", "sar", "gmti", "ewar", "comm"];
     function setPlanLayer(g, on) { s1SetLayers(mv, [S1_PLAN_ID + "-" + g + "-l"], on && (!s1acc.rev || s1acc.rev[g] !== false)); }
     function planSub(g) { return lyrPanel.querySelector('input[data-k="tracks-' + g + '"]'); }
@@ -1742,6 +1775,7 @@ window.S06_SHELL = (function () {
     /* 屏是缓存的：回看 SH-06 只走 onShow、不重建 → 这里按当前开关状态重画一次 */
     function redrawS1() {
       if (!hasMap) return;
+      if (window.MapViewSetScenario) window.MapViewSetScenario(cfg);
       s1Draw(mv, s1acc);
       applyAllToggleStates();
       s1RevSig = "";              /* 图层重建过：逼 reveal 再套一遍 */
@@ -1803,7 +1837,10 @@ window.S06_SHELL = (function () {
     return { shell: true, st: st, root: root, aiLog: root.querySelector(".s6-ai-log"), mapView: window.__s6ShellMap || null, cam: window.__s6ShellCam || null,
       redraw: redrawS1,
       autoplay: s1AutoStart,
-      cleanup: function () { if (hasMap) { s1Clear(mv, s1acc); clearFlight(); } } };
+      cleanup: function () {
+        if (videoCloseup) videoCloseup.reset();
+        if (hasMap) { s1Clear(mv, s1acc); clearFlight(); }
+      } };
   }
   return {
     LAYERS: LAYERS,

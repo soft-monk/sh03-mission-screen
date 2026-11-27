@@ -9,9 +9,10 @@
     region: "东部区域封控区",
     /* 总览机位：任务区（西）与集结区（东）同框，SH-04/05/06 共用；
        SH-06 的开场运镜从这个机位出发（见 scenes/s03-situation.js 的 S6_OVIEW） */
-    camera: { center: [115.030, 39.970], zoom: 8.5, pitch: 30, bearing: -20 },
+    camera: { center: [115.030, 39.970], zoom: 8.5, pitch: 30, bearing: 0 },
     mapBounds: [[111.30, 38.10], [117.70, 41.70]],
     minZoom: 8.5,
+    flatMap: { bounds: [[113.10, 39.10], [116.54, 40.70]], minZoom: 9.7, maxPitch: 30 },
     area: {
       mission: [[113.62960, 39.51435], [114.56639, 39.51435], [114.56639, 40.25096], [113.62960, 40.25096]],
       targets: [
@@ -86,10 +87,11 @@
     region: "沿海岛屿任务区",
     /* 总览机位：任务区（西南）与我方集结区（东北）同框；SH-04/05/06 共用，
        SH-06 的开场运镜从这个机位出发（见 scenes/s06-shell.js 的 S1_OVIEW） */
-    camera: { center: [121.073, 24.850], zoom: 9.75, pitch: 30, bearing: -20 },
+    camera: { center: [121.073, 24.850], zoom: 9.75, pitch: 30, bearing: 0 },
     coordText: "121.07300, 24.97800",
     mapBounds: [[118.60, 23.20], [123.60, 26.80]],
     minZoom: 8.5,
+    flatMap: { bounds: [[120.06, 24.05], [121.99, 25.799]], minZoom: 10.0, maxPitch: 30 },
     area: {
       /* 任务区：以 121.0241, 24.8365 为中心 40x40km */
       mission: [[120.82616, 24.65562], [121.22204, 24.65562], [121.22204, 25.01738], [120.82616, 25.01738]],
@@ -131,6 +133,7 @@
     voice: []
   });
   var S3 = variant("scene-3", "要点防护", "场景三", {
+    flatMap: null,
     region: "北部要点防护区",
     camera: { center: [114.100, 39.880], zoom: 9.25, pitch: 38, bearing: -20 },
     area: {
