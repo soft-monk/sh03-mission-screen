@@ -527,19 +527,19 @@ function make(variant) {
         '</div>' +
         '<section class="s6-video-smallbar">' +
           '<div class="s6-video-card s6-video-small-card" data-video="A">' +
-            '<div class="s6-video-title">14光电-攻击｜002火控雷达</div>' +
+            '<div class="s6-video-title">17光电-攻击｜002火控雷达</div>' +
             '<canvas class="s6-video-small-canvas" data-video="A"></canvas>' +
           '</div>' +
           '<div class="s6-video-card s6-video-small-card" data-video="B">' +
-            '<div class="s6-video-title">15光电-侦察｜002火控雷达</div>' +
+            '<div class="s6-video-title">18光电-侦察｜002火控雷达</div>' +
             '<canvas class="s6-video-small-canvas" data-video="B"></canvas>' +
           '</div>' +
           '<div class="s6-video-card s6-video-small-card s6-video-extra" data-video="C" style="display:none">' +
-            '<div class="s6-video-title">17光电-攻击｜001预警雷达</div>' +
+            '<div class="s6-video-title">14光电-攻击｜001预警雷达</div>' +
             '<canvas class="s6-video-small-canvas" data-video="C"></canvas>' +
           '</div>' +
           '<div class="s6-video-card s6-video-small-card s6-video-extra" data-video="D" style="display:none">' +
-            '<div class="s6-video-title">18光电-侦察｜001预警雷达</div>' +
+            '<div class="s6-video-title">15光电-侦察｜001预警雷达</div>' +
             '<canvas class="s6-video-small-canvas" data-video="D"></canvas>' +
           '</div>' +
           '<div class="s6-video-card s6-video-small-card s6-video-third" data-video="E" style="display:none">' +
@@ -1126,7 +1126,7 @@ function make(variant) {
       var thirdStarted = false;
       var assigned003 = null;
       var mirrorGen = 0;
-      var VIDEO_TITLES = { A: "14光电-攻击｜002火控雷达", B: "15光电-侦察｜002火控雷达", C: "17光电-攻击｜001预警雷达", D: "18光电-侦察｜001预警雷达", E: "01光电-攻击｜003运动目标", F: "02光电-侦察｜003运动目标" };
+      var VIDEO_TITLES = { A: "17光电-攻击｜002火控雷达", B: "18光电-侦察｜002火控雷达", C: "14光电-攻击｜001预警雷达", D: "15光电-侦察｜001预警雷达", E: "01光电-攻击｜003运动目标", F: "02光电-侦察｜003运动目标" };
       /* 攻击动画仍按视频进度（41 s）触发，但不再产生 AI 消息；
          三条「已被摧毁」改为飞行时间轴触发（timelineRules）。 */
       var videoAiRules = [
@@ -1824,8 +1824,8 @@ function make(variant) {
         { t: FL.T_REASSIGN || 0, who: "ai", audio: ["assets/audio/s2/038.wav", "assets/audio/s2/039.wav"], text: "已分配14号、15号光电察打机<br>进行001预警雷达察打任务。" },
         { t: FL.T_REASSIGN || 0, who: "ai", audio: ["assets/audio/s2/040.wav", "assets/audio/s2/041.wav"], text: "已分配17号、18号光电察打机<br>进行002火控雷达察打任务。" },
         { t: FL.T_REPLAN || 0, who: "ai", audio: ["assets/audio/s2/042.wav", "assets/audio/s2/043.wav"], text: "对“潜在目标部署区-2”重新进行区域划分<br>6架光电察打机预计遍历时间9分钟。" },
-        { t: T_CONFIRM_002, who: "ai", audio: ["assets/audio/s2/044.wav", "assets/audio/s2/045.wav", "assets/audio/s2/046.wav"], text: "接收目标002图像，识别确认为火控雷达<br>由14号光电察打机执行攻击，15号光电察打机进行毁伤评估" },
-        { t: T_CONFIRM_001, who: "ai", audio: ["assets/audio/s2/047.wav", "assets/audio/s2/048.wav", "assets/audio/s2/049.wav"], text: "接收目标001图像，识别确认为预警雷达<br>由17号光电察打机执行攻击，18号光电察打机进行毁伤评估" },
+        { t: T_CONFIRM_002, who: "ai", audio: ["assets/audio/s2/044.wav", "assets/audio/s2/045.wav", "assets/audio/s2/046.wav"], text: "接收目标002图像，识别确认为火控雷达<br>由17号光电察打机执行攻击，18号光电察打机进行毁伤评估" },
+        { t: T_CONFIRM_001, who: "ai", audio: ["assets/audio/s2/047.wav", "assets/audio/s2/048.wav", "assets/audio/s2/049.wav"], text: "接收目标001图像，识别确认为预警雷达<br>由14号光电察打机执行攻击，15号光电察打机进行毁伤评估" },
         { t: 4392.33, who: "ai", audio: ["assets/audio/s2/054.wav", "assets/audio/s2/055.wav"], text: "对“潜在目标部署区-2”重新进行区域划分<br>8架光电察打机预计遍历时间7分钟。" },
         { t: 4500.00, who: "ai", audio: ["assets/audio/s2/056.wav", "assets/audio/s2/057.wav"], text: "雷达侦察机在“潜在目标部署区-1”GMTI模式搜索发现1个运动目标，已加入目标列表。" },
         { t: 4500.00, who: "ai", audio: ["assets/audio/s2/058.wav", "assets/audio/s2/059.wav"], text: "推荐行动方案：<br>派出两架光电察打机对目标003进行侦察<br>目标确认后直接打击。" },
